@@ -1,0 +1,43 @@
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment variables
+.env
+.env.*
+
+# Model files
+models/*
+!models/.gitkeep
+
+# Database files
+database/*
+!database/.gitkeep
+
+# Image and result artifacts
+data/input_images/*
+!data/input_images/.gitkeep
+
+data/result_images/*
+!data/result_images/.gitkeep
+
+# Logs
+logs/*
+!logs/.gitkeep
+
+# PyInstaller build output
+build/
+dist/
+*.spec
+
+# Editor and OS temporary files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
