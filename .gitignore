@@ -34,6 +34,9 @@ data/annotations/*
 labels/*
 !labels/.gitkeep
 
+datasets/pcb/*
+!datasets/pcb/.gitkeep
+
 # Logs
 logs/*
 !logs/.gitkeep

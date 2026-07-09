@@ -10,15 +10,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 XML_DIR = PROJECT_ROOT / "data" / "annotations"
 LABELS_DIR = PROJECT_ROOT / "labels"
 
-CLASS_NAMES = [
-    "missing_hole",
-    "mouse_bite",
-    "open_circuit",
-    "short",
-    "spur",
-    "spurious_copper",
-]
-CLASS_TO_ID = {class_name: index for index, class_name in enumerate(CLASS_NAMES)}
+CLASS_MAP = {
+    "open_circuit": 0,
+    "short": 1,
+    "missing_hole": 2,
+}
 
 
 def voc_bbox_to_yolo(
@@ -56,22 +52,25 @@ def parse_size(root: ET.Element, xml_path: Path) -> tuple[float, float]:
     return image_width, image_height
 
 
-def convert_xml_file(xml_path: Path, output_path: Path) -> int:
-    """Convert one XML file and return the number of YOLO label rows written."""
+def convert_xml_file(xml_path: Path, output_path: Path) -> tuple[int, int]:
+    """Convert one XML file and return written and skipped object counts."""
     tree = ET.parse(xml_path)
     root = tree.getroot()
     image_width, image_height = parse_size(root, xml_path)
 
     yolo_rows: list[str] = []
+    skipped_count = 0
     for obj in root.findall("object"):
         class_name = (obj.findtext("name") or "").strip()
-        if class_name not in CLASS_TO_ID:
+        if class_name not in CLASS_MAP:
             print(f"Warning: {xml_path.name}: unknown class '{class_name}', skipped")
+            skipped_count += 1
             continue
 
         bbox = obj.find("bndbox")
         if bbox is None:
             print(f"Warning: {xml_path.name}: object '{class_name}' has no bndbox, skipped")
+            skipped_count += 1
             continue
 
         try:
@@ -81,6 +80,7 @@ def convert_xml_file(xml_path: Path, output_path: Path) -> int:
             ymax = float(bbox.findtext("ymax", ""))
         except ValueError:
             print(f"Warning: {xml_path.name}: invalid bbox for '{class_name}', skipped")
+            skipped_count += 1
             continue
 
         x_center, y_center, width, height = voc_bbox_to_yolo(
@@ -92,14 +92,14 @@ def convert_xml_file(xml_path: Path, output_path: Path) -> int:
             image_height,
         )
 
-        class_id = CLASS_TO_ID[class_name]
+        class_id = CLASS_MAP[class_name]
         # YOLO expects one object per line: class_id and normalized bbox values.
         yolo_rows.append(
             f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}"
         )
 
     output_path.write_text("\n".join(yolo_rows) + ("\n" if yolo_rows else ""), encoding="utf-8")
-    return len(yolo_rows)
+    return len(yolo_rows), skipped_count
 
 
 def main() -> None:
@@ -108,15 +108,19 @@ def main() -> None:
     if not XML_DIR.exists():
         raise FileNotFoundError(f"XML folder does not exist: {XML_DIR}")
 
-    converted_count = 0
-    object_count = 0
+    xml_count = 0
+    txt_count = 0
+    skipped_object_count = 0
     for xml_path in sorted(XML_DIR.glob("*.xml")):
         output_path = LABELS_DIR / f"{xml_path.stem}.txt"
-        object_count += convert_xml_file(xml_path, output_path)
-        converted_count += 1
+        _, skipped_count = convert_xml_file(xml_path, output_path)
+        skipped_object_count += skipped_count
+        xml_count += 1
+        txt_count += 1
 
-    print(f"Converted XML files: {converted_count}")
-    print(f"Converted object labels: {object_count}")
+    print(f"Total XML files: {xml_count}")
+    print(f"Created TXT files: {txt_count}")
+    print(f"Skipped objects: {skipped_object_count}")
     print(f"YOLO labels saved to: {LABELS_DIR}")
 
 

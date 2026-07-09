@@ -54,10 +54,36 @@ python -m venv .venv
 
 Pascal VOC XML 파일을 `data/annotations/` 아래에 넣거나, [tools/convert_voc_to_yolo.py](C:/workspace/V_VLM/tools/convert_voc_to_yolo.py) 상단의 `XML_DIR` 값을 수정합니다.
 변환된 YOLO TXT 라벨은 기본적으로 `labels/` 폴더에 저장됩니다.
+현재 변환 대상은 YOLO 학습에 사용할 3개 불량 유형만 포함합니다. `mouse_bite`, `spur`, `spurious_copper` 등 매핑에 없는 XML object는 경고 메시지를 출력하고 건너뜁니다.
+
+| 클래스 번호 | 불량 유형 | XML 이름 |
+| --- | --- | --- |
+| 0 | Open Circuit | open_circuit |
+| 1 | Short | short |
+| 2 | Missing Hole | missing_hole |
 
 ```powershell
 python tools/convert_voc_to_yolo.py
 ```
+
+## YOLO 학습용 데이터셋 분할
+
+이미지는 `data/input_images/`, YOLO TXT 라벨은 `labels/`에 둡니다. 다른 경로를 사용할 경우 [tools/split_yolo_dataset.py](C:/workspace/V_VLM/tools/split_yolo_dataset.py) 상단의 `IMAGE_DIR`, `LABEL_DIR`, `OUTPUT_DIR` 값을 수정합니다.
+스크립트는 이미지와 같은 이름의 `.txt` 라벨을 찾아 함께 복사하고, 라벨이 없는 이미지는 경고 후 건너뜁니다. 기본 비율은 train/val/test = 8:1:1입니다.
+
+```powershell
+python tools/split_yolo_dataset.py
+```
+
+결과는 `datasets/pcb/` 아래에 생성됩니다.
+
+- `datasets/pcb/images/train`
+- `datasets/pcb/images/val`
+- `datasets/pcb/images/test`
+- `datasets/pcb/labels/train`
+- `datasets/pcb/labels/val`
+- `datasets/pcb/labels/test`
+- `datasets/pcb/data.yaml`
 
 ## 테스트
 
