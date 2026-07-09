@@ -8,6 +8,8 @@ import shutil
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATASET_ROOT = PROJECT_ROOT / "datasets" / "pcb"
+SOURCE_IMAGE_DIR = PROJECT_ROOT / "data" / "images"
+SOURCE_LABEL_DIR = PROJECT_ROOT / "labels"
 IMAGES_ROOT = DATASET_ROOT / "images"
 LABELS_ROOT = DATASET_ROOT / "labels"
 
@@ -73,62 +75,51 @@ def representative_class_id(class_counts: Counter[int]) -> int:
 
 
 def collect_image_label_pairs() -> list[tuple[str, bytes, str, bytes, int]]:
-    """Collect all split image/label pairs before deleting any output folders."""
+    """Collect source image/label pairs before rebuilding output folders."""
     pairs: list[tuple[str, bytes, str, bytes, int]] = []
     seen_stems: set[str] = set()
 
-    missing_roots = [
-        path
-        for path in (
-            *(IMAGES_ROOT / split_name for split_name in SPLITS),
-            *(LABELS_ROOT / split_name for split_name in SPLITS),
-        )
-        if not path.exists()
-    ]
+    missing_roots = [path for path in (SOURCE_IMAGE_DIR, SOURCE_LABEL_DIR) if not path.exists()]
     if missing_roots:
-        print("ERROR: required dataset split folders are missing.")
+        print("ERROR: required source folders are missing.")
         for missing_root in missing_roots:
             print(f"- {missing_root}")
         return pairs
 
-    for split_name in SPLITS:
-        image_dir = IMAGES_ROOT / split_name
-        label_dir = LABELS_ROOT / split_name
+    for image_path in sorted(SOURCE_IMAGE_DIR.iterdir()):
+        if not image_path.is_file() or image_path.suffix.lower() not in IMAGE_EXTENSIONS:
+            continue
 
-        for image_path in sorted(image_dir.iterdir()):
-            if not image_path.is_file() or image_path.suffix.lower() not in IMAGE_EXTENSIONS:
-                continue
+        if image_path.stem in seen_stems:
+            print(f"WARNING: duplicate image stem '{image_path.stem}', skipped: {image_path}")
+            continue
 
-            if image_path.stem in seen_stems:
-                print(f"WARNING: duplicate image stem '{image_path.stem}', skipped: {image_path}")
-                continue
+        label_path = SOURCE_LABEL_DIR / f"{image_path.stem}.txt"
+        if not label_path.exists():
+            print(f"WARNING: label not found for image, skipped: {image_path}")
+            continue
 
-            label_path = label_dir / f"{image_path.stem}.txt"
-            if not label_path.exists():
-                print(f"WARNING: label not found for image, skipped: {image_path}")
-                continue
+        class_counts = read_label_class_counts(label_path)
+        if class_counts is None:
+            continue
 
-            class_counts = read_label_class_counts(label_path)
-            if class_counts is None:
-                continue
+        try:
+            image_bytes = image_path.read_bytes()
+            label_bytes = label_path.read_bytes()
+        except OSError as exc:
+            print(f"WARNING: could not load pair into memory, skipped: {exc}")
+            continue
 
-            try:
-                image_bytes = image_path.read_bytes()
-                label_bytes = label_path.read_bytes()
-            except OSError as exc:
-                print(f"WARNING: could not load pair into memory, skipped: {exc}")
-                continue
-
-            pairs.append(
-                (
-                    image_path.name,
-                    image_bytes,
-                    label_path.name,
-                    label_bytes,
-                    representative_class_id(class_counts),
-                )
+        pairs.append(
+            (
+                image_path.name,
+                image_bytes,
+                label_path.name,
+                label_bytes,
+                representative_class_id(class_counts),
             )
-            seen_stems.add(image_path.stem)
+        )
+        seen_stems.add(image_path.stem)
 
     return pairs
 
