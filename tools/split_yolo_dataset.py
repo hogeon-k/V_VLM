@@ -8,25 +8,27 @@ import shutil
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # Change these paths to match your dataset layout.
-IMAGE_DIR = PROJECT_ROOT / "data" / "input_images"
-LABEL_DIR = PROJECT_ROOT / "labels"
-OUTPUT_DIR = PROJECT_ROOT / "datasets" / "pcb"
+IMAGE_DIR = "data/images"
+LABEL_DIR = "labels"
+OUTPUT_DIR = "datasets/pcb"
 
 TRAIN_RATIO = 0.8
 VAL_RATIO = 0.1
 TEST_RATIO = 0.1
 RANDOM_SEED = 42
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 SPLITS = ("train", "val", "test")
 CLASS_NAMES = [
-    "missing_hole",
-    "mouse_bite",
     "open_circuit",
     "short",
-    "spur",
-    "spurious_copper",
+    "missing_hole",
 ]
+
+
+def project_path(path_text: str) -> Path:
+    """Resolve a top-level config path from the project root."""
+    return PROJECT_ROOT / path_text
 
 
 def collect_image_label_pairs(image_dir: Path, label_dir: Path) -> list[tuple[Path, Path]]:
@@ -108,7 +110,7 @@ def write_data_yaml(output_dir: Path) -> None:
     """Write a YOLO data.yaml file for the PCB defect classes."""
     names = "\n".join(f"  {index}: {name}" for index, name in enumerate(CLASS_NAMES))
     data_yaml = (
-        f"path: {output_dir.as_posix()}\n"
+        f"path: {OUTPUT_DIR}\n"
         "train: images/train\n"
         "val: images/val\n"
         "test: images/test\n"
@@ -120,26 +122,30 @@ def write_data_yaml(output_dir: Path) -> None:
 
 
 def main() -> None:
-    if not IMAGE_DIR.exists():
-        raise FileNotFoundError(f"Image folder does not exist: {IMAGE_DIR}")
-    if not LABEL_DIR.exists():
-        raise FileNotFoundError(f"Label folder does not exist: {LABEL_DIR}")
+    image_dir = project_path(IMAGE_DIR)
+    label_dir = project_path(LABEL_DIR)
+    output_dir = project_path(OUTPUT_DIR)
 
-    pairs = collect_image_label_pairs(IMAGE_DIR, LABEL_DIR)
+    if not image_dir.exists():
+        raise FileNotFoundError(f"Image folder does not exist: {image_dir}")
+    if not label_dir.exists():
+        raise FileNotFoundError(f"Label folder does not exist: {label_dir}")
+
+    pairs = collect_image_label_pairs(image_dir, label_dir)
     split_map = split_pairs(pairs)
 
-    prepare_output_dirs(OUTPUT_DIR)
+    prepare_output_dirs(output_dir)
     for split_name, split_items in split_map.items():
-        copy_split_files(split_name, split_items, OUTPUT_DIR)
+        copy_split_files(split_name, split_items, output_dir)
 
-    write_data_yaml(OUTPUT_DIR)
+    write_data_yaml(output_dir)
 
     print(f"Total image/label pairs: {len(pairs)}")
     print(f"Train: {len(split_map['train'])}")
     print(f"Val: {len(split_map['val'])}")
     print(f"Test: {len(split_map['test'])}")
-    print(f"YOLO dataset saved to: {OUTPUT_DIR}")
-    print(f"data.yaml saved to: {OUTPUT_DIR / 'data.yaml'}")
+    print(f"YOLO dataset saved to: {output_dir}")
+    print(f"data.yaml saved to: {output_dir / 'data.yaml'}")
 
 
 if __name__ == "__main__":

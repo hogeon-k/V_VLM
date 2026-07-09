@@ -24,6 +24,9 @@ database/*
 data/input_images/*
 !data/input_images/.gitkeep
 
+data/images/*
+!data/images/.gitkeep
+
 data/result_images/*
 !data/result_images/.gitkeep
 

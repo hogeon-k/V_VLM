@@ -68,8 +68,8 @@ python tools/convert_voc_to_yolo.py
 
 ## YOLO 학습용 데이터셋 분할
 
-이미지는 `data/input_images/`, YOLO TXT 라벨은 `labels/`에 둡니다. 다른 경로를 사용할 경우 [tools/split_yolo_dataset.py](C:/workspace/V_VLM/tools/split_yolo_dataset.py) 상단의 `IMAGE_DIR`, `LABEL_DIR`, `OUTPUT_DIR` 값을 수정합니다.
-스크립트는 이미지와 같은 이름의 `.txt` 라벨을 찾아 함께 복사하고, 라벨이 없는 이미지는 경고 후 건너뜁니다. 기본 비율은 train/val/test = 8:1:1입니다.
+이미지는 `data/images/`, YOLO TXT 라벨은 `labels/`에 둡니다. 다른 경로를 사용할 경우 [tools/split_yolo_dataset.py](C:/workspace/V_VLM/tools/split_yolo_dataset.py) 상단의 `IMAGE_DIR`, `LABEL_DIR`, `OUTPUT_DIR` 값을 수정합니다.
+스크립트는 이미지와 같은 이름의 `.txt` 라벨을 찾아 함께 복사하고, 라벨이 없는 이미지는 경고 후 건너뜁니다. 지원 이미지 확장자는 `jpg`, `jpeg`, `png`입니다. 기본 비율은 train/val/test = 8:1:1이며, 전체 데이터가 60개라면 대략 train 48개, val 6개, test 6개로 나뉩니다.
 
 ```powershell
 python tools/split_yolo_dataset.py
@@ -84,6 +84,20 @@ python tools/split_yolo_dataset.py
 - `datasets/pcb/labels/val`
 - `datasets/pcb/labels/test`
 - `datasets/pcb/data.yaml`
+
+생성되는 `data.yaml`은 3개 클래스 기준입니다.
+
+```yaml
+path: datasets/pcb
+train: images/train
+val: images/val
+test: images/test
+nc: 3
+names:
+  0: open_circuit
+  1: short
+  2: missing_hole
+```
 
 ## 테스트
 
