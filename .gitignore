@@ -27,6 +27,13 @@ data/input_images/*
 data/result_images/*
 !data/result_images/.gitkeep
 
+# Dataset labels and annotations
+data/annotations/*
+!data/annotations/.gitkeep
+
+labels/*
+!labels/.gitkeep
+
 # Logs
 logs/*
 !logs/.gitkeep
