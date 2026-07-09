@@ -5,7 +5,6 @@ from pathlib import Path
 import random
 import shutil
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATASET_ROOT = PROJECT_ROOT / "datasets" / "pcb"
 SOURCE_IMAGE_DIR = PROJECT_ROOT / "data" / "images"
@@ -70,7 +69,9 @@ def read_label_class_counts(label_path: Path) -> Counter[int] | None:
 def representative_class_id(class_counts: Counter[int]) -> int:
     """Choose the most frequent class ID, using the smallest class ID on ties."""
     max_count = max(class_counts.values())
-    candidates = [class_id for class_id, count in class_counts.items() if count == max_count]
+    candidates = [
+        class_id for class_id, count in class_counts.items() if count == max_count
+    ]
     return min(candidates)
 
 
@@ -79,7 +80,9 @@ def collect_image_label_pairs() -> list[tuple[str, bytes, str, bytes, int]]:
     pairs: list[tuple[str, bytes, str, bytes, int]] = []
     seen_stems: set[str] = set()
 
-    missing_roots = [path for path in (SOURCE_IMAGE_DIR, SOURCE_LABEL_DIR) if not path.exists()]
+    missing_roots = [
+        path for path in (SOURCE_IMAGE_DIR, SOURCE_LABEL_DIR) if not path.exists()
+    ]
     if missing_roots:
         print("ERROR: required source folders are missing.")
         for missing_root in missing_roots:
@@ -87,11 +90,16 @@ def collect_image_label_pairs() -> list[tuple[str, bytes, str, bytes, int]]:
         return pairs
 
     for image_path in sorted(SOURCE_IMAGE_DIR.iterdir()):
-        if not image_path.is_file() or image_path.suffix.lower() not in IMAGE_EXTENSIONS:
+        if (
+            not image_path.is_file()
+            or image_path.suffix.lower() not in IMAGE_EXTENSIONS
+        ):
             continue
 
         if image_path.stem in seen_stems:
-            print(f"WARNING: duplicate image stem '{image_path.stem}', skipped: {image_path}")
+            print(
+                f"WARNING: duplicate image stem '{image_path.stem}', skipped: {image_path}"
+            )
             continue
 
         label_path = SOURCE_LABEL_DIR / f"{image_path.stem}.txt"
@@ -161,7 +169,9 @@ def stratified_split(
     pairs: list[tuple[str, bytes, str, bytes, int]],
 ) -> dict[str, list[tuple[str, bytes, str, bytes, int]]]:
     """Group by representative class and split each group independently."""
-    grouped_pairs: dict[int, list[tuple[str, bytes, str, bytes, int]]] = defaultdict(list)
+    grouped_pairs: dict[int, list[tuple[str, bytes, str, bytes, int]]] = defaultdict(
+        list
+    )
     for item in pairs:
         grouped_pairs[item[4]].append(item)
 
@@ -195,7 +205,9 @@ def rebuild_split_dirs() -> None:
             print(f"WARNING: could not remove cache file {cache_file}: {exc}")
 
 
-def copy_split_files(split_map: dict[str, list[tuple[str, bytes, str, bytes, int]]]) -> None:
+def copy_split_files(
+    split_map: dict[str, list[tuple[str, bytes, str, bytes, int]]],
+) -> None:
     """Copy image and label files into the rebuilt split folders."""
     for split_name, items in split_map.items():
         image_output_dir = IMAGES_ROOT / split_name
@@ -208,7 +220,9 @@ def copy_split_files(split_map: dict[str, list[tuple[str, bytes, str, bytes, int
 
 def write_data_yaml() -> None:
     """Write a YOLO data.yaml file for the 3-class PCB dataset."""
-    names = "\n".join(f"  {class_id}: {class_name}" for class_id, class_name in CLASS_NAMES.items())
+    names = "\n".join(
+        f"  {class_id}: {class_name}" for class_id, class_name in CLASS_NAMES.items()
+    )
     data_yaml = (
         "path: datasets/pcb\n"
         "train: images/train\n"
