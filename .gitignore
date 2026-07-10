@@ -44,6 +44,9 @@ datasets/pcb/*
 # YOLO training output
 runs/
 
+# Generated verification outputs
+outputs/
+
 # Logs
 logs/*
 !logs/.gitkeep
