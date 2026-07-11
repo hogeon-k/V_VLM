@@ -111,6 +111,62 @@ names:
 .\.venv\Scripts\python.exe -m compileall .
 ```
 
+## YOLO 모델 검증 비교
+
+`compare_models.py`는 두 YOLO 모델을 동일한 검증 데이터와 평가 옵션으로 `val()` 실행한 뒤, 전체/클래스별 Precision, Recall, mAP, 속도와 confusion matrix 정보를 비교합니다. 실행 전 `runs/detect/*/weights/best.pt` 후보를 출력하며, 비교할 두 가중치는 명시적으로 지정해야 합니다.
+
+```powershell
+.\.venv\Scripts\python.exe compare_models.py `
+  --model-a runs\detect\pcb_default\weights\best.pt `
+  --model-b runs\detect\pcb_custom\weights\best.pt `
+  --name-a default `
+  --name-b custom `
+  --data datasets\pcb\data.yaml `
+  --imgsz 960 `
+  --conf 0.001 `
+  --iou 0.7 `
+  --device 0 `
+  --split val
+```
+
+기본 출력 위치는 `runs/compare/`입니다. 각 모델의 검증 결과와 함께 `model_comparison.csv`, `class_comparison.csv`, `comparison_summary.json`이 생성됩니다. 두 실행의 실제 정답 객체 수가 다르면 스크립트가 비교 무효 경고를 출력합니다.
+
+## 테스트 예측 및 오류 분석 비교
+
+`compare_predictions.py`는 동일한 PCB 테스트 이미지와 YOLO TXT 정답 라벨을 직접 매칭해 TP/FP/FN을 계산합니다. 기본 비교 대상은 `models/best.pt`와 `runs/detect/pcb_ablation_scale05/weights/best.pt`이며, CLI 옵션으로 변경할 수 있습니다.
+
+```powershell
+.\.venv\Scripts\python.exe compare_predictions.py `
+  --model-a models\best.pt `
+  --model-b runs\detect\pcb_ablation_scale05\weights\best.pt `
+  --name-a existing_best `
+  --name-b scale05 `
+  --images datasets\pcb\images\test `
+  --labels datasets\pcb\labels\test `
+  --data datasets\pcb\data.yaml `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --match-iou 0.5 `
+  --device 0 `
+  --run-name open_circuit_error_analysis
+```
+
+동일 클래스이고 `match_iou` 이상인 한 쌍은 TP입니다. 매칭되지 않은 예측은 FP, 매칭되지 않은 정답은 FN으로 집계합니다. 서로 다른 클래스가 같은 위치에서 `match_iou` 이상으로 겹치면 해당 객체를 FP와 FN으로 각각 집계하고 class confusion으로 기록합니다. 한 GT와 한 prediction은 greedy matching에서 한 번만 연결됩니다.
+
+결과는 기존 실행을 덮어쓰지 않도록 `runs/prediction_compare/<run-name>/` 아래에 생성됩니다.
+
+- `<model>/images/`: 예측 및 TP/FP/FN 주석 이미지
+- `<model>/labels/`: confidence를 포함한 YOLO 형식 예측 라벨
+- `side_by_side/`: 정답, 모델 A, 모델 B를 나란히 비교하는 이미지
+- `image_details.csv`, `class_summary.csv`, `confusion_details.csv`: 기본 비교 결과
+- `error_details.csv`: TP/FP/FN별 클래스, confidence, GT/예측 좌표, 매칭 IoU
+- `open_circuit_errors.csv`: open_circuit 관련 FP/FN과 검토 보조용 reason hint
+- `image_error_summary.csv`: FN, FP, class confusion 우선순위로 정렬된 이미지별 오류 요약
+- `error_analysis/<model>/`: `open_circuit_fp`, `open_circuit_fn`, `class_confusion`, `all_errors` 오류 전용 주석 이미지
+
+오류 전용 이미지의 색상은 GT 초록색, prediction 파란색, FP 강조 빨간색, FN 강조 노란색, class confusion 주황색(BGR 기준)입니다. `reason_hint`는 라벨 검토 우선순위를 돕기 위한 자동 분류이며 최종 결함 원인 판정은 아닙니다.
+
 ## 예정 작업
 
 - PySide6 검사 화면을 메인 스레드를 막지 않는 구조로 구현
