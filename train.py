@@ -212,7 +212,7 @@ def train(args: argparse.Namespace) -> None:
         hsv_s=0.3,
         hsv_v=0.2,
         degrees=0.0,
-        translate=0.1,
+        translate=0.05,
         scale=0.5,
         shear=0.0,
         flipud=0.0,
