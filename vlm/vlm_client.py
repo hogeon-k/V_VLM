@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 
 class VlmClient:
@@ -26,30 +26,22 @@ class VlmClient:
         prompt: str,
         image_bytes: bytes | None = None,
         image_path: str | Path | None = None,
+        image_bytes_list: Sequence[bytes] | None = None,
+        image_paths: Sequence[str | Path] | None = None,
     ) -> str:
-        """Send a prompt and one image to Ollama and return the text response."""
-        if image_path is None and image_bytes is None:
-            raise ValueError("VLM image_path or image_bytes is required.")
+        """Send a prompt and one or more images to Ollama and return text."""
+        images = self._collect_images(
+            image_bytes=image_bytes,
+            image_path=image_path,
+            image_bytes_list=image_bytes_list,
+            image_paths=image_paths,
+        )
 
         message: dict[str, Any] = {
             "role": "user",
             "content": prompt,
+            "images": images,
         }
-
-        if image_path is not None:
-            resolved_image_path = Path(image_path).resolve()
-
-            if not resolved_image_path.is_file():
-                raise FileNotFoundError(
-                    f"VLM input image not found: {resolved_image_path}"
-                )
-
-            message["images"] = [str(resolved_image_path)]
-        else:
-            if not image_bytes:
-                raise ValueError("VLM image_bytes is empty.")
-
-            message["images"] = [image_bytes]
 
         try:
             import ollama
@@ -138,3 +130,46 @@ class VlmClient:
             )
 
         return content_text
+
+    def _collect_images(
+        self,
+        image_bytes: bytes | None,
+        image_path: str | Path | None,
+        image_bytes_list: Sequence[bytes] | None,
+        image_paths: Sequence[str | Path] | None,
+    ) -> list[bytes | str]:
+        images: list[bytes | str] = []
+
+        if image_bytes is not None:
+            if not image_bytes:
+                raise ValueError("VLM image_bytes is empty.")
+            images.append(image_bytes)
+
+        if image_path is not None:
+            images.append(self._resolve_image_path(image_path))
+
+        if image_bytes_list is not None:
+            if not image_bytes_list:
+                raise ValueError("VLM image_bytes_list is empty.")
+            for index, item in enumerate(image_bytes_list, start=1):
+                if not item:
+                    raise ValueError(f"VLM image_bytes_list item {index} is empty.")
+                images.append(item)
+
+        if image_paths is not None:
+            if not image_paths:
+                raise ValueError("VLM image_paths is empty.")
+            images.extend(self._resolve_image_path(path) for path in image_paths)
+
+        if not images:
+            raise ValueError("VLM image_path or image_bytes is required.")
+
+        return images
+
+    def _resolve_image_path(self, image_path: str | Path) -> str:
+        resolved_image_path = Path(image_path).resolve()
+
+        if not resolved_image_path.is_file():
+            raise FileNotFoundError(f"VLM input image not found: {resolved_image_path}")
+
+        return str(resolved_image_path)

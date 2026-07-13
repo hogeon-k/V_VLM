@@ -9,6 +9,7 @@ import cv2
 from config.settings import RESULT_IMAGE_DIR
 from model.defect_info import Detection
 from model.yolo_result import YoloResult
+from service.detection_location import calculate_detection_location
 from yolo.model_loader import YoloModelLoader
 from yolo.yolo_config import YoloConfig
 
@@ -66,6 +67,7 @@ class YoloDetector:
             return []
 
         names = getattr(result, "names", {}) or {}
+        image_width, image_height = self._get_result_image_size(result)
         detections: list[Detection] = []
         xyxy_values = boxes.xyxy.cpu().tolist()
         confidence_values = boxes.conf.cpu().tolist()
@@ -83,7 +85,25 @@ class YoloDetector:
                     y1=y1,
                     x2=x2,
                     y2=y2,
+                    location=calculate_detection_location(
+                        (x1, y1, x2, y2),
+                        image_width=image_width,
+                        image_height=image_height,
+                    ),
                 )
             )
 
         return detections
+
+    def _get_result_image_size(self, result: object) -> tuple[int, int]:
+        orig_shape = getattr(result, "orig_shape", None)
+        if orig_shape is not None and len(orig_shape) >= 2:
+            height, width = orig_shape[:2]
+            return int(width), int(height)
+
+        orig_img = getattr(result, "orig_img", None)
+        if orig_img is not None and hasattr(orig_img, "shape") and len(orig_img.shape) >= 2:
+            height, width = orig_img.shape[:2]
+            return int(width), int(height)
+
+        raise RuntimeError("YOLO result does not include original image size.")

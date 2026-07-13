@@ -14,6 +14,7 @@ class Detection:
     y1: int
     x2: int
     y2: int
+    location: str | None = None
     vlm_description: str | None = None
 
     @property
@@ -48,6 +49,7 @@ class DefectInfo(Detection):
         bbox_y1: int,
         bbox_x2: int,
         bbox_y2: int,
+        location: str | None = None,
         vlm_description: str | None = None,
         class_id: int = -1,
     ) -> None:
@@ -59,5 +61,6 @@ class DefectInfo(Detection):
             y1=bbox_y1,
             x2=bbox_x2,
             y2=bbox_y2,
+            location=location,
             vlm_description=vlm_description,
         )

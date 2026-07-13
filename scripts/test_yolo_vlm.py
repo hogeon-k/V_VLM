@@ -21,17 +21,25 @@ from yolo.yolo_config import YoloConfig
 
 def parse_args() -> argparse.Namespace:
     """Parse terminal inspection options."""
-    parser = argparse.ArgumentParser(description="Run YOLO PCB inspection and optional Ollama VLM explanation.")
+    parser = argparse.ArgumentParser(
+        description="Run YOLO PCB inspection and optional Ollama VLM explanation."
+    )
     parser.add_argument("--image", required=True, help="Input PCB image path.")
     parser.add_argument("--model", default="models/best.pt", help="YOLO model path.")
     parser.add_argument("--imgsz", type=int, default=960, help="YOLO inference image size.")
     parser.add_argument("--conf", type=float, default=0.15, help="YOLO confidence threshold.")
-    parser.add_argument("--iou", type=float, default=0.7, help="YOLO NMS IoU threshold.")
+    parser.add_argument("--iou", type=float, default=0.5, help="YOLO NMS IoU threshold.")
     parser.add_argument("--device", default="0", help="YOLO device, for example 0 or cpu.")
     parser.add_argument("--vlm-model", default="qwen2.5vl:3b", help="Ollama VLM model name.")
     parser.add_argument("--ollama-host", default="http://127.0.0.1:11434", help="Ollama host URL.")
     parser.add_argument("--vlm-num-ctx", type=int, default=8192, help="Ollama VLM context window.")
     parser.add_argument("--vlm-num-predict", type=int, default=512, help="Ollama VLM max generated tokens.")
+    parser.add_argument("--vlm-image-size", type=int, default=960, help="Max VLM input image side length.")
+    parser.add_argument("--vlm-image-quality", type=int, default=90, help="VLM JPEG input quality.")
+    parser.add_argument("--vlm-crop-montage-size", type=int, default=960, help="Max VLM crop montage side length.")
+    parser.add_argument("--vlm-crop-padding", type=int, default=192, help="Detection crop padding target in pixels.")
+    parser.add_argument("--vlm-crop-min-size", type=int, default=256, help="Minimum detection crop side length.")
+    parser.add_argument("--vlm-crop-max-size", type=int, default=512, help="Maximum detection crop side length.")
     parser.add_argument("--skip-vlm", action="store_true", help="Run YOLO only and skip VLM explanation.")
     return parser.parse_args()
 
@@ -63,7 +71,17 @@ def build_vlm_service(args: argparse.Namespace) -> VlmService:
         num_ctx=args.vlm_num_ctx,
         num_predict=args.vlm_num_predict,
     )
-    return VlmService(client=client, prompt_builder=PromptBuilder(), response_parser=VlmResponseParser())
+    return VlmService(
+        client=client,
+        prompt_builder=PromptBuilder(),
+        response_parser=VlmResponseParser(),
+        image_size=args.vlm_image_size,
+        image_quality=args.vlm_image_quality,
+        crop_montage_size=args.vlm_crop_montage_size,
+        crop_padding=args.vlm_crop_padding,
+        crop_min_size=args.vlm_crop_min_size,
+        crop_max_size=args.vlm_crop_max_size,
+    )
 
 
 def print_detection_rows(detections: object) -> None:
@@ -77,6 +95,7 @@ def print_detection_rows(detections: object) -> None:
     for index, detection in enumerate(detections, start=1):
         print(
             f"{index}. {detection.class_name} | confidence={detection.confidence:.4f} | "
+            f"location={detection.location or '위치 미계산'} | "
             f"box=({detection.x1}, {detection.y1}, {detection.x2}, {detection.y2})"
         )
 
@@ -110,10 +129,14 @@ def main() -> int:
         print(f"[INFO] VLM model: {args.vlm_model}")
         print(f"[INFO] VLM num_ctx: {args.vlm_num_ctx}")
         print(f"[INFO] VLM num_predict: {args.vlm_num_predict}")
+        print(f"[INFO] VLM image max size: {args.vlm_image_size}")
+        print(f"[INFO] VLM crop montage max size: {args.vlm_crop_montage_size}")
+        print(f"[INFO] VLM crop padding: {args.vlm_crop_padding}")
 
+        vlm_service = build_vlm_service(args)
         inspection_service = InspectionService(
             yolo_service=yolo_service,
-            vlm_service=build_vlm_service(args),
+            vlm_service=vlm_service,
         )
         result = inspection_service.inspect(image_path)
         print(f"[INFO] Judgment: {result.status}")
@@ -121,6 +144,20 @@ def main() -> int:
         print(f"[INFO] Result image: {result.result_image_path}")
         if result.defect_count == 0:
             print("[INFO] VLM analysis skipped")
+        elif vlm_service.last_preparation_info is not None:
+            info = vlm_service.last_preparation_info
+            print(f"[INFO] VLM image count: {info.image_count}")
+            print(f"[INFO] VLM detection crop count: {info.detection_crop_count}")
+            if info.full_image_size is not None:
+                width, height = info.full_image_size
+                print(f"[INFO] VLM full image size: {width}x{height}")
+            if info.crop_montage_size is not None:
+                width, height = info.crop_montage_size
+                print(f"[INFO] VLM crop montage size: {width}x{height}")
+            if info.image_preparation_seconds is not None:
+                print(f"[INFO] VLM image preparation time: {info.image_preparation_seconds:.3f}s")
+            if info.inference_seconds is not None:
+                print(f"[INFO] VLM inference time: {info.inference_seconds:.3f}s")
         print_detection_rows(result.detections)
         if result.vlm_explanation:
             print()

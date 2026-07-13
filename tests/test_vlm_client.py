@@ -45,6 +45,24 @@ def test_vlm_client_passes_ollama_options(monkeypatch: pytest.MonkeyPatch) -> No
     ]
 
 
+def test_vlm_client_passes_image_bytes_list_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, object] = {}
+
+    class FakeClient:
+        def chat(self, **kwargs: object) -> dict[str, object]:
+            calls.update(kwargs)
+            return {"message": {"content": "ok"}}
+
+    install_fake_ollama(monkeypatch, FakeClient())
+
+    result = VlmClient().generate("prompt", image_bytes_list=[b"full", b"montage"])
+
+    assert result == "ok"
+    assert calls["messages"] == [
+        {"role": "user", "content": "prompt", "images": [b"full", b"montage"]}
+    ]
+
+
 def test_vlm_client_context_error_is_not_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeClient:
         def chat(self, **kwargs: object) -> dict[str, object]:
@@ -82,6 +100,16 @@ def test_vlm_client_model_missing_includes_pull_hint(monkeypatch: pytest.MonkeyP
 def test_vlm_client_requires_an_image() -> None:
     with pytest.raises(ValueError, match="image_path or image_bytes is required"):
         VlmClient().generate("prompt")
+
+
+def test_vlm_client_rejects_empty_image_bytes_list() -> None:
+    with pytest.raises(ValueError, match="image_bytes_list is empty"):
+        VlmClient().generate("prompt", image_bytes_list=[])
+
+
+def test_vlm_client_rejects_empty_image_bytes_list_item() -> None:
+    with pytest.raises(ValueError, match="image_bytes_list item 2 is empty"):
+        VlmClient().generate("prompt", image_bytes_list=[b"image", b""])
 
 
 def test_vlm_client_rejects_missing_image_path(tmp_path) -> None:
