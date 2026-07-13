@@ -2,6 +2,7 @@ PySide6
 opencv-python
 Pillow
 ultralytics
+ollama
 torch
 torchvision
 pandas
@@ -9,5 +10,4 @@ numpy
 pytest
 pyinstaller
 
-# VLM packages are not finalized yet.
-# Add VLM-related dependencies here after the model/provider is selected.
+# Ollama itself is a separate desktop/server program.

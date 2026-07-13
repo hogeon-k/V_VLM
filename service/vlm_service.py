@@ -20,5 +20,10 @@ class VlmService:
         self.response_parser = response_parser or VlmResponseParser()
 
     def describe_defects(self, image_path: Path, yolo_result: YoloResult) -> str | None:
-        # TODO: Build a provider-neutral prompt and parse the VLM response.
-        return None
+        """Explain NG detections with a local Ollama VLM."""
+        if yolo_result.defect_count == 0:
+            return None
+
+        prompt = self.prompt_builder.build_defect_prompt(yolo_result)
+        response = self.client.generate(prompt, image_path=image_path)
+        return self.response_parser.parse_description(response)

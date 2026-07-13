@@ -22,7 +22,30 @@ class InspectionService:
         self.vlm_service = vlm_service or VlmService()
         self.result_service = result_service or ResultService()
 
-    def inspect_image(self, image_path: Path) -> InspectionResult:
-        # TODO: Coordinate image loading, YOLO detection, optional VLM explanation,
-        # result image generation, and repository persistence.
-        return InspectionResult(image_name=image_path.name, original_image_path=image_path)
+    def inspect(self, image_path: str | Path) -> InspectionResult:
+        """Run YOLO first, then call VLM only for NG images."""
+        source_path = Path(image_path)
+        yolo_result = self.yolo_service.detect(source_path)
+
+        status = "NG" if yolo_result.is_ng else "OK"
+        vlm_explanation: str | None = None
+        if yolo_result.is_ng:
+            try:
+                vlm_explanation = self.vlm_service.describe_defects(
+                    yolo_result.annotated_image_path or source_path,
+                    yolo_result,
+                )
+            except RuntimeError as exc:
+                vlm_explanation = f"[VLM error] {exc}"
+
+        return InspectionResult(
+            source_image_path=source_path,
+            result_image_path=yolo_result.annotated_image_path,
+            status=status,
+            detections=yolo_result.detections,
+            vlm_explanation=vlm_explanation,
+        )
+
+    def inspect_image(self, image_path: str | Path) -> InspectionResult:
+        """Compatibility wrapper for the existing UI/service naming."""
+        return self.inspect(image_path)

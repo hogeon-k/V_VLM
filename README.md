@@ -1,5 +1,7 @@
 # V_VLM
 
+YOLO + Ollama VLM terminal inspection guide: [docs/yolo_vlm_terminal.md](C:/workspace/V_VLM/docs/yolo_vlm_terminal.md)
+
 PCB 검사용 Python 데스크톱 Vision AI 프로젝트입니다. 목표 흐름은 PCB 이미지를 입력받고, YOLO로 불량 위치와 종류를 탐지한 뒤, NG 이미지에 대해서만 VLM 설명을 요청하고, 검색 가능한 검사 결과를 SQLite에 저장하는 것입니다.
 
 현재 저장소에는 초기 프로젝트 구조와 가벼운 클래스 골격만 포함되어 있습니다. YOLO 추론, VLM 호출, 전체 PySide6 화면, 데이터베이스 CRUD 흐름은 TODO로 남겨두었습니다.

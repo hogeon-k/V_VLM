@@ -10,6 +10,6 @@ class YoloService:
     def __init__(self, detector: YoloDetector | None = None) -> None:
         self.detector = detector or YoloDetector()
 
-    def detect(self, image_path: Path) -> YoloResult:
-        # TODO: Delegate to YOLO detector after model configuration is finalized.
-        return YoloResult(image_path=image_path)
+    def detect(self, image_path: str | Path, output_path: str | Path | None = None) -> YoloResult:
+        """Delegate image detection to the configured YOLO detector."""
+        return self.detector.detect(image_path, output_path=output_path)
