@@ -81,6 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="0", help="YOLO device, for example 0 or cpu.")
     parser.add_argument("--project", default=str(DEFAULT_PROJECT), help="Base output directory.")
     parser.add_argument("--run-name", default=None, help="Optional execution subdirectory name.")
+    parser.add_argument("--debug", action="store_true", help="Print per-box TP/FP/FN IoU diagnostics.")
     return parser.parse_args()
 
 
@@ -223,6 +224,12 @@ def box_iou(first: Detection, second: Detection) -> float:
     return intersection / union if union > 0.0 else 0.0
 
 
+def best_same_class_iou(detection: Detection, candidates: list[Detection]) -> float:
+    """Return the best IoU against same-class boxes, or zero when none exist."""
+    same_class_ious = [box_iou(detection, candidate) for candidate in candidates if detection.class_id == candidate.class_id]
+    return max(same_class_ious, default=0.0)
+
+
 def greedy_pairs(gt: list[Detection], predictions: list[Detection], match_iou: float, same_class: bool, used_gt: set[int], used_pred: set[int]) -> list[Match]:
     """Return descending-IoU one-to-one greedy pairs from unused detections."""
     candidates: list[tuple[float, int, int]] = []
@@ -310,10 +317,19 @@ def draw_box(image: np.ndarray, detection: Detection, label: str, color: tuple[i
     font = cv2.FONT_HERSHEY_SIMPLEX
     scale = 0.45
     text_thickness = 1
-    (text_width, text_height), baseline = cv2.getTextSize(label, font, scale, text_thickness)
-    text_y = max(text_height + baseline + 2, y1)
-    cv2.rectangle(image, (x1, text_y - text_height - baseline - 3), (x1 + text_width + 4, text_y + 2), color, -1)
-    cv2.putText(image, label, (x1 + 2, text_y - baseline), font, scale, (0, 0, 0), text_thickness, cv2.LINE_AA)
+    lines = label.splitlines() or [label]
+    measurements = [cv2.getTextSize(line, font, scale, text_thickness) for line in lines]
+    text_width = max((size[0][0] for size in measurements), default=0)
+    text_height = max((size[0][1] for size in measurements), default=0)
+    baseline = max((size[1] for size in measurements), default=0)
+    line_height = text_height + baseline + 3
+    block_height = line_height * len(lines) + 2
+    text_y = max(block_height, y1)
+    background_x2 = min(width - 1, x1 + text_width + 4)
+    cv2.rectangle(image, (x1, text_y - block_height), (background_x2, text_y + 2), color, -1)
+    for line_index, line in enumerate(lines):
+        y = text_y - block_height + 2 + text_height + line_index * line_height
+        cv2.putText(image, line, (x1 + 2, y), font, scale, (0, 0, 0), text_thickness, cv2.LINE_AA)
 
 
 def annotate_ground_truth(image: np.ndarray, gt: list[Detection], class_names: list[str], fn_indices: set[int] | None = None) -> np.ndarray:
@@ -329,14 +345,21 @@ def annotate_predictions(image: np.ndarray, predictions: list[Detection], gt: li
     """Render predictions plus yellow GT boxes that remain FN after matching."""
     canvas = image.copy()
     tp_indices = {match.pred_index for match in tp_matches}
+    tp_iou_by_pred = {match.pred_index: match.iou for match in tp_matches}
     confusion_indices = {match.pred_index for match in confusion_matches}
     matched_gt = {match.gt_index for match in tp_matches}
+    gt_best_iou = {index: best_same_class_iou(detection, predictions) for index, detection in enumerate(gt)}
+    pred_best_iou = {index: best_same_class_iou(prediction, gt) for index, prediction in enumerate(predictions)}
     for index, detection in enumerate(gt):
         if index not in matched_gt:
-            draw_box(canvas, detection, f"FN GT {safe_name(class_names, detection.class_id)}", FN_COLOR)
+            label = f"FN GT {safe_name(class_names, detection.class_id)}\nbest_iou={gt_best_iou[index]:.2f}"
+            draw_box(canvas, detection, label, FN_COLOR)
     for index, prediction in enumerate(predictions):
         status, color = ("TP", TP_COLOR) if index in tp_indices else ("CONF", CONFUSION_COLOR) if index in confusion_indices else ("FP", FP_COLOR)
-        label = f"{status} {safe_name(class_names, prediction.class_id)} {prediction.confidence or 0.0:.2f}"
+        if status == "TP":
+            label = f"TP {safe_name(class_names, prediction.class_id)} conf={prediction.confidence or 0.0:.2f}\niou={tp_iou_by_pred[index]:.2f}"
+        else:
+            label = f"{status} {safe_name(class_names, prediction.class_id)} conf={prediction.confidence or 0.0:.2f}\nbest_iou={pred_best_iou[index]:.2f}"
         draw_box(canvas, prediction, label, color)
     return canvas
 
@@ -388,6 +411,8 @@ def initialise_counts(class_names: list[str]) -> dict[str, dict[str, int]]:
 def analyse_image(gt: list[Detection], predictions: list[Detection], class_names: list[str], match_iou: float) -> dict[str, Any]:
     """Match one image and return totals, per-class counts, and class confusions."""
     tp_matches, confusion_matches, used_gt, used_pred = match_detections(gt, predictions, match_iou)
+    gt_best_iou = {index: best_same_class_iou(detection, predictions) for index, detection in enumerate(gt)}
+    pred_best_iou = {index: best_same_class_iou(prediction, gt) for index, prediction in enumerate(predictions)}
     per_class = initialise_counts(class_names)
     for detection in gt:
         per_class[safe_name(class_names, detection.class_id)]["gt"] += 1
@@ -429,6 +454,8 @@ def analyse_image(gt: list[Detection], predictions: list[Detection], class_names
         "fn": total_fn,
         "used_gt": used_gt,
         "used_pred": used_pred,
+        "gt_best_iou": gt_best_iou,
+        "pred_best_iou": pred_best_iou,
     }
 
 
@@ -463,22 +490,50 @@ def build_error_record(
     error_type: str,
     gt_detection: Detection | None,
     prediction: Detection | None,
-    match_iou: float | None,
+    matched_iou: float | None,
+    best_iou: float,
+    match_iou_threshold: float,
     reason_hint: str,
     class_names: list[str],
 ) -> dict[str, Any]:
     """Create one TP, FP, or FN record with both optional boxes represented."""
+    formatted_matched_iou = "" if matched_iou is None else round(matched_iou, 6)
     record = {
         "model": model_name,
         "image_name": image_name,
         "error_type": error_type,
         "confidence": "" if prediction is None or prediction.confidence is None else round(prediction.confidence, 6),
-        "match_iou": "" if match_iou is None else round(match_iou, 6),
+        "matched_iou": formatted_matched_iou,
+        "best_iou": round(best_iou, 6),
+        "match_iou_threshold": round(match_iou_threshold, 6),
+        "match_iou": formatted_matched_iou,
         "reason_hint": reason_hint,
     }
     record.update(detection_csv_fields("gt", gt_detection, class_names))
     record.update(detection_csv_fields("pred", prediction, class_names))
     return record
+
+
+def print_debug_record(record: dict[str, Any]) -> None:
+    """Print a compact per-record IoU diagnostic for debug mode."""
+    error_type = record["error_type"]
+    if error_type == "TP":
+        print(
+            f"[DEBUG] {record['image_name']} | TP | class={record['pred_class']} | "
+            f"conf={float(record['confidence']):.4f} | matched_iou={float(record['matched_iou']):.4f}"
+        )
+    elif error_type == "FP":
+        confidence = float(record["confidence"]) if record["confidence"] != "" else 0.0
+        print(
+            f"[DEBUG] {record['image_name']} | FP | class={record['pred_class']} | "
+            f"conf={confidence:.4f} | best_iou={float(record['best_iou']):.4f} | "
+            f"threshold={float(record['match_iou_threshold']):.4f}"
+        )
+    elif error_type == "FN":
+        print(
+            f"[DEBUG] {record['image_name']} | FN | class={record['gt_class']} | "
+            f"best_iou={float(record['best_iou']):.4f} | threshold={float(record['match_iou_threshold']):.4f}"
+        )
 
 
 def build_error_records(
@@ -488,6 +543,8 @@ def build_error_records(
     result: dict[str, Any],
     class_names: list[str],
     confidence_threshold: float,
+    match_iou_threshold: float,
+    debug: bool,
 ) -> list[dict[str, Any]]:
     """Build auditable TP/FP/FN records while preserving class-confusion links.
 
@@ -504,20 +561,88 @@ def build_error_records(
     confusion_pred = {match.pred_index for match in result["confusion_matches"]}
 
     for match in result["tp_matches"]:
-        records.append(build_error_record(model_name, image_name, "TP", gt[match.gt_index], predictions[match.pred_index], match.iou, "", class_names))
+        records.append(
+            build_error_record(
+                model_name,
+                image_name,
+                "TP",
+                gt[match.gt_index],
+                predictions[match.pred_index],
+                match.iou,
+                match.iou,
+                match_iou_threshold,
+                "",
+                class_names,
+            )
+        )
     for match in result["confusion_matches"]:
         gt_detection, prediction = gt[match.gt_index], predictions[match.pred_index]
-        records.append(build_error_record(model_name, image_name, "FP", gt_detection, prediction, match.iou, "class_confusion", class_names))
-        records.append(build_error_record(model_name, image_name, "FN", gt_detection, prediction, match.iou, "class_confusion", class_names))
+        records.append(
+            build_error_record(
+                model_name,
+                image_name,
+                "FP",
+                gt_detection,
+                prediction,
+                None,
+                result["pred_best_iou"][match.pred_index],
+                match_iou_threshold,
+                "class_confusion",
+                class_names,
+            )
+        )
+        records.append(
+            build_error_record(
+                model_name,
+                image_name,
+                "FN",
+                gt_detection,
+                prediction,
+                None,
+                result["gt_best_iou"][match.gt_index],
+                match_iou_threshold,
+                "class_confusion",
+                class_names,
+            )
+        )
     for pred_index, prediction in enumerate(predictions):
         if pred_index in tp_pred or pred_index in confusion_pred:
             continue
         reason = "threshold_sensitive" if is_threshold_sensitive(prediction.confidence, confidence_threshold) else "background_or_unlabeled_object"
-        records.append(build_error_record(model_name, image_name, "FP", None, prediction, None, reason, class_names))
+        records.append(
+            build_error_record(
+                model_name,
+                image_name,
+                "FP",
+                None,
+                prediction,
+                None,
+                result["pred_best_iou"][pred_index],
+                match_iou_threshold,
+                reason,
+                class_names,
+            )
+        )
     for gt_index, gt_detection in enumerate(gt):
         if gt_index in tp_gt or gt_index in confusion_gt:
             continue
-        records.append(build_error_record(model_name, image_name, "FN", gt_detection, None, None, "missed_detection", class_names))
+        records.append(
+            build_error_record(
+                model_name,
+                image_name,
+                "FN",
+                gt_detection,
+                None,
+                None,
+                result["gt_best_iou"][gt_index],
+                match_iou_threshold,
+                "missed_detection",
+                class_names,
+            )
+        )
+    if debug:
+        for record in records:
+            print_debug_record(record)
     return records
 
 
@@ -525,7 +650,27 @@ def save_error_details_csv(path: Path, records: list[dict[str, Any]]) -> None:
     """Save complete TP/FP/FN box-level matching evidence for both models."""
     write_csv(
         path,
-        ["model", "image_name", "error_type", "gt_class", "pred_class", "confidence", "gt_x1", "gt_y1", "gt_x2", "gt_y2", "pred_x1", "pred_y1", "pred_x2", "pred_y2", "match_iou"],
+        [
+            "model",
+            "image_name",
+            "error_type",
+            "gt_class",
+            "pred_class",
+            "confidence",
+            "matched_iou",
+            "best_iou",
+            "match_iou_threshold",
+            "gt_x1",
+            "gt_y1",
+            "gt_x2",
+            "gt_y2",
+            "pred_x1",
+            "pred_y1",
+            "pred_x2",
+            "pred_y2",
+            "match_iou",
+            "reason_hint",
+        ],
         records,
     )
 
@@ -537,7 +682,22 @@ def save_open_circuit_errors_csv(path: Path, records: list[dict[str, Any]]) -> N
         if (record["error_type"] == "FP" and record["pred_class"] == "open_circuit")
         or (record["error_type"] == "FN" and record["gt_class"] == "open_circuit")
     ]
-    write_csv(path, ["image_name", "error_type", "gt_class", "pred_class", "confidence", "match_iou", "reason_hint"], selected)
+    write_csv(
+        path,
+        [
+            "image_name",
+            "error_type",
+            "gt_class",
+            "pred_class",
+            "confidence",
+            "matched_iou",
+            "best_iou",
+            "match_iou_threshold",
+            "match_iou",
+            "reason_hint",
+        ],
+        selected,
+    )
 
 
 def build_image_error_summary(model_name: str, image_name: str, result: dict[str, Any], class_names: list[str]) -> dict[str, Any]:
@@ -598,7 +758,7 @@ def render_error_analysis_images(
                 drawn.add(key)
                 class_id = class_names.index(record["gt_class"]) if record["gt_class"] in class_names else 0
                 box = Detection(class_id, (float(record["gt_x1"]), float(record["gt_y1"]), float(record["gt_x2"]), float(record["gt_y2"])))
-                draw_box(canvas, box, f"GT: {record['gt_class']}", CONFUSION_COLOR if is_confusion else FN_COLOR, 3)
+                draw_box(canvas, box, f"FN GT {record['gt_class']}\nbest_iou={float(record['best_iou']):.2f}", CONFUSION_COLOR if is_confusion else FN_COLOR, 3)
         if record["error_type"] == "FP" and record["pred_class"]:
             key = ("pred", record["pred_class"], record["pred_x1"], record["pred_y1"], record["pred_x2"], record["pred_y2"])
             if key not in drawn:
@@ -606,7 +766,11 @@ def render_error_analysis_images(
                 confidence = float(record["confidence"]) if record["confidence"] != "" else None
                 class_id = class_names.index(record["pred_class"]) if record["pred_class"] in class_names else 0
                 box = Detection(class_id, (float(record["pred_x1"]), float(record["pred_y1"]), float(record["pred_x2"]), float(record["pred_y2"])), confidence)
-                label = f"Pred: {record['pred_class']} {confidence:.2f}" if confidence is not None else f"Pred: {record['pred_class']}"
+                label = (
+                    f"FP {record['pred_class']} conf={confidence:.2f}\nbest_iou={float(record['best_iou']):.2f}"
+                    if confidence is not None
+                    else f"FP {record['pred_class']}\nbest_iou={float(record['best_iou']):.2f}"
+                )
                 draw_box(canvas, box, label, CONFUSION_COLOR if is_confusion else FP_COLOR, 3)
     fp_count = sum(record["error_type"] == "FP" for record in errors)
     fn_count = sum(record["error_type"] == "FN" for record in errors)
@@ -822,7 +986,7 @@ def main() -> int:
                 })
             for item in result["confusions"]:
                 confusion_rows.append({"image": image_path.name, "model": model_name, **item})
-            image_records = build_error_records(model_name, image_path.name, gt, result, class_names, args.conf)
+            image_records = build_error_records(model_name, image_path.name, gt, result, class_names, args.conf, args.match_iou, args.debug)
             error_records.extend(image_records)
             image_error_rows.append(build_image_error_summary(model_name, image_path.name, result, class_names))
             render_error_analysis_images(error_analysis_dir, model_name, image_path.name, image, image_records, class_names)
