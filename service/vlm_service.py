@@ -45,6 +45,7 @@ class VlmService:
         self.crop_min_size = crop_min_size
         self.crop_max_size = crop_max_size
         self.last_preparation_info: VlmPreparationInfo | None = None
+        self.last_raw_response: str | None = None
 
     def describe_defects(self, image_path: Path, yolo_result: YoloResult) -> str | None:
         """Explain NG detections with a local Ollama VLM."""
@@ -90,4 +91,6 @@ class VlmService:
             self.last_preparation_info.inference_seconds = (
                 perf_counter() - inference_started
             )
-        return self.response_parser.parse_description(response)
+        self.last_raw_response = response
+        return self.response_parser.parse_description(response, yolo_result)
+

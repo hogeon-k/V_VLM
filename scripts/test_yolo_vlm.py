@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vlm-crop-min-size", type=int, default=256, help="Minimum detection crop side length.")
     parser.add_argument("--vlm-crop-max-size", type=int, default=512, help="Maximum detection crop side length.")
     parser.add_argument("--skip-vlm", action="store_true", help="Run YOLO only and skip VLM explanation.")
+    parser.add_argument("--debug-vlm", action="store_true", help="Print the raw VLM response after the sanitized explanation.")
     return parser.parse_args()
 
 
@@ -163,6 +164,10 @@ def main() -> int:
             print()
             print("[VLM explanation]")
             print(result.vlm_explanation)
+        if args.debug_vlm and vlm_service.last_raw_response:
+            print()
+            print("[VLM raw response]")
+            print(vlm_service.last_raw_response)
 
         return 0
     except Exception as exc:

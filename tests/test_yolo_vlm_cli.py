@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from model.defect_info import Detection
+from model.inspection_result import InspectionResult
 import scripts.test_yolo_vlm as cli
 
 
 def test_cli_vlm_defaults_and_skip_vlm_flag(monkeypatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["test_yolo_vlm.py", "--image", "sample.jpg", "--skip-vlm"])
+    monkeypatch.setattr(
+        sys, "argv", ["test_yolo_vlm.py", "--image", "sample.jpg", "--skip-vlm"]
+    )
 
     args = cli.parse_args()
 
@@ -21,6 +25,7 @@ def test_cli_vlm_defaults_and_skip_vlm_flag(monkeypatch) -> None:
     assert args.vlm_crop_max_size == 512
     assert args.iou == 0.5
     assert args.skip_vlm is True
+    assert args.debug_vlm is False
 
 
 def test_cli_build_vlm_service_passes_context_options(monkeypatch) -> None:
@@ -65,16 +70,20 @@ def test_cli_build_vlm_service_passes_context_options(monkeypatch) -> None:
 
 def test_cli_detection_rows_include_location(capsys) -> None:
     cli.print_detection_rows(
-        [Detection(0, "open_circuit", 0.784, 2711, 946, 2739, 979, location="중단 오른쪽")]
+        [
+            Detection(
+                0, "open_circuit", 0.784, 2711, 946, 2739, 979, location="middle right"
+            )
+        ]
     )
 
     output = capsys.readouterr().out
 
-    assert "location=중단 오른쪽" in output
+    assert "location=middle right" in output
     assert "box=(2711, 946, 2739, 979)" in output
 
 
-def test_cli_help_includes_crop_montage_options(monkeypatch, capsys) -> None:
+def test_cli_help_includes_crop_montage_and_debug_options(monkeypatch, capsys) -> None:
     monkeypatch.setattr(sys, "argv", ["test_yolo_vlm.py", "--help"])
 
     try:
@@ -87,3 +96,56 @@ def test_cli_help_includes_crop_montage_options(monkeypatch, capsys) -> None:
     assert "--vlm-crop-padding" in output
     assert "--vlm-crop-min-size" in output
     assert "--vlm-crop-max-size" in output
+    assert "--debug-vlm" in output
+
+
+class FakeVlmService:
+    last_preparation_info = None
+    last_raw_response = '{"raw": true}'
+
+
+class FakeInspectionService:
+    def __init__(self, yolo_service: object, vlm_service: object) -> None:
+        self.yolo_service = yolo_service
+        self.vlm_service = vlm_service
+
+    def inspect(self, image_path: Path) -> InspectionResult:
+        return InspectionResult(
+            source_image_path=image_path,
+            result_image_path=Path("result.jpg"),
+            status="NG",
+            detections=[Detection(0, "open_circuit", 0.8, 1, 2, 3, 4)],
+            vlm_explanation="sanitized explanation",
+        )
+
+
+def install_main_fakes(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "build_yolo_service", lambda args: object())
+    monkeypatch.setattr(cli, "build_vlm_service", lambda args: FakeVlmService())
+    monkeypatch.setattr(cli, "InspectionService", FakeInspectionService)
+
+
+def test_cli_default_output_hides_raw_vlm_response(monkeypatch, capsys) -> None:
+    install_main_fakes(monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["test_yolo_vlm.py", "--image", "sample.jpg"])
+
+    assert cli.main() == 0
+
+    output = capsys.readouterr().out
+    assert "sanitized explanation" in output
+    assert "[VLM raw response]" not in output
+    assert '{"raw": true}' not in output
+
+
+def test_cli_debug_vlm_prints_raw_vlm_response(monkeypatch, capsys) -> None:
+    install_main_fakes(monkeypatch)
+    monkeypatch.setattr(
+        sys, "argv", ["test_yolo_vlm.py", "--image", "sample.jpg", "--debug-vlm"]
+    )
+
+    assert cli.main() == 0
+
+    output = capsys.readouterr().out
+    assert "sanitized explanation" in output
+    assert "[VLM raw response]" in output
+    assert '{"raw": true}' in output

@@ -1,54 +1,147 @@
 from __future__ import annotations
 
+from model.defect_info import Detection
 from model.yolo_result import YoloResult
 
 
+LOW_CONFIDENCE_THRESHOLD = 0.70
+
+CLASS_VISUAL_GUIDES = {
+    "open_circuit": (
+        "focus on broken or missing circuit pattern, discontinuity, connection state, "
+        "and differences from nearby normal traces"
+    ),
+    "short": (
+        "focus on abnormal connection, contact, or bridge shape between traces that "
+        "should be separated"
+    ),
+    "missing_hole": (
+        "focus on a blocked, absent, or positionally different hole compared with "
+        "nearby normal holes"
+    ),
+}
+
+DEFAULT_VISUAL_GUIDE = (
+    "focus on visible differences from nearby normal patterns and avoid guessing "
+    "features that are not visible in the image"
+)
+
+
 class PromptBuilder:
-    """Build Korean prompts that keep YOLO and Python location data authoritative."""
+    """Build prompts that keep YOLO data authoritative and VLM output structured."""
 
     def build_defect_prompt(self, yolo_result: YoloResult) -> str:
         detections = "\n\n".join(
-            (
-                f"탐지 {index}\n"
-                f"- 클래스: {detection.class_name}\n"
-                f"- 신뢰도: {detection.confidence:.4f}\n"
-                f"- 위치: {detection.location or '위치 미계산'}\n"
-                f"- Bounding Box: ({detection.x1}, {detection.y1}, {detection.x2}, {detection.y2})"
-            )
+            self._format_detection(index, detection)
             for index, detection in enumerate(yolo_result.detections, start=1)
         )
+        class_guides = "\n".join(
+            f"- {class_name}: {guide}"
+            for class_name, guide in sorted(CLASS_VISUAL_GUIDES.items())
+        )
+        final_judgment = "NG" if yolo_result.is_ng else "OK"
+        defect_classes = ", ".join(
+            dict.fromkeys(detection.class_name for detection in yolo_result.detections)
+        )
 
-        return f"""당신은 PCB 불량 검사 결과를 설명하는 보조자입니다.
+        return f"""You are an assistant that explains PCB defect inspection results to an operator.
 
-입력 이미지 설명:
-- 첫 번째 이미지는 PCB 전체 위치와 YOLO Bounding Box를 확인하기 위한 전체 결과 이미지입니다.
-- 두 번째 이미지는 각 탐지 영역의 원본 해상도 crop을 하나로 합친 crop montage입니다.
-- crop montage의 Detection 1, Detection 2, Detection 3은 아래 탐지 정보 순서와 동일합니다.
+Input images:
+- Image 1 is the full YOLO result image with bounding boxes.
+- Image 2 is a crop montage of the detected regions.
+- The crop montage order matches Detection 1, Detection 2, Detection 3, and so on.
 
-YOLO 탐지 결과는 불량 후보 정보입니다.
-- 아래의 클래스, 신뢰도, 위치, Bounding Box는 Python과 YOLO가 제공한 값이므로 변경하지 마세요.
-- 위치는 Python 코드에서 계산한 값이므로 다시 추론하지 마세요.
-- 좌표를 이용해 새로운 위치를 계산하지 마세요.
-- 전체 이미지의 위치는 맥락 확인에 사용하세요.
-- crop montage는 각 탐지 영역의 실제 회로 패턴 단절 여부를 확인하는 데 사용하세요.
-- crop에서 결함 형태가 명확하지 않으면 확정적으로 판정하지 마세요.
-- YOLO 탐지 후보와 crop에서 시각적으로 확인한 내용을 구분해서 설명하세요.
-- 모든 Detection을 순서대로 확인하세요.
-- 한 탐지의 시각 특징을 다른 탐지에 잘못 적용하지 마세요.
-- "녹색 PCB가 보입니다" 같은 일반적인 설명은 피하세요.
-- 시각적으로 확인하기 어려운 내용은 "이미지만으로 확인 어려움"이라고 작성하세요.
-- 축소 이미지 또는 crop에서도 세부 단절 형태 확인이 어려우면 "축소 이미지에서는 세부 단절 형태 확인이 어려움"이라고 작성하세요.
-- 응답은 한국어로 작성하세요.
-- 응답은 6개 항목 형식을 유지하되 각 항목은 짧게 작성하세요.
+Your role:
+- Explain the YOLO detection results in a way an operator can understand.
+- Add only visual observations that can be checked from the full result image or crop montage.
+- Do not repeat the general definition of the defect class as the visual_feature.
+- The visual_feature must describe the actual shape, gap, color/contrast, continuity, or pattern seen in that specific crop.
+- If the crop does not clearly show a concrete feature, say that the crop image does not clearly confirm the feature.
+- Describe each detection separately.
+- Do not change the YOLO final judgment, class name, detection count, location, confidence, or bounding box.
+- Do not remove YOLO detections or rename them to another defect class.
+- If something is not clearly visible, write that it is difficult to confirm from the image alone.
+- You are not the final judge. You are an explanation system that supports operator review.
 
-YOLO 탐지 목록:
+Authoritative YOLO summary:
+- Final judgment: {final_judgment}
+- Defect classes: {defect_classes or "none"}
+- Detection count: {yolo_result.defect_count}
+
+Required rules:
+1. Use the YOLO final OK/NG judgment exactly as provided.
+2. Use the YOLO defect class, detection count, location, bounding box, and confidence exactly as provided.
+3. Do not delete a YOLO detection or change it to another class.
+4. Explain every Detection individually.
+5. Write only features that are actually observable in the images.
+6. If the feature is unclear, write "image-only confirmation is difficult".
+7. For open_circuit, focus on broken/missing trace pattern, discontinuity, connection state, and contrast with nearby normal traces.
+8. Mention uncertainty when reflection, drawing/overlay, blur, crop scale, or low visibility may affect confirmation.
+9. If confidence is below {LOW_CONFIDENCE_THRESHOLD:.2f}, mark it as priority recheck.
+10. For an NG judgment, write at least one operator check item.
+11. Do not write "no check required", "confirmation unnecessary", or "no additional action" for NG.
+12. The VLM is only a visual explanation assistant; YOLO remains the source of truth.
+
+Class-specific visual guides:
+{class_guides}
+- unlisted classes: {DEFAULT_VISUAL_GUIDE}
+
+YOLO detections:
 {detections}
 
-아래 형식을 지키세요.
-1. 최종 판정: NG
-2. 탐지된 불량
-3. 불량 위치
-4. 시각적 특징
-5. 판정 근거
-6. 작업자 확인 사항
+Prefer JSON if possible, with this schema:
+{{
+  "final_judgment": "{final_judgment}",
+  "defect_classes": ["{defect_classes}"],
+  "detection_count": {yolo_result.defect_count},
+  "detections": [
+    {{
+      "detection_id": 1,
+      "class_name": "",
+      "location": "",
+      "confidence": 0.0000,
+      "bounding_box": [0, 0, 0, 0],
+      "visual_feature": "actual visible feature in this crop, not the class definition",
+      "uncertainty": "",
+      "operator_check": "",
+      "priority_recheck": false
+    }}
+  ],
+  "overall_reason": "",
+  "final_operator_check": ""
+}}
+
+If you cannot produce valid JSON, use this exact text structure:
+1. Final judgment: {final_judgment}
+
+2. Detection summary:
+   - Defect class: {defect_classes or "none"}
+   - Detection count: {yolo_result.defect_count}
+
+3. Detection details:
+   - Detection 1:
+     - Location:
+     - Confidence:
+     - Bounding Box:
+     - Observed visual feature:
+     - Uncertainty:
+     - Operator check:
+     - Priority recheck:
+
+4. Overall judgment reason:
+
+5. Final operator check:
 """
+
+    def _format_detection(self, index: int, detection: Detection) -> str:
+        priority_recheck = detection.confidence < LOW_CONFIDENCE_THRESHOLD
+        guide = CLASS_VISUAL_GUIDES.get(detection.class_name, DEFAULT_VISUAL_GUIDE)
+        return (
+            f"- Detection {index}:\n"
+            f"  - Class: {detection.class_name}\n"
+            f"  - Location: {detection.location or 'location unavailable'}\n"
+            f"  - Confidence: {detection.confidence:.4f}\n"
+            f"  - Bounding Box: ({detection.x1}, {detection.y1}, {detection.x2}, {detection.y2})\n"
+            f"  - Visual guide: {guide}\n"
+            f"  - Priority recheck: {'yes' if priority_recheck else 'no'}"
+        )

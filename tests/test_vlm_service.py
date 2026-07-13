@@ -13,14 +13,14 @@ def test_vlm_service_skips_ok_result() -> None:
     assert description is None
 
 
-def test_vlm_service_generates_description_for_ng_result(tmp_path) -> None:
+def test_vlm_service_generates_sanitized_description_for_ng_result(tmp_path) -> None:
     image_path = tmp_path / "sample.png"
     Image.new("RGB", (100, 80), "white").save(image_path)
 
     class FakeClient:
         def generate(self, prompt: str, image_bytes_list: list[bytes]) -> str:
             assert "open_circuit" in prompt
-            assert "위치 미계산" in prompt
+            assert "location unavailable" in prompt
             assert len(image_bytes_list) == 2
             assert all(image_bytes_list)
             return "  explanation  "
@@ -31,7 +31,11 @@ def test_vlm_service_generates_description_for_ng_result(tmp_path) -> None:
     service = VlmService(client=FakeClient())
     description = service.describe_defects(image_path, yolo_result)
 
-    assert description == "explanation"
+    assert description is not None
+    assert "최종 판정: NG" in description
+    assert "탐지 수: 1" in description
+    assert "explanation" not in description
+    assert service.last_raw_response == "  explanation  "
 
 
 def test_vlm_service_passes_full_image_and_montage_bytes(monkeypatch) -> None:
@@ -91,7 +95,9 @@ def test_vlm_service_passes_full_image_and_montage_bytes(monkeypatch) -> None:
 
     description = service.describe_defects(Path("result.jpg"), yolo_result)
 
-    assert description == "explanation"
+    assert description is not None
+    assert "최종 판정: NG" in description
+    assert service.last_raw_response == "explanation"
     assert calls["resize"] == (Path("result.jpg"), 512, 85)
     assert calls["montage"] == (
         Path("result.jpg"),
@@ -131,9 +137,9 @@ def test_vlm_service_prompt_includes_calculated_location(monkeypatch) -> None:
         lambda image_bytes: (100, 80),
     )
 
-    detection = Detection(0, "open_circuit", 0.91, 1, 2, 3, 4, location="중단 오른쪽")
+    detection = Detection(0, "open_circuit", 0.91, 1, 2, 3, 4, location="middle right")
     yolo_result = YoloResult(Path("sample.png"), detections=[detection])
 
     VlmService(client=FakeClient()).describe_defects(Path("result.jpg"), yolo_result)
 
-    assert "- 위치: 중단 오른쪽" in str(calls["prompt"])
+    assert "- Location: middle right" in str(calls["prompt"])
