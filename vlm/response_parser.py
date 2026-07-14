@@ -2,330 +2,355 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
-from model.defect_info import Detection
 from model.yolo_result import YoloResult
-from vlm.prompt_builder import LOW_CONFIDENCE_THRESHOLD
 
-DEFAULT_VISUAL_FEATURE = "crop 이미지에서 구체적인 시각적 특징을 명확히 확인하지 못했습니다."
-DEFAULT_UNCERTAINTY = "이미지만으로 실제 결함 여부를 단정하기 어렵습니다."
-DEFAULT_OPERATOR_CHECK = (
-    "YOLO Bounding Box와 원본 이미지 및 crop 이미지를 함께 확인하여 "
-    "실제 결함 여부를 최종 확인하세요."
+ENGLISH_DEFAULT_VISUAL_FEATURE = "No clear visual characteristic could be confirmed."
+DEFAULT_VISUAL_FEATURE = "명확한 시각적 특징을 확인하지 못했습니다."
+FALLBACK_SUMMARY = (
+    "VLM 설명 생성에 실패하여 YOLO 탐지 결과를 기준으로 표시합니다."
 )
-_PARSE_FALLBACK_REASON = "VLM 응답을 구조화하지 못해 YOLO 결과 기준으로 정리했습니다."
 
-_NO_CHECK_PATTERNS = [
-    re.compile(pattern, re.IGNORECASE)
-    for pattern in (
-        r"no\s+check\s+required",
-        r"confirmation\s+unnecessary",
-        r"no\s+additional\s+action",
-        r"no\s+further\s+action",
-        r"not\s+required",
-        r"필요\s*없음",
-        r"확인\s*필요\s*없음",
-        r"확인\s*불필요",
-        r"추가\s*확인\s*불필요",
-        r"추가\s*조치\s*없음",
-    )
-]
 
-_UNCLEAR_PATTERNS = [
-    re.compile(pattern, re.IGNORECASE)
-    for pattern in (
-        r"image-only confirmation is difficult",
-        r"difficult to confirm",
-        r"unclear",
-        r"not clearly visible",
-        r"명확.*어렵",
-        r"확인.*어렵",
-        r"불명확",
-    )
-]
+@dataclass(frozen=True)
+class ParsedVlmDetection:
+    detection_id: int
+    visual_feature: str
+    visibility: str
+    review_required: bool
+
+
+@dataclass(frozen=True)
+class ParsedVlmResponse:
+    final_judgment: str
+    detections: list[ParsedVlmDetection]
+    summary: str
+    raw_data: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class VlmQualityInfo:
+    quality_status: str = "not_evaluated"
+    class_name_only_count: int = 0
+    class_name_only_detection_ids: tuple[int, ...] = ()
+    summary_contradiction: bool = False
+    semantic_warning_count: int = 0
+
+
+@dataclass(frozen=True)
+class VlmParseResult:
+    raw_response: str
+    parse_success: bool
+    parse_error: str
+    fallback_used: bool
+    parsed_response: ParsedVlmResponse | None
+    formatted_response: str
+    quality_info: VlmQualityInfo = field(default_factory=VlmQualityInfo)
 
 
 class VlmResponseParser:
-    def parse_description(
-        self,
-        response_text: str,
-        yolo_result: YoloResult | None = None,
-    ) -> str:
-        """Normalize provider responses while keeping YOLO output authoritative."""
+    def parse_response(self, raw_response: str, yolo_result: YoloResult) -> VlmParseResult:
+        """Parse structured JSON and fall back to YOLO-authoritative text on failure."""
+        try:
+            parsed_response = parse_vlm_response(raw_response, yolo_result.defect_count)
+            quality_info = evaluate_response_quality(parsed_response, yolo_result)
+            formatted = format_parsed_vlm_response(parsed_response, yolo_result)
+            return VlmParseResult(
+                raw_response=raw_response,
+                parse_success=True,
+                parse_error="",
+                fallback_used=False,
+                parsed_response=parsed_response,
+                formatted_response=formatted,
+                quality_info=quality_info,
+            )
+        except ValueError as exc:
+            return VlmParseResult(
+                raw_response=raw_response,
+                parse_success=False,
+                parse_error=str(exc),
+                fallback_used=True,
+                parsed_response=None,
+                formatted_response=format_yolo_fallback_response(yolo_result),
+                quality_info=VlmQualityInfo(),
+            )
+
+    def parse_description(self, response_text: str, yolo_result: YoloResult | None = None) -> str:
+        """Backward-compatible wrapper returning only the user-facing text."""
         if yolo_result is None:
             return response_text.strip()
-        return sanitize_vlm_explanation(response_text, yolo_result)
+        return self.parse_response(response_text, yolo_result).formatted_response
 
 
-def sanitize_vlm_explanation(response_text: str, yolo_result: YoloResult) -> str:
-    """Merge VLM observations into a YOLO-authoritative user explanation."""
+def parse_vlm_response(raw_response: str, expected_detection_count: int) -> ParsedVlmResponse:
+    """Validate the exact JSON structure expected from the VLM."""
+    if not raw_response or not raw_response.strip():
+        raise ValueError("Empty VLM response")
+
     try:
-        stripped = response_text.strip()
-        parsed_json = _extract_json_object(stripped) if stripped else None
-        if isinstance(parsed_json, dict):
-            return _format_structured_response(
-                vlm_data=parsed_json,
-                yolo_result=yolo_result,
-                parse_failed=False,
-            )
-        return _format_structured_response(
-            vlm_data=None,
-            yolo_result=yolo_result,
-            parse_failed=True,
-        )
-    except Exception:
-        return _format_structured_response(
-            vlm_data=None,
-            yolo_result=yolo_result,
-            parse_failed=True,
-        )
+        data = json.loads(raw_response)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON: {exc.msg}") from exc
 
+    if not isinstance(data, dict):
+        raise ValueError("Unexpected response structure: root must be an object")
 
-def _extract_json_object(response_text: str) -> dict[str, Any] | None:
-    for candidate in _json_candidates(response_text):
-        try:
-            parsed = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(parsed, dict):
-            return parsed
-    return None
+    _reject_additional_properties(data, {"final_judgment", "detections", "summary"}, "root")
 
+    final_judgment = data.get("final_judgment")
+    if final_judgment not in {"OK", "NG"}:
+        raise ValueError(f"Invalid final_judgment: {final_judgment}")
 
-def _json_candidates(response_text: str) -> list[str]:
-    candidates = [response_text]
-    candidates.extend(
-        match.group(1).strip()
-        for match in re.finditer(
-            r"```(?:json)?\s*(.*?)```",
-            response_text,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-    )
-
-    start = response_text.find("{")
-    end = response_text.rfind("}")
-    if start != -1 and end > start:
-        candidates.append(response_text[start : end + 1])
-
-    unique_candidates = []
-    for candidate in candidates:
-        candidate = candidate.strip()
-        if candidate and candidate not in unique_candidates:
-            unique_candidates.append(candidate)
-    return unique_candidates
-
-
-def _format_structured_response(
-    vlm_data: dict[str, Any] | None,
-    yolo_result: YoloResult,
-    parse_failed: bool,
-) -> str:
-    vlm_detections_by_id = _detections_by_id(vlm_data)
-    details = []
-    operator_checks = []
-    any_priority_recheck = parse_failed
-
-    for index, detection in enumerate(yolo_result.detections, start=1):
-        vlm_item = vlm_detections_by_id.get(index)
-        merged = _merge_detection(index, detection, vlm_item, parse_failed)
-        details.append(_format_detection_detail(index, detection, merged))
-        if merged["operator_check"]:
-            operator_checks.append(merged["operator_check"])
-        any_priority_recheck = any_priority_recheck or bool(merged["priority_recheck"])
-
-    overall_reason = _safe_text(_get_field(vlm_data, "overall_reason"))
-    if not overall_reason:
-        overall_reason = _build_default_overall_reason(yolo_result, parse_failed)
-
-    final_operator_check = _safe_text(_get_field(vlm_data, "final_operator_check"))
-    operator_checks.append(final_operator_check or DEFAULT_OPERATOR_CHECK)
-    final_operator_check = _join_unique(operator_checks) or DEFAULT_OPERATOR_CHECK
-
-    return _compose_response(
-        detection_details=details,
-        overall_reason=overall_reason,
-        final_operator_check=final_operator_check,
-        yolo_result=yolo_result,
-        any_priority_recheck=any_priority_recheck,
-    )
-
-
-def _detections_by_id(vlm_data: dict[str, Any] | None) -> dict[int, dict[str, Any]]:
-    detections = _get_field(vlm_data, "detections")
+    detections = data.get("detections")
     if not isinstance(detections, list):
-        return {}
+        raise ValueError("Missing or invalid detections field")
 
-    result = {}
-    for item in detections:
+    if len(detections) != expected_detection_count:
+        raise ValueError(
+            "Detection count mismatch: "
+            f"expected={expected_detection_count}, actual={len(detections)}"
+        )
+
+    parsed_detections: list[ParsedVlmDetection] = []
+    for index, item in enumerate(detections, start=1):
         if not isinstance(item, dict):
-            continue
-        detection_id = _coerce_int(item.get("detection_id"))
-        if detection_id is None:
-            continue
-        result[detection_id] = item
-    return result
+            raise ValueError(f"Unexpected detection structure at index {index}")
+        _reject_additional_properties(
+            item,
+            {"detection_id", "visual_feature", "visibility", "review_required"},
+            f"detection {index}",
+        )
+        missing = [
+            key
+            for key in ("detection_id", "visual_feature", "visibility", "review_required")
+            if key not in item
+        ]
+        if missing:
+            raise ValueError(f"Missing required field in detection {index}: {missing[0]}")
 
+        detection_id = item["detection_id"]
+        if isinstance(detection_id, bool) or not isinstance(detection_id, int):
+            raise ValueError(f"Invalid detection_id at index {index}: {detection_id}")
 
-def _merge_detection(
-    index: int,
-    detection: Detection,
-    vlm_item: dict[str, Any] | None,
-    parse_failed: bool,
-) -> dict[str, object]:
-    visual_feature = _safe_text(_get_field(vlm_item, "visual_feature"))
-    uncertainty = _safe_text(_get_field(vlm_item, "uncertainty"))
-    operator_check = _sanitize_operator_check(
-        _safe_text(_get_field(vlm_item, "operator_check"))
+        visual_feature = item["visual_feature"]
+        if not isinstance(visual_feature, str):
+            raise ValueError(f"Invalid visual_feature for detection {detection_id}")
+
+        visibility = item["visibility"]
+        if visibility not in {"clear", "unclear"}:
+            raise ValueError(f"Invalid visibility for detection {detection_id}: {visibility}")
+
+        review_required = item["review_required"]
+        if not isinstance(review_required, bool):
+            raise ValueError(f"Invalid review_required for detection {detection_id}")
+
+        parsed_detections.append(
+            ParsedVlmDetection(
+                detection_id=detection_id,
+                visual_feature=visual_feature.strip() or DEFAULT_VISUAL_FEATURE,
+                visibility=visibility,
+                review_required=review_required,
+            )
+        )
+
+    expected_ids = list(range(1, expected_detection_count + 1))
+    actual_ids = [detection.detection_id for detection in parsed_detections]
+    if actual_ids != expected_ids:
+        raise ValueError(f"Detection ID mismatch: expected={expected_ids}, actual={actual_ids}")
+
+    summary = data.get("summary")
+    if not isinstance(summary, str):
+        raise ValueError("Missing or invalid summary field")
+
+    return ParsedVlmResponse(
+        final_judgment=final_judgment,
+        detections=parsed_detections,
+        summary=summary.strip(),
+        raw_data=data,
     )
-    missing_vlm_result = vlm_item is None
-    generic_observation = _looks_generic_visual_feature(detection.class_name, visual_feature)
-    missing_observation = not visual_feature or generic_observation
 
-    if missing_observation:
-        visual_feature = DEFAULT_VISUAL_FEATURE
-    if not uncertainty:
-        uncertainty = DEFAULT_UNCERTAINTY if missing_observation else "특이 불확실성 언급 없음"
-    if not operator_check:
-        operator_check = DEFAULT_OPERATOR_CHECK
 
-    priority_recheck = (
-        detection.confidence < LOW_CONFIDENCE_THRESHOLD
-        or missing_vlm_result
-        or missing_observation
-        or parse_failed
-        or _as_bool(_get_field(vlm_item, "priority_recheck"))
-        or _looks_unclear(visual_feature)
-        or _looks_unclear(uncertainty)
+def evaluate_response_quality(
+    parsed_response: ParsedVlmResponse,
+    yolo_result: YoloResult,
+) -> VlmQualityInfo:
+    """Evaluate explanation quality without changing parse success/fallback behavior."""
+    class_name_only_ids: list[int] = []
+    fallback_or_empty_count = 0
+    for yolo_detection, vlm_detection in zip(
+        yolo_result.detections,
+        parsed_response.detections,
+        strict=True,
+    ):
+        quality = visual_feature_quality(
+            vlm_detection.visual_feature,
+            yolo_detection.class_name,
+        )
+        if quality == "class_name_only":
+            class_name_only_ids.append(vlm_detection.detection_id)
+        elif quality in {"empty", "fallback"}:
+            fallback_or_empty_count += 1
+    summary_contradiction = has_summary_visibility_contradiction(parsed_response)
+    semantic_warning_count = (
+        len(class_name_only_ids) + fallback_or_empty_count + int(summary_contradiction)
+    )
+    quality_status = "warning" if semantic_warning_count else "acceptable"
+    return VlmQualityInfo(
+        quality_status=quality_status,
+        class_name_only_count=len(class_name_only_ids),
+        class_name_only_detection_ids=tuple(class_name_only_ids),
+        summary_contradiction=summary_contradiction,
+        semantic_warning_count=semantic_warning_count,
     )
 
-    return {
-        "visual_feature": visual_feature,
-        "uncertainty": uncertainty,
-        "operator_check": operator_check,
-        "priority_recheck": priority_recheck,
+
+def is_class_name_only_visual_feature(visual_feature: str, class_name: str) -> bool:
+    """Return true when visual_feature is only a normalized class label."""
+    normalized_feature = _normalize_class_label(visual_feature)
+    if not normalized_feature:
+        return False
+    normalized_class = _normalize_class_label(class_name)
+    class_only_forms = {
+        normalized_class,
+        f"{normalized_class} defect",
+        f"defect {normalized_class}",
     }
+    return normalized_feature in class_only_forms
 
 
-def _format_detection_detail(
-    index: int,
-    detection: Detection,
-    merged: dict[str, object],
+def visual_feature_quality(visual_feature: str, class_name: str) -> str:
+    """Classify one visual_feature quality with a small stable vocabulary."""
+    if not visual_feature or not visual_feature.strip():
+        return "empty"
+    if visual_feature.strip() in {DEFAULT_VISUAL_FEATURE, ENGLISH_DEFAULT_VISUAL_FEATURE}:
+        return "fallback"
+    if is_class_name_only_visual_feature(visual_feature, class_name):
+        return "class_name_only"
+    return "acceptable"
+
+
+def has_summary_visibility_contradiction(parsed_response: ParsedVlmResponse) -> bool:
+    """Detect explicit 'all clear' summaries when any detection is unclear."""
+    if not any(detection.visibility == "unclear" for detection in parsed_response.detections):
+        return False
+    normalized_summary = re.sub(r"\s+", " ", parsed_response.summary.lower()).strip()
+    contradiction_patterns = (
+        "all defects are clearly visible",
+        "all detections are clearly visible",
+        "all defects are clear",
+        "every defect is clearly visible",
+        "모든 불량이 명확하게 보입니다",
+        "모든 탐지 영역이 명확합니다",
+        "모든 불량이 선명하게 확인됩니다",
+    )
+    return any(pattern in normalized_summary for pattern in contradiction_patterns)
+
+
+def format_parsed_vlm_response(
+    parsed_response: ParsedVlmResponse,
+    yolo_result: YoloResult,
 ) -> str:
+    """Format parsed VLM observations deterministically using YOLO metadata."""
+    yolo_final_judgment = "NG" if yolo_result.is_ng else "OK"
     lines = [
-        f"{index}. {detection.class_name}",
-        f"   - 위치: {detection.location or '위치 미계산'}",
-        f"   - 신뢰도: {detection.confidence:.4f}",
-        f"   - Bounding Box: ({detection.x1}, {detection.y1}, {detection.x2}, {detection.y2})",
-        f"   - 관찰된 시각적 특징: {merged['visual_feature']}",
-        f"   - 불확실성: {merged['uncertainty']}",
+        f"최종 판정: {yolo_final_judgment}",
+        "",
+        "탐지 요약:",
+        f"- 탐지된 불량 수: {len(yolo_result.detections)}개",
+        "",
+        "불량 상세 정보:",
     ]
-    if merged["priority_recheck"]:
-        lines.append("   - 우선 재검토 여부: 예")
+
+    for index, (yolo_detection, vlm_detection) in enumerate(
+        zip(yolo_result.detections, parsed_response.detections, strict=True),
+        start=1,
+    ):
+        lines.extend(
+            [
+                "",
+                f"{index}. {yolo_detection.class_name}",
+                f"   - 신뢰도: {yolo_detection.confidence:.4f}",
+                f"   - 위치: {yolo_detection.location or '위치 정보 없음'}",
+                (
+                    "   - 바운딩 박스: "
+                    f"({yolo_detection.x1}, {yolo_detection.y1}, "
+                    f"{yolo_detection.x2}, {yolo_detection.y2})"
+                ),
+                f"   - 시각적 특징: {vlm_detection.visual_feature}",
+                f"   - 가시성: {_format_visibility(vlm_detection.visibility)}",
+                f"   - 추가 확인: {_format_review_required(vlm_detection.review_required)}",
+            ]
+        )
+
+    lines.extend(["", "종합 설명:", parsed_response.summary])
     return "\n".join(lines)
 
 
-def _compose_response(
-    detection_details: list[str],
-    overall_reason: str,
-    final_operator_check: str,
-    yolo_result: YoloResult,
-    any_priority_recheck: bool,
-) -> str:
+def format_yolo_fallback_response(yolo_result: YoloResult) -> str:
+    """Create deterministic safe text when the VLM response cannot be parsed."""
     final_judgment = "NG" if yolo_result.is_ng else "OK"
-    defect_classes = ", ".join(
-        dict.fromkeys(detection.class_name for detection in yolo_result.detections)
-    ) or "없음"
-    details = "\n\n".join(detection_details) if detection_details else "탐지 없음"
-    priority_line = "\n우선 재검토 대상이 포함되어 있습니다." if any_priority_recheck else ""
-    return (
-        f"최종 판정: {final_judgment}\n\n"
-        f"탐지 요약:\n"
-        f"- 클래스: {defect_classes}\n"
-        f"- 탐지 수: {yolo_result.defect_count}\n\n"
-        f"탐지 상세:\n\n{details}\n\n"
-        f"종합 의견:\n{overall_reason}{priority_line}\n\n"
-        f"최종 작업자 확인 사항:\n{final_operator_check}"
-    )
-
-
-def _build_default_overall_reason(yolo_result: YoloResult, parse_failed: bool) -> str:
-    final_judgment = "NG" if yolo_result.is_ng else "OK"
-    defect_classes = ", ".join(
-        dict.fromkeys(detection.class_name for detection in yolo_result.detections)
-    ) or "결함 없음"
-    reason = f"YOLO가 {yolo_result.defect_count}개의 {defect_classes} 후보를 탐지하여 최종 판정은 {final_judgment}입니다."
-    if parse_failed:
-        reason = f"{reason} {_PARSE_FALLBACK_REASON}"
-    return reason
-
-
-def _get_field(data: dict[str, Any] | None, key: str) -> Any:
-    if not isinstance(data, dict):
-        return None
-    return data.get(key)
-
-
-def _safe_text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value.strip()
-    return str(value).strip()
-
-
-def _sanitize_operator_check(value: str) -> str:
-    if not value:
-        return ""
-    sanitized = value
-    for pattern in _NO_CHECK_PATTERNS:
-        sanitized = pattern.sub(DEFAULT_OPERATOR_CHECK, sanitized)
-    return sanitized.strip()
-
-
-def _coerce_int(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value.strip())
-        except ValueError:
-            return None
-    return None
-
-
-def _as_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"true", "1", "yes", "y", "예"}
-    return False
-
-
-def _looks_unclear(value: str) -> bool:
-    return any(pattern.search(value) for pattern in _UNCLEAR_PATTERNS)
-
-
-def _looks_generic_visual_feature(class_name: str, visual_feature: str) -> bool:
-    lowered = visual_feature.lower()
-    if class_name == "open_circuit":
-        generic_parts = (
-            "broken or missing circuit pattern",
-            "discontinuity",
-            "connection state",
-            "differences from nearby normal traces",
+    lines = [
+        f"최종 판정: {final_judgment}",
+        "",
+        "탐지 요약:",
+        f"- 탐지된 불량 수: {len(yolo_result.detections)}개",
+        "",
+        "불량 상세 정보:",
+    ]
+    if not yolo_result.detections:
+        lines.append("")
+        lines.append("(없음)")
+    for index, detection in enumerate(yolo_result.detections, start=1):
+        lines.extend(
+            [
+                "",
+                f"{index}. {detection.class_name}",
+                f"   - 신뢰도: {detection.confidence:.4f}",
+                f"   - 위치: {detection.location or '위치 정보 없음'}",
+                (
+                    "   - 바운딩 박스: "
+                    f"({detection.x1}, {detection.y1}, {detection.x2}, {detection.y2})"
+                ),
+                f"   - 시각적 특징: {DEFAULT_VISUAL_FEATURE}",
+                "   - 가시성: 불명확함",
+                "   - 추가 확인: 필요",
+            ]
         )
-        return any(part in lowered for part in generic_parts)
-    return False
+    lines.extend(["", "종합 설명:", FALLBACK_SUMMARY])
+    return "\n".join(lines)
 
 
-def _join_unique(values: list[str]) -> str:
-    unique_values = []
-    for value in values:
-        sanitized = _sanitize_operator_check(value)
-        if sanitized and sanitized not in unique_values:
-            unique_values.append(sanitized)
-    return "\n".join(f"- {value}" for value in unique_values)
+def sanitize_vlm_explanation(response_text: str, yolo_result: YoloResult) -> str:
+    """Backward-compatible function name for existing callers."""
+    return VlmResponseParser().parse_description(response_text, yolo_result)
+
+
+def _reject_additional_properties(
+    data: dict[str, Any],
+    allowed_keys: set[str],
+    location: str,
+) -> None:
+    unexpected = sorted(set(data) - allowed_keys)
+    if unexpected:
+        raise ValueError(f"Unexpected field in {location}: {unexpected[0]}")
+
+
+def _normalize_class_label(value: str) -> str:
+    normalized = value.strip().lower()
+    normalized = normalized.replace("_", " ").replace("-", " ")
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def _format_visibility(value: str) -> str:
+    if value == "clear":
+        return "명확함"
+    if value == "unclear":
+        return "불명확함"
+    return value
+
+
+def _format_review_required(value: bool) -> str:
+    return "필요" if value else "불필요"

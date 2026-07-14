@@ -6,7 +6,12 @@ import pytest
 from PIL import Image
 
 from model.defect_info import Detection
-from vlm.crop_montage import create_crop_montage_jpeg_bytes, create_detection_crops
+from vlm.crop_montage import (
+    create_crop_montage_jpeg_bytes,
+    create_crop_montage_result,
+    create_detection_crops,
+    save_montage_bytes,
+)
 
 
 def detection(index: int, x1: int, y1: int, x2: int, y2: int) -> Detection:
@@ -101,6 +106,62 @@ def test_crop_montage_jpeg_bytes_for_detection_counts(tmp_path, count: int) -> N
         assert max(image.size) <= 960
 
 
+def test_crop_montage_result_includes_metadata(tmp_path) -> None:
+    image_path = tmp_path / "board.jpg"
+    Image.new("RGB", (1000, 800), "white").save(image_path)
+
+    result = create_crop_montage_result(
+        image_path,
+        [detection(1, 100, 80, 130, 110)],
+        max_size=960,
+    )
+
+    assert result.image_bytes
+    assert result.width > 0
+    assert result.height > 0
+    assert result.crop_count == 1
+
+
+def test_crop_montage_result_respects_size_limit_without_losing_crop_count(tmp_path) -> None:
+    image_path = tmp_path / "board.jpg"
+    Image.new("RGB", (1800, 1200), "white").save(image_path)
+    detections = [
+        detection(1, 100, 80, 150, 130),
+        detection(2, 700, 400, 760, 470),
+        detection(3, 1300, 900, 1360, 980),
+        detection(4, 1500, 100, 1580, 180),
+    ]
+
+    result = create_crop_montage_result(
+        image_path,
+        detections,
+        max_size=640,
+        columns=2,
+    )
+
+    assert result.crop_count == 4
+    assert max(result.width, result.height) == 640
+    assert result.width == result.height
+    with Image.open(BytesIO(result.image_bytes)) as image:
+        assert image.size == (640, 640)
+
+
+def test_crop_montage_result_does_not_upscale_small_montage(tmp_path) -> None:
+    image_path = tmp_path / "board.jpg"
+    Image.new("RGB", (180, 180), "white").save(image_path)
+
+    result = create_crop_montage_result(
+        image_path,
+        [detection(1, 20, 20, 40, 40)],
+        max_size=640,
+        min_crop_size=64,
+        max_crop_size=128,
+    )
+
+    assert result.crop_count == 1
+    assert max(result.width, result.height) < 640
+
+
 def test_crop_montage_rejects_empty_detections(tmp_path) -> None:
     image_path = tmp_path / "board.jpg"
     Image.new("RGB", (100, 100), "white").save(image_path)
@@ -112,3 +173,24 @@ def test_crop_montage_rejects_empty_detections(tmp_path) -> None:
 def test_detection_crops_reject_missing_image(tmp_path) -> None:
     with pytest.raises(FileNotFoundError, match="VLM crop source image not found"):
         create_detection_crops(tmp_path / "missing.jpg", [detection(1, 1, 2, 3, 4)])
+
+
+def test_save_montage_bytes_creates_parent_and_valid_jpeg(tmp_path) -> None:
+    image_path = tmp_path / "board.jpg"
+    Image.new("RGB", (1000, 800), "white").save(image_path)
+    montage_bytes = create_crop_montage_jpeg_bytes(
+        image_path,
+        [detection(1, 100, 80, 130, 110)],
+    )
+
+    saved_path = save_montage_bytes(montage_bytes, tmp_path / "nested" / "montage")
+
+    assert saved_path == tmp_path / "nested" / "montage.jpg"
+    assert saved_path.stat().st_size > 0
+    with Image.open(saved_path) as image:
+        assert image.format == "JPEG"
+
+
+def test_save_montage_bytes_rejects_empty_bytes(tmp_path) -> None:
+    with pytest.raises(ValueError, match="must not be empty"):
+        save_montage_bytes(b"", tmp_path / "montage.jpg")

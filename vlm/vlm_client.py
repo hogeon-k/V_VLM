@@ -1,7 +1,20 @@
 from __future__ import annotations
 
+import base64
+import json
 from pathlib import Path
 from typing import Any, Sequence
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from vlm.ollama_response import (
+    OllamaResponseMetadata,
+    build_ollama_metadata,
+    build_ollama_debug_lines,
+    extract_ollama_content,
+    normalize_ollama_response,
+)
+from vlm.response_schema import VLM_RESPONSE_SCHEMA
 
 
 class VlmClient:
@@ -11,15 +24,30 @@ class VlmClient:
         self,
         model_name: str = "qwen2.5vl:3b",
         host: str = "http://127.0.0.1:11434",
-        temperature: float = 0.1,
+        temperature: float = 0.0,
+        top_p: float = 0.8,
+        top_k: int = 20,
+        repeat_penalty: float = 1.1,
+        seed: int = 42,
         num_ctx: int = 8192,
-        num_predict: int = 512,
+        num_predict: int = 256,
+        response_schema: dict[str, Any] | None = None,
+        debug_response: bool = False,
+        timeout_seconds: float = 120.0,
     ) -> None:
         self.model_name = model_name
         self.host = host.rstrip("/")
         self.temperature = temperature
+        self.top_p = top_p
+        self.top_k = top_k
+        self.repeat_penalty = repeat_penalty
+        self.seed = seed
         self.num_ctx = num_ctx
         self.num_predict = num_predict
+        self.response_schema = response_schema or VLM_RESPONSE_SCHEMA
+        self.debug_response = debug_response
+        self.timeout_seconds = timeout_seconds
+        self.last_response_metadata: OllamaResponseMetadata | None = None
 
     def generate(
         self,
@@ -37,33 +65,32 @@ class VlmClient:
             image_paths=image_paths,
         )
 
-        message: dict[str, Any] = {
-            "role": "user",
-            "content": prompt,
-            "images": images,
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt,
+                    "images": self._encode_images_for_http(images),
+                }
+            ],
+            "stream": False,
+            "format": self.response_schema,
+            "options": {
+                "num_ctx": self.num_ctx,
+                "num_predict": self.num_predict,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "top_k": self.top_k,
+                "repeat_penalty": self.repeat_penalty,
+                "seed": self.seed,
+            },
         }
 
         try:
-            import ollama
-        except ImportError as exc:
-            raise RuntimeError(
-                "ollama Python package is not installed. "
-                "Run: .\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt"
-            ) from exc
-
-        client = ollama.Client(host=self.host)
-
-        try:
-            response = client.chat(
-                model=self.model_name,
-                messages=[message],
-                options={
-                    "temperature": self.temperature,
-                    "num_ctx": self.num_ctx,
-                    "num_predict": self.num_predict,
-                },
-            )
+            response_data, status_code = self._post_chat(payload)
         except Exception as exc:
+            self.last_response_metadata = None
             error_text = str(exc)
             error_lower = error_text.lower()
 
@@ -107,29 +134,49 @@ class VlmClient:
                 f"Original error: {type(exc).__name__}: {error_text}"
             ) from exc
 
-        if isinstance(response, dict):
-            response_message = response.get("message", {})
-            content = (
-                response_message.get("content", "")
-                if isinstance(response_message, dict)
-                else ""
-            )
-        else:
-            response_message = getattr(response, "message", None)
-            content = (
-                getattr(response_message, "content", "")
-                if response_message is not None
-                else ""
-            )
+        metadata = build_ollama_metadata(response_data, http_status=status_code)
+        self.last_response_metadata = metadata
 
-        content_text = str(content).strip()
+        if self.debug_response:
+            print(f"[DEBUG] Ollama status code: {status_code}")
+            for line in build_ollama_debug_lines(response_data):
+                print(line)
+        return extract_ollama_content(response_data, metadata)
 
-        if not content_text:
+    def _post_chat(self, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
+        request = Request(
+            url=f"{self.host}/api/chat",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                status_code = int(getattr(response, "status", 200))
+                body = response.read().decode("utf-8")
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(
-                f"Ollama returned an empty VLM response. " f"Model: {self.model_name}"
+                f"Ollama HTTP request failed. status_code={exc.code}. body={body}"
+            ) from exc
+        except URLError as exc:
+            raise RuntimeError(f"Failed to connect to Ollama at {self.host}. {exc}") from exc
+
+        if not body.strip():
+            raise RuntimeError(
+                "Ollama returned an empty HTTP response body. "
+                f"status_code={status_code}"
             )
 
-        return content_text
+        try:
+            response_data = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Ollama returned invalid JSON. status_code={status_code}. "
+                f"Original error: {exc.msg}"
+            ) from exc
+
+        return normalize_ollama_response(response_data), status_code
 
     def _collect_images(
         self,
@@ -165,6 +212,16 @@ class VlmClient:
             raise ValueError("VLM image_path or image_bytes is required.")
 
         return images
+
+    def _encode_images_for_http(self, images: Sequence[bytes | str]) -> list[str]:
+        encoded_images: list[str] = []
+        for image in images:
+            if isinstance(image, bytes):
+                image_bytes = image
+            else:
+                image_bytes = Path(image).read_bytes()
+            encoded_images.append(base64.b64encode(image_bytes).decode("ascii"))
+        return encoded_images
 
     def _resolve_image_path(self, image_path: str | Path) -> str:
         resolved_image_path = Path(image_path).resolve()

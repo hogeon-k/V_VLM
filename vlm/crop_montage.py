@@ -24,6 +24,16 @@ class PreparedDetectionCrop:
     bbox_in_crop: tuple[int, int, int, int]
 
 
+@dataclass(frozen=True)
+class CropMontageResult:
+    """JPEG crop montage bytes plus metadata used by the VLM pipeline."""
+
+    image_bytes: bytes
+    width: int
+    height: int
+    crop_count: int
+
+
 def create_detection_crops(
     image_path: str | Path,
     detections: Sequence[Detection],
@@ -56,7 +66,7 @@ def create_detection_crops(
     return crops
 
 
-def create_crop_montage_jpeg_bytes(
+def create_crop_montage_result(
     image_path: str | Path,
     detections: Sequence[Detection],
     max_size: int = 960,
@@ -65,7 +75,7 @@ def create_crop_montage_jpeg_bytes(
     padding: int = 192,
     min_crop_size: int = 256,
     max_crop_size: int = 512,
-) -> bytes:
+) -> CropMontageResult:
     """Combine detection crops into one RGB JPEG montage for VLM input."""
     crops = create_detection_crops(
         image_path=image_path,
@@ -103,7 +113,48 @@ def create_crop_montage_jpeg_bytes(
     if not montage_bytes:
         raise RuntimeError("Failed to create VLM crop montage JPEG bytes.")
 
-    return montage_bytes
+    return CropMontageResult(
+        image_bytes=montage_bytes,
+        width=montage.width,
+        height=montage.height,
+        crop_count=len(crops),
+    )
+
+
+def create_crop_montage_jpeg_bytes(
+    image_path: str | Path,
+    detections: Sequence[Detection],
+    max_size: int = 960,
+    quality: int = 90,
+    columns: int = 2,
+    padding: int = 192,
+    min_crop_size: int = 256,
+    max_crop_size: int = 512,
+) -> bytes:
+    """Return only the JPEG bytes for callers that use the original API."""
+    return create_crop_montage_result(
+        image_path=image_path,
+        detections=detections,
+        max_size=max_size,
+        quality=quality,
+        columns=columns,
+        padding=padding,
+        min_crop_size=min_crop_size,
+        max_crop_size=max_crop_size,
+    ).image_bytes
+
+
+def save_montage_bytes(image_bytes: bytes, output_path: Path) -> Path:
+    """Save already-created JPEG montage bytes and return the final path."""
+    if not image_bytes:
+        raise ValueError("Crop montage image bytes must not be empty.")
+
+    target_path = Path(output_path)
+    if target_path.suffix.lower() not in {".jpg", ".jpeg"}:
+        target_path = target_path.with_suffix(".jpg")
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_bytes(image_bytes)
+    return target_path
 
 
 def _create_one_crop(

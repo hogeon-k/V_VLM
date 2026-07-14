@@ -22,6 +22,17 @@ def test_resize_large_image_to_max_side(tmp_path) -> None:
     assert read_jpeg_size(image_bytes) == (960, 240)
 
 
+def test_resize_pcb_image_to_size_limit_preserves_aspect_ratio(tmp_path) -> None:
+    image_path = tmp_path / "pcb.png"
+    Image.new("RGB", (3034, 1586), "white").save(image_path)
+
+    small_bytes = resize_image_to_jpeg_bytes(image_path, max_size=640)
+    default_bytes = resize_image_to_jpeg_bytes(image_path, max_size=960)
+
+    assert read_jpeg_size(small_bytes) == (640, 335)
+    assert read_jpeg_size(default_bytes) == (960, 502)
+
+
 def test_resize_keeps_aspect_ratio_for_tall_image(tmp_path) -> None:
     image_path = tmp_path / "tall.png"
     Image.new("RGB", (300, 1200), "white").save(image_path)

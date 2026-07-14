@@ -1,49 +1,125 @@
 # YOLO + Ollama VLM Terminal Inspection
 
-`models/best.pt`로 YOLO 탐지를 실행하고, 탐지가 1개 이상인 NG 이미지에 대해서만 Ollama `qwen2.5vl:3b`로 한국어 불량 설명을 생성합니다.
+This guide covers the single-image terminal flow, batch validation, and VLM repeatability checks for PCB defect inspection.
 
-## Image Flow
+## Core Policy
 
-- YOLO inference uses `imgsz=960`.
-- The annotated YOLO result image is saved under `data/result_images/` at the original result resolution.
-- Bounding Box locations are calculated in Python, not inferred by the VLM.
-- The original image size and each box center are classified into a 3x3 region: top/middle/bottom and left/center/right.
-- The VLM is instructed to use the calculated location as-is.
-- Immediately before the VLM request, the result image is resized in memory so its longest side is at most 960 px by default.
-- Detection crops are created in memory from the original-resolution result image around each YOLO box.
-- The crops are combined into one RGB JPEG crop montage, also capped at 960 px by default.
-- The VLM receives exactly two RGB JPEG byte images for NG results: the full YOLO result image first, then the crop montage second.
-- No temporary image files, crop files, montage files, or extra log images are created for VLM input.
-- Detection order is preserved in the crop montage: Detection 1, Detection 2, Detection 3 match the printed YOLO list.
-- The full image is used for board-level context, while the crop montage is used to inspect fine defect shape.
-- The two-image VLM request can improve defect detail but may increase response time.
-- VLM image preparation time and inference time are printed separately.
-- If the VLM images are too small to confirm a fine defect shape, the VLM should say that the detail is difficult to confirm from the image.
+- YOLO is the authoritative source for the final OK/NG judgment, defect class, confidence, detection order, location, and bounding box.
+- The VLM is only an explanation assistant.
+- The VLM receives the full YOLO result image and one detection crop montage for NG results.
+- The VLM must return compact JSON matching the configured schema.
+- Python parses and formats the final readable response deterministically.
+- If parsing fails, the app uses a YOLO-based fallback response and preserves the raw VLM response separately.
 
-## Setup
+## Deterministic Generation
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-ollama pull qwen2.5vl:3b
-ollama list
+The default Ollama generation options are:
+
+```text
+num_ctx = 8192
+num_predict = 256
+temperature = 0.0
+top_p = 0.8
+top_k = 20
+repeat_penalty = 1.1
+seed = 42
 ```
 
-Ollama itself is a separate desktop/server program, not a pip package.
+These options reduce output variation, but they do not guarantee exact reproducibility across different Ollama versions, model builds, quantization variants, or hardware backends.
 
-## YOLO-Only Test
+## VLM Image Size Controls
 
-```powershell
-.\.venv\Scripts\python.exe scripts\test_yolo_vlm.py `
-  --image data\input_images\test.jpg `
-  --model models\best.pt `
-  --imgsz 960 `
-  --conf 0.15 `
-  --iou 0.5 `
-  --device 0 `
-  --skip-vlm
+The VLM receives two JPEG images for NG results: the full YOLO result image and one detection crop montage. Defaults are:
+
+```text
+full image longest side = 960
+crop montage longest side = 960
+crop tile maximum side = 512
+JPEG quality = 90
 ```
 
-## YOLO + VLM Test
+Use these options to isolate image-size effects without changing prompt, schema, YOLO, crop padding, crop tile limits, or the two-image VLM input structure:
+
+```text
+--vlm-full-image-size 640
+--vlm-montage-size 640
+```
+
+Both options preserve aspect ratio and do not upscale smaller images. Larger values can increase Ollama image token/context pressure and may cause empty or incomplete responses with schema-constrained VLM calls.
+
+Use `--vlm-image-mode` to isolate whether the VLM failure is caused by the two-image payload:
+
+```text
+--vlm-image-mode full
+--vlm-image-mode montage
+--vlm-image-mode full_montage
+```
+
+The default is `full_montage`, which preserves the existing image payload behavior. In `full` mode only the full image bytes are sent to the VLM. In `montage` mode only the crop montage bytes are sent. JSON Schema, format, YOLO settings, crop parameters, generation options, and parser validation rules are unchanged by the image mode.
+
+## Structured Output
+
+The VLM prompt is written primarily in Korean so the model is encouraged to return Korean `visual_feature` and `summary` text. Operator-facing formatted explanations and fallback explanations are also printed in Korean.
+
+The Ollama request still uses the `format` field with a JSON Schema. JSON keys and enum values remain in English for compatibility. The response must contain:
+
+```text
+final_judgment
+detections
+summary
+```
+
+Each detection must contain:
+
+```text
+detection_id
+visual_feature
+visibility
+review_required
+```
+
+The parser rejects invalid JSON, missing fields, unknown enum values, additional properties, detection count mismatches, and detection ID mismatches. CSV column names also remain in English, while CSV values may contain Korean explanation text.
+
+## Explanation Quality Warnings
+
+JSON parse success only means the VLM response matched the required structure. It does not guarantee that `visual_feature` is a useful visual explanation.
+
+After a successful parse, the parser separately records explanation quality metadata:
+
+```text
+quality_status
+class_name_only_count
+summary_contradiction
+semantic_warning_count
+```
+
+`quality_status=warning` means the JSON is usable, but at least one explanation quality issue was detected. The current checks flag `visual_feature` values that only repeat the YOLO class name, such as `short`, `open_circuit`, or `<class> defect`, and explicit summary contradictions such as an unclear detection paired with `All defects are clearly visible.`
+
+These warnings do not change the YOLO-authoritative judgment, parse status, fallback behavior, or detection count/ID validation.
+
+## Ollama Response Extraction
+
+The client uses Ollama chat responses by default and extracts the raw VLM content from:
+
+```text
+message.content
+```
+
+For compatibility with generate-style responses, it also supports:
+
+```text
+response
+```
+
+The raw content is saved before JSON parsing. If Ollama returns an error field, the client raises a clear runtime error. If the HTTP/SDK response exists but contains no assistant content, the service records:
+
+```text
+Ollama response JSON did not contain assistant content.
+```
+
+as the parse error and uses the YOLO fallback response. Use `--vlm-debug-response` to print safe response-shape diagnostics such as top-level keys, `message.content` presence, content length, `done`, and timing fields. The debug output does not print image bytes, base64 images, or the full request payload.
+
+## Single-Image Test
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\test_yolo_vlm.py `
@@ -56,16 +132,155 @@ Ollama itself is a separate desktop/server program, not a pip package.
   --vlm-model qwen2.5vl:3b `
   --ollama-host http://127.0.0.1:11434 `
   --vlm-num-ctx 8192 `
-  --vlm-num-predict 512 `
-  --vlm-image-size 960 `
-  --vlm-crop-montage-size 960 `
-  --vlm-crop-padding 192 `
-  --vlm-crop-min-size 256 `
-  --vlm-crop-max-size 512
+  --vlm-num-predict 256 `
+  --vlm-temperature 0.0 `
+  --vlm-top-p 0.8 `
+  --vlm-top-k 20 `
+  --vlm-repeat-penalty 1.1 `
+  --vlm-seed 42 `
+  --vlm-full-image-size 960 `
+  --vlm-montage-size 960 `
+  --vlm-image-mode full_montage
 ```
 
-Use `--vlm-image-size` to lower or raise the maximum side length of the full image sent to the VLM. Use `--vlm-crop-montage-size` for the crop montage maximum side length. The default is `960` for both.
+Add `--debug-vlm` to print the raw structured response.
+Add `--vlm-debug-response` to print safe Ollama response-shape diagnostics.
 
-## PySide6 Connection Point
+## Optional Crop Montage Saving
 
-Call `service.inspection_service.InspectionService.inspect()` inside a worker thread. Pass `InspectionResult.status`, `detections`, `result_image_path`, and `vlm_explanation` back to the UI state.
+Add this flag to save the generated detection crop montage for debugging:
+
+```powershell
+--save-crop-montage
+```
+
+The default save directory is:
+
+```text
+data/result_images/montage
+```
+
+Saved file names use the source image stem plus a timestamp:
+
+```text
+test_crop_montage_20260714_183012_123456.jpg
+```
+
+Saving does not add another VLM image and does not regenerate the montage.
+
+## Test Image Directory
+
+Repeatable test images belong under:
+
+```text
+data/vlm_test_images/
+  open_circuit/
+  short/
+  missing_hole/
+  normal/
+  low_confidence/
+  multiple_defects/
+  false_positive_candidates/
+```
+
+Ground truth is treated as definitive only for `open_circuit`, `short`, `missing_hole`, and `normal`.
+
+## Batch Test
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_vlm_test_batch.py `
+  --input-dir data\vlm_test_images `
+  --model models\best.pt `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.5 `
+  --device 0 `
+  --vlm-model qwen2.5vl:3b `
+  --ollama-host http://127.0.0.1:11434 `
+  --vlm-num-ctx 8192 `
+  --vlm-num-predict 256 `
+  --vlm-temperature 0.0 `
+  --vlm-top-p 0.8 `
+  --vlm-top-k 20 `
+  --vlm-repeat-penalty 1.1 `
+  --vlm-seed 42 `
+  --vlm-full-image-size 960 `
+  --vlm-montage-size 960 `
+  --vlm-image-mode full_montage `
+  --save-crop-montage
+```
+
+The batch script recursively scans `.jpg`, `.jpeg`, `.png`, `.bmp`, and `.webp` files. Uppercase extensions are supported.
+
+## Batch CSV
+
+Batch result CSV files are written to:
+
+```text
+data/result_images/vlm_batch_results/
+```
+
+The CSV is written with UTF-8 BOM for Excel compatibility. It includes the original columns plus:
+
+```text
+vlm_raw_response
+vlm_parse_success
+vlm_parse_error
+vlm_fallback_used
+vlm_temperature
+vlm_top_p
+vlm_top_k
+vlm_repeat_penalty
+vlm_seed
+vlm_image_mode
+vlm_image_count
+crop_count
+vlm_full_image_size_limit
+vlm_montage_size_limit
+vlm_full_image_width
+vlm_full_image_height
+montage_width
+montage_height
+quality_status
+class_name_only_count
+summary_contradiction
+semantic_warning_count
+class_name_only_detection_ids
+```
+
+`vlm_response` stores the final user-facing response. `vlm_raw_response` stores the exact Ollama text before parsing. Multiline values are written through Python's CSV module.
+
+For normal images with zero detections, VLM analysis is skipped and `vlm_response` is:
+
+```text
+VLM analysis skipped because no defect was detected.
+```
+
+## Repeatability Test
+
+```powershell
+.\.venv\Scripts\python.exe scripts\test_vlm_repeatability.py `
+  --image data\input_images\test.jpg `
+  --model models\best.pt `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.5 `
+  --device 0 `
+  --vlm-model qwen2.5vl:3b `
+  --ollama-host http://127.0.0.1:11434 `
+  --vlm-num-ctx 8192 `
+  --vlm-num-predict 256 `
+  --vlm-temperature 0.0 `
+  --vlm-top-p 0.8 `
+  --vlm-top-k 20 `
+  --vlm-repeat-penalty 1.1 `
+  --vlm-seed 42 `
+  --vlm-full-image-size 960 `
+  --vlm-montage-size 960 `
+  --vlm-image-mode full_montage `
+  --repeat-count 5
+```
+
+The script runs YOLO once, then repeats the VLM call with the same YOLO result and identical generation settings. It prints parse success count, fallback count, exact-match counts, consistency checks, and SHA-256 hashes for raw responses and canonical parsed JSON.
+
+Exact-match results measure whether this local stack produced byte-identical raw text or canonical parsed JSON for repeated calls. A mismatch does not automatically mean the inspection result is invalid; compare parse success, detection IDs, and final judgment consistency first.

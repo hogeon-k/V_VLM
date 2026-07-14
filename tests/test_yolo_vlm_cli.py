@@ -3,9 +3,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 from model.defect_info import Detection
 from model.inspection_result import InspectionResult
 import scripts.test_yolo_vlm as cli
+from vlm.response_parser import VlmQualityInfo
 
 
 def test_cli_vlm_defaults_and_skip_vlm_flag(monkeypatch) -> None:
@@ -17,12 +20,23 @@ def test_cli_vlm_defaults_and_skip_vlm_flag(monkeypatch) -> None:
 
     assert args.ollama_host == "http://127.0.0.1:11434"
     assert args.vlm_num_ctx == 8192
-    assert args.vlm_num_predict == 512
+    assert args.vlm_num_predict == 256
+    assert args.vlm_temperature == 0.0
+    assert args.vlm_top_p == 0.8
+    assert args.vlm_top_k == 20
+    assert args.vlm_repeat_penalty == 1.1
+    assert args.vlm_seed == 42
+    assert args.vlm_debug_response is False
     assert args.vlm_image_size == 960
+    assert args.vlm_full_image_size is None
+    assert args.vlm_image_mode == "full_montage"
     assert args.vlm_crop_montage_size == 960
+    assert args.vlm_montage_size is None
     assert args.vlm_crop_padding == 192
     assert args.vlm_crop_min_size == 256
     assert args.vlm_crop_max_size == 512
+    assert args.save_crop_montage is False
+    assert args.crop_montage_output_dir == "data/result_images/montage"
     assert args.iou == 0.5
     assert args.skip_vlm is True
     assert args.debug_vlm is False
@@ -42,10 +56,26 @@ def test_cli_build_vlm_service_passes_context_options(monkeypatch) -> None:
             "10000",
             "--vlm-num-predict",
             "256",
+            "--vlm-temperature",
+            "0.2",
+            "--vlm-top-p",
+            "0.7",
+            "--vlm-top-k",
+            "10",
+            "--vlm-repeat-penalty",
+            "1.2",
+            "--vlm-seed",
+            "7",
             "--vlm-image-size",
             "640",
+            "--vlm-full-image-size",
+            "768",
+            "--vlm-image-mode",
+            "montage",
             "--vlm-crop-montage-size",
             "700",
+            "--vlm-montage-size",
+            "896",
             "--vlm-crop-padding",
             "120",
             "--vlm-crop-min-size",
@@ -61,8 +91,14 @@ def test_cli_build_vlm_service_passes_context_options(monkeypatch) -> None:
     assert service.client.host == "http://example.test:11434"
     assert service.client.num_ctx == 10000
     assert service.client.num_predict == 256
-    assert service.image_size == 640
-    assert service.crop_montage_size == 700
+    assert service.client.temperature == 0.2
+    assert service.client.top_p == 0.7
+    assert service.client.top_k == 10
+    assert service.client.repeat_penalty == 1.2
+    assert service.client.seed == 7
+    assert service.image_size == 768
+    assert service.image_mode == "montage"
+    assert service.crop_montage_size == 896
     assert service.crop_padding == 120
     assert service.crop_min_size == 180
     assert service.crop_max_size == 420
@@ -92,16 +128,95 @@ def test_cli_help_includes_crop_montage_and_debug_options(monkeypatch, capsys) -
         assert exc.code == 0
 
     output = capsys.readouterr().out
+    assert "--vlm-full-image-size" in output
+    assert "--vlm-montage-size" in output
+    assert "--vlm-image-mode" in output
     assert "--vlm-crop-montage-size" in output
     assert "--vlm-crop-padding" in output
     assert "--vlm-crop-min-size" in output
     assert "--vlm-crop-max-size" in output
+    assert "--vlm-temperature" in output
+    assert "--vlm-top-p" in output
+    assert "--vlm-top-k" in output
+    assert "--vlm-repeat-penalty" in output
+    assert "--vlm-seed" in output
+    assert "--vlm-debug-response" in output
+    assert "--save-crop-montage" in output
+    assert "--crop-montage-output-dir" in output
     assert "--debug-vlm" in output
+
+
+@pytest.mark.parametrize(
+    ("full_size", "montage_size"),
+    [
+        ("640", "640"),
+        ("768", "768"),
+        ("960", "960"),
+    ],
+)
+def test_cli_accepts_vlm_size_experiment_options(monkeypatch, full_size: str, montage_size: str) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "test_yolo_vlm.py",
+            "--image",
+            "sample.jpg",
+            "--vlm-full-image-size",
+            full_size,
+            "--vlm-montage-size",
+            montage_size,
+        ],
+    )
+
+    args = cli.parse_args()
+    service = cli.build_vlm_service(args)
+
+    assert service.image_size == int(full_size)
+    assert service.crop_montage_size == int(montage_size)
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--vlm-full-image-size", "0"),
+        ("--vlm-full-image-size", "-1"),
+        ("--vlm-full-image-size", "bad"),
+        ("--vlm-montage-size", "0"),
+        ("--vlm-montage-size", "-1"),
+        ("--vlm-montage-size", "bad"),
+    ],
+)
+def test_cli_rejects_invalid_vlm_size_experiment_options(monkeypatch, option: str, value: str) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["test_yolo_vlm.py", "--image", "sample.jpg", option, value],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.parse_args()
+
+    assert exc_info.value.code == 2
+
+
+def test_cli_rejects_invalid_vlm_image_mode(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["test_yolo_vlm.py", "--image", "sample.jpg", "--vlm-image-mode", "both"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.parse_args()
+
+    assert exc_info.value.code == 2
 
 
 class FakeVlmService:
     last_preparation_info = None
     last_raw_response = '{"raw": true}'
+    last_quality_info = VlmQualityInfo()
 
 
 class FakeInspectionService:
