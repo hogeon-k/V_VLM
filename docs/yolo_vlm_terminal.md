@@ -137,6 +137,46 @@ VLM attempts are logged like this:
 
 With `--save-raw-response-on-failure`, failure files under `raw_responses/` contain a JSON diagnostic envelope rather than only the final text. The envelope includes the response body when available, plus `error_type` and `error_message`.
 
+## Ollama Payload Diagnostics
+
+Use the standalone diagnostic script to isolate which `/api/chat` payload condition first fails. It does not use the production `VlmClient.generate()` path, so it can compare text-only requests, vision requests, JSON mode, and the full JSON Schema format independently.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\diagnose_ollama_payload.py `
+  --image data\result_images\montage\01_open_circuit_07_crop_montage_20260714_154328_506877.jpg `
+  --model qwen2.5vl:3b `
+  --ollama-host http://127.0.0.1:11434
+```
+
+For the two-image schema test, pass a second image explicitly:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\diagnose_ollama_payload.py `
+  --image <첫 번째 이미지 경로> `
+  --second-image <두 번째 이미지 경로> `
+  --model qwen2.5vl:3b
+```
+
+The script runs these steps in order:
+
+```text
+A text only
+B text + options
+C image, no format
+D image + options
+E image + format="json"
+F image + full JSON Schema
+G two images + full JSON Schema
+```
+
+Each step prints request shape, raw HTTP response, parsed Ollama metadata, content length, and pass/fail status. Per-step diagnostic JSON files are written to:
+
+```text
+data/result_images/ollama_diagnostics/
+```
+
+Stored request payloads keep the real structure but replace base64 image strings with length markers such as `<base64 omitted: 191600 chars>`.
+
 ## Single-Image Test
 
 ```powershell
