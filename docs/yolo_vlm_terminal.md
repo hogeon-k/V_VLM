@@ -212,6 +212,41 @@ Ground truth is treated as definitive only for `open_circuit`, `short`, `missing
 
 The batch script recursively scans `.jpg`, `.jpeg`, `.png`, `.bmp`, and `.webp` files. Uppercase extensions are supported.
 
+Batch processing is sequential per image. The script completes YOLO, optional VLM, response validation, fallback if needed, and per-image result saving before moving to the next image. It does not run YOLO over the full folder first and then process all NG images with VLM later.
+
+OK images, meaning YOLO produced zero detections, skip VLM and are saved with `image_status=completed` and `vlm_status=not_run`. NG images create a crop montage, use the configured `--vlm-image-mode`, call VLM, validate the response, and retry bounded failures before using fallback.
+
+Additional batch stability options:
+
+```powershell
+--vlm-max-retries 2 `
+--vlm-retry-delay 0.5 `
+--vlm-timeout 120 `
+--continue-on-error `
+--save-raw-response-on-failure
+```
+
+`--vlm-max-retries` is the number of retries after the first VLM attempt. `--vlm-retry-delay` waits between retries. `--vlm-timeout` is passed to the Ollama HTTP client. The batch continues after image-level failures by default, while initialization errors such as a missing model can still stop the run.
+
+Expected sequential log shape:
+
+```text
+[INFO] [1/5] normal.jpg processing started
+[INFO] [1/5] normal.jpg YOLO started
+[INFO] [1/5] normal.jpg YOLO completed
+[INFO] [1/5] normal.jpg OK
+[INFO] [1/5] normal.jpg VLM skipped
+[INFO] [1/5] normal.jpg result saved
+[INFO] [1/5] normal.jpg processing completed
+[INFO] [2/5] open_circuit.jpg processing started
+[INFO] [2/5] open_circuit.jpg YOLO started
+[INFO] [2/5] open_circuit.jpg NG, detection 1 count
+[INFO] [2/5] open_circuit.jpg VLM started
+[INFO] [2/5] open_circuit.jpg VLM response validation completed
+[INFO] [2/5] open_circuit.jpg result saved
+[INFO] [2/5] open_circuit.jpg processing completed
+```
+
 ## Batch CSV
 
 Batch result CSV files are written to:
@@ -220,7 +255,20 @@ Batch result CSV files are written to:
 data/result_images/vlm_batch_results/
 ```
 
-The CSV is written with UTF-8 BOM for Excel compatibility. It includes the original columns plus:
+Each image is saved immediately after it finishes. The batch output directory contains:
+
+```text
+vlm_batch_results/
+  results/
+  result_images/
+  montage/
+  raw_responses/
+  batch_summary.json
+  failed_images.json
+  vlm_batch_results_<timestamp>.csv
+```
+
+The CSV is written with UTF-8 BOM for Excel compatibility and is rewritten after each image so completed rows remain available during a long batch. It includes the original columns plus:
 
 ```text
 vlm_raw_response
@@ -246,6 +294,9 @@ class_name_only_count
 summary_contradiction
 semantic_warning_count
 class_name_only_detection_ids
+image_status
+retry_count
+failure_reason
 ```
 
 `vlm_response` stores the final user-facing response. `vlm_raw_response` stores the exact Ollama text before parsing. Multiline values are written through Python's CSV module.
@@ -255,6 +306,8 @@ For normal images with zero detections, VLM analysis is skipped and `vlm_respons
 ```text
 VLM analysis skipped because no defect was detected.
 ```
+
+`batch_summary.json` stores total image count, OK/NG counts, VLM executed/skipped counts, first-attempt success, retry success, fallback count, final failure count, common failure counters such as `done_false`, `empty_content`, `invalid_json`, `schema_error`, `timeout`, total processing time, average image time, average VLM time, and one compact summary per image.
 
 ## Repeatability Test
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, sleep
 
 from model.yolo_result import YoloResult
 from vlm.crop_montage import create_crop_montage_result, save_montage_bytes
@@ -50,6 +50,8 @@ class VlmService:
         save_crop_montage: bool = False,
         crop_montage_output_dir: str | Path = "data/result_images/montage",
         image_mode: str = "full_montage",
+        max_retries: int = 0,
+        retry_delay_seconds: float = 0.0,
     ) -> None:
         self.client = client or VlmClient()
         self.prompt_builder = prompt_builder or PromptBuilder()
@@ -63,6 +65,8 @@ class VlmService:
         self.save_crop_montage = save_crop_montage
         self.crop_montage_output_dir = Path(crop_montage_output_dir)
         self.image_mode = image_mode
+        self.max_retries = max(0, int(max_retries))
+        self.retry_delay_seconds = max(0.0, float(retry_delay_seconds))
         self.last_preparation_info: VlmPreparationInfo | None = None
         self.last_raw_response: str | None = None
         self.last_crop_montage_path: Path | None = None
@@ -74,6 +78,9 @@ class VlmService:
         self.last_parse_status: str = "not_attempted"
         self.last_ollama_metadata: OllamaResponseMetadata | None = None
         self.last_quality_info: VlmQualityInfo = VlmQualityInfo()
+        self.last_retry_count: int = 0
+        self.last_failure_reason: str = ""
+        self.last_failure_reasons: list[str] = []
 
     def describe_defects(self, image_path: Path, yolo_result: YoloResult) -> str | None:
         """Explain NG detections with a local Ollama VLM."""
@@ -88,6 +95,9 @@ class VlmService:
         self.last_parse_status = "not_attempted"
         self.last_ollama_metadata = None
         self.last_quality_info = VlmQualityInfo()
+        self.last_retry_count = 0
+        self.last_failure_reason = ""
+        self.last_failure_reasons = []
         if yolo_result.defect_count == 0:
             return None
 
@@ -133,39 +143,76 @@ class VlmService:
         )
 
         inference_started = perf_counter()
+        max_attempts = self.max_retries + 1
         try:
-            try:
-                response = self.client.generate(
-                    prompt,
-                    image_bytes_list=image_bytes_list,
-                )
-                self.last_ollama_metadata = getattr(self.client, "last_response_metadata", None)
+            for attempt_index in range(max_attempts):
+                if attempt_index:
+                    self.last_retry_count = attempt_index
+                    self.last_vlm_status = "retrying"
+                    if self.retry_delay_seconds:
+                        sleep(self.retry_delay_seconds)
+
+                try:
+                    response = self.client.generate(
+                        prompt,
+                        image_bytes_list=image_bytes_list,
+                    )
+                    self.last_ollama_metadata = getattr(self.client, "last_response_metadata", None)
+                except OllamaContentError as exc:
+                    self.last_ollama_metadata = exc.metadata
+                    self.last_vlm_status = _vlm_status_for_empty_content(exc.metadata)
+                    self.last_failure_reason = self.last_vlm_status
+                    self.last_failure_reasons.append(self.last_failure_reason)
+                    if attempt_index < self.max_retries:
+                        continue
+                    return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
+                except ValueError as exc:
+                    self.last_ollama_metadata = getattr(self.client, "last_response_metadata", None)
+                    self.last_vlm_status = "empty_content"
+                    self.last_failure_reason = self.last_vlm_status
+                    self.last_failure_reasons.append(self.last_failure_reason)
+                    if attempt_index < self.max_retries:
+                        continue
+                    return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
+                except RuntimeError as exc:
+                    self.last_ollama_metadata = getattr(self.client, "last_response_metadata", None)
+                    self.last_vlm_status = _vlm_status_for_runtime_error(exc)
+                    self.last_failure_reason = self.last_vlm_status
+                    self.last_failure_reasons.append(self.last_failure_reason)
+                    if attempt_index < self.max_retries:
+                        continue
+                    return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
+
+                self.last_raw_response = response
+                parse_result = self.response_parser.parse_response(response, yolo_result)
+                self.last_parse_result = parse_result
+                self.last_parse_success = parse_result.parse_success
+                self.last_parse_error = parse_result.parse_error
+                self.last_fallback_used = parse_result.fallback_used
+                self.last_parse_status = _parse_status_from_result(parse_result)
+                self.last_quality_info = parse_result.quality_info
+                if parse_result.parse_success:
+                    self.last_vlm_status = "retry_success" if attempt_index else "success"
+                    self.last_failure_reason = "|".join(self.last_failure_reasons)
+                    return parse_result.formatted_response
+
+                self.last_vlm_status = self.last_parse_status
+                self.last_failure_reason = self.last_parse_status
+                self.last_failure_reasons.append(self.last_failure_reason)
+                if attempt_index < self.max_retries:
+                    continue
                 self.last_vlm_status = "success"
-            except OllamaContentError as exc:
-                self.last_ollama_metadata = exc.metadata
-                self.last_vlm_status = _vlm_status_for_empty_content(exc.metadata)
-                return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
-            except ValueError as exc:
-                self.last_ollama_metadata = getattr(self.client, "last_response_metadata", None)
-                self.last_vlm_status = "empty_content"
-                return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
-            except RuntimeError as exc:
-                self.last_ollama_metadata = getattr(self.client, "last_response_metadata", None)
-                self.last_vlm_status = _vlm_status_for_runtime_error(exc)
-                return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
+                return parse_result.formatted_response
+
+            return self._record_fallback(
+                response=self.last_raw_response or "",
+                parse_error=self.last_failure_reason or "VLM retry attempts exhausted.",
+                yolo_result=yolo_result,
+            )
         finally:
             self.last_preparation_info.inference_seconds = (
                 perf_counter() - inference_started
             )
-        self.last_raw_response = response
-        parse_result = self.response_parser.parse_response(response, yolo_result)
-        self.last_parse_result = parse_result
-        self.last_parse_success = parse_result.parse_success
-        self.last_parse_error = parse_result.parse_error
-        self.last_fallback_used = parse_result.fallback_used
-        self.last_parse_status = _parse_status_from_result(parse_result)
-        self.last_quality_info = parse_result.quality_info
-        return parse_result.formatted_response
 
     def _record_fallback(
         self,

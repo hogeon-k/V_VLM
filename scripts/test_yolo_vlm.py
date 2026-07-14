@@ -123,6 +123,7 @@ def build_vlm_service(args: argparse.Namespace) -> VlmService:
         num_ctx=args.vlm_num_ctx,
         num_predict=args.vlm_num_predict,
         debug_response=args.vlm_debug_response,
+        timeout_seconds=getattr(args, "vlm_timeout", 120.0),
     )
     return VlmService(
         client=client,
@@ -137,6 +138,8 @@ def build_vlm_service(args: argparse.Namespace) -> VlmService:
         save_crop_montage=args.save_crop_montage,
         crop_montage_output_dir=PROJECT_ROOT / args.crop_montage_output_dir,
         image_mode=args.vlm_image_mode,
+        max_retries=getattr(args, "vlm_max_retries", 0),
+        retry_delay_seconds=getattr(args, "vlm_retry_delay", 0.0),
     )
 
 

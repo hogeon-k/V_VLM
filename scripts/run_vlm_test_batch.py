@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from collections import Counter
 from datetime import datetime
@@ -46,12 +47,15 @@ CSV_COLUMNS = [
     "vlm_inference_time_seconds",
     "total_processing_time_seconds",
     "status",
+    "image_status",
     "error_message",
     "pipeline_status",
     "yolo_status",
     "vlm_status",
     "parse_status",
     "fallback_used",
+    "retry_count",
+    "failure_reason",
     "http_status",
     "ollama_done",
     "ollama_done_reason",
@@ -144,6 +148,21 @@ def parse_args() -> argparse.Namespace:
         default="data/result_images/vlm_batch_results",
         help="Directory for the batch result CSV.",
     )
+    parser.add_argument("--vlm-max-retries", type=int, default=2, help="Maximum VLM retry count per image.")
+    parser.add_argument("--vlm-retry-delay", type=float, default=0.5, help="Delay between VLM retries in seconds.")
+    parser.add_argument("--vlm-timeout", type=float, default=120.0, help="Ollama HTTP timeout in seconds.")
+    parser.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        default=True,
+        help="Continue processing later images after an image-level failure.",
+    )
+    parser.add_argument(
+        "--save-raw-response-on-failure",
+        action="store_true",
+        default=True,
+        help="Save raw VLM response text when an image uses fallback or fails.",
+    )
     return parser.parse_args()
 
 
@@ -173,6 +192,20 @@ def build_csv_path(output_dir: Path) -> Path:
     return output_dir / f"vlm_batch_results_{timestamp}.csv"
 
 
+def build_batch_paths(output_dir: Path) -> dict[str, Path]:
+    """Create the batch output folders used for immediate per-image results."""
+    paths = {
+        "root": output_dir,
+        "results": output_dir / "results",
+        "result_images": output_dir / "result_images",
+        "montage": output_dir / "montage",
+        "raw_responses": output_dir / "raw_responses",
+    }
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    return paths
+
+
 def result_to_row(
     *,
     image_path: Path,
@@ -185,6 +218,7 @@ def result_to_row(
     vlm_inference_seconds: float | None = None,
     total_processing_seconds: float = 0.0,
     status: str = "success",
+    image_status: str = "completed",
     vlm_raw_response: str = "",
     vlm_parse_success: bool = False,
     vlm_parse_error: str = "",
@@ -200,6 +234,8 @@ def result_to_row(
     yolo_status: str = "success",
     vlm_status: str = "not_run",
     parse_status: str = "not_attempted",
+    retry_count: int = 0,
+    failure_reason: str = "",
     ollama_metadata: OllamaResponseMetadata | None = None,
     vlm_image_count: int | None = None,
     crop_count: int | None = None,
@@ -251,12 +287,15 @@ def result_to_row(
         "vlm_inference_time_seconds": _format_seconds(vlm_inference_seconds),
         "total_processing_time_seconds": _format_seconds(total_processing_seconds),
         "status": status,
+        "image_status": image_status,
         "error_message": error_message,
         "pipeline_status": pipeline_status,
         "yolo_status": yolo_status,
         "vlm_status": vlm_status,
         "parse_status": parse_status,
         "fallback_used": _format_bool(vlm_fallback_used),
+        "retry_count": retry_count,
+        "failure_reason": failure_reason,
         "http_status": _format_csv_value(ollama_metadata.http_status if ollama_metadata else None),
         "ollama_done": _format_bool(ollama_metadata.done if ollama_metadata else None),
         "ollama_done_reason": ollama_metadata.done_reason if ollama_metadata and ollama_metadata.done_reason else "",
@@ -307,17 +346,62 @@ def write_csv(csv_path: Path, rows: list[dict[str, object]]) -> None:
         writer.writerows(rows)
 
 
+def write_json(path: Path, data: object) -> None:
+    """Write UTF-8 JSON with stable non-destructive parent creation."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def write_image_result_json(path: Path, row: dict[str, object], yolo_result: YoloResult | None) -> None:
+    """Persist one image result immediately as JSON."""
+    detections = []
+    if yolo_result is not None:
+        detections = [
+            {
+                "detection_id": index,
+                "class_id": detection.class_id,
+                "class_name": detection.class_name,
+                "confidence": detection.confidence,
+                "bbox": [detection.x1, detection.y1, detection.x2, detection.y2],
+                "location": detection.location,
+            }
+            for index, detection in enumerate(yolo_result.detections, start=1)
+        ]
+    write_json(path, {"result": row, "detections": detections})
+
+
+def write_raw_response_if_needed(
+    *,
+    raw_responses_dir: Path,
+    image_path: Path,
+    raw_response: str,
+    should_save: bool,
+) -> Path | None:
+    """Save raw VLM text only when debugging a failure/fallback path."""
+    if not should_save or not raw_response:
+        return None
+    output_path = raw_responses_dir / f"{_safe_json_stem(image_path)}_failed.txt"
+    output_path.write_text(raw_response, encoding="utf-8")
+    return output_path
+
+
 def main() -> int:
     """Run the batch and keep processing after per-image failures."""
     args = parse_args()
     input_dir = _resolve_path(args.input_dir)
     output_dir = _resolve_path(args.output_dir)
+    batch_paths = build_batch_paths(output_dir)
+    args.save_crop_montage = True
+    args.crop_montage_output_dir = str(batch_paths["montage"])
     csv_path = build_csv_path(output_dir)
     images = discover_images(input_dir)
+    batch_started = perf_counter()
 
     print(f"[INFO] Found {len(images)} test images")
     if not images:
         write_csv(csv_path, [])
+        write_json(output_dir / "batch_summary.json", _build_batch_summary([], [], perf_counter() - batch_started))
+        write_json(output_dir / "failed_images.json", [])
         print("[INFO] Batch completed")
         print("[INFO] Total images: 0")
         print("[INFO] Success: 0")
@@ -328,6 +412,8 @@ def main() -> int:
     yolo_service = build_yolo_service(args)
     vlm_service = build_vlm_service(args)
     rows: list[dict[str, object]] = []
+    image_summaries: list[dict[str, object]] = []
+    failed_images: list[dict[str, object]] = []
     category_counts = Counter(path.relative_to(input_dir).parts[0] for path in images)
     print(f"[INFO] VLM full image size limit: {args.vlm_full_image_size or args.vlm_image_size}")
     print(f"[INFO] VLM montage size limit: {args.vlm_montage_size or args.vlm_crop_montage_size}")
@@ -335,13 +421,19 @@ def main() -> int:
 
     for index, image_path in enumerate(images, start=1):
         relative_path = image_path.relative_to(input_dir)
-        print(f"[INFO] [{index}/{len(images)}] Processing {relative_path}")
+        prefix = f"[INFO] [{index}/{len(images)}] {relative_path}"
+        print(f"{prefix} processing started")
         started = perf_counter()
         yolo_result: YoloResult | None = None
+        result_json_path = batch_paths["results"] / f"{_safe_json_stem(image_path)}.json"
         try:
-            yolo_result = yolo_service.detect(image_path)
-            print(f"[INFO] YOLO detections: {yolo_result.defect_count}")
+            print(f"{prefix} YOLO started")
+            yolo_output_path = batch_paths["result_images"] / f"{_safe_json_stem(image_path)}_result{image_path.suffix}"
+            yolo_result = yolo_service.detect(image_path, output_path=yolo_output_path)
+            print(f"{prefix} YOLO completed")
             if yolo_result.defect_count == 0:
+                print(f"{prefix} OK")
+                print(f"{prefix} VLM skipped")
                 vlm_response = SKIPPED_VLM_MESSAGE
                 vlm_raw_response = ""
                 vlm_parse_success = False
@@ -365,11 +457,20 @@ def main() -> int:
                 summary_contradiction = False
                 semantic_warning_count = 0
                 class_name_only_detection_ids = ()
+                image_status = "completed"
+                retry_count = 0
+                failure_reason = ""
             else:
+                print(f"{prefix} NG, detection {yolo_result.defect_count} count")
+                print(f"{prefix} VLM started")
                 vlm_response = vlm_service.describe_defects(
                     yolo_result.annotated_image_path or image_path,
                     yolo_result,
                 ) or ""
+                retry_count = vlm_service.last_retry_count
+                failure_reason = vlm_service.last_failure_reason
+                if retry_count:
+                    print(f"{prefix} VLM retry count: {retry_count}/{args.vlm_max_retries}")
                 info = vlm_service.last_preparation_info
                 crop_montage_path = info.crop_montage_path if info else None
                 image_preparation_seconds = info.image_preparation_seconds if info else None
@@ -394,6 +495,7 @@ def main() -> int:
                 summary_contradiction = quality.summary_contradiction
                 semantic_warning_count = quality.semantic_warning_count
                 class_name_only_detection_ids = quality.class_name_only_detection_ids
+                image_status = "completed_with_fallback" if vlm_fallback_used else "completed"
                 if full_image_size is not None:
                     print(f"[INFO] VLM full image size: {full_image_size[0]}x{full_image_size[1]}")
                 if montage_size is not None:
@@ -410,95 +512,134 @@ def main() -> int:
                 print(f"[INFO] Class-name-only visual features: {class_name_only_count}")
                 print(f"[INFO] Summary contradiction: {str(summary_contradiction).lower()}")
                 print(f"[INFO] Semantic warning count: {semantic_warning_count}")
+                if vlm_fallback_used:
+                    print(f"{prefix} VLM final failure, fallback used")
+                else:
+                    print(f"{prefix} VLM response validation completed")
 
-            rows.append(
-                result_to_row(
-                    image_path=image_path,
-                    input_dir=input_dir,
-                    yolo_result=yolo_result,
-                    vlm_model=args.vlm_model,
-                    vlm_response=vlm_response,
-                    vlm_raw_response=vlm_raw_response,
-                    vlm_parse_success=vlm_parse_success,
-                    vlm_parse_error=vlm_parse_error,
-                    vlm_fallback_used=vlm_fallback_used,
-                    vlm_temperature=args.vlm_temperature,
-                    vlm_top_p=args.vlm_top_p,
-                    vlm_top_k=args.vlm_top_k,
-                    vlm_repeat_penalty=args.vlm_repeat_penalty,
-                    vlm_seed=args.vlm_seed,
-                    vlm_image_mode=vlm_image_mode,
-                    crop_montage_path=crop_montage_path,
-                    image_preparation_seconds=image_preparation_seconds,
-                    vlm_inference_seconds=vlm_inference_seconds,
-                    total_processing_seconds=perf_counter() - started,
-                    status="success",
-                    pipeline_status="success",
-                    yolo_status="success",
-                    vlm_status=vlm_status,
-                    parse_status=parse_status,
-                    ollama_metadata=ollama_metadata,
-                    vlm_image_count=vlm_image_count,
-                    crop_count=crop_count,
-                    full_image_size_limit=full_image_size_limit,
-                    montage_size_limit=montage_size_limit,
-                    full_image_size=full_image_size,
-                    montage_size=montage_size,
-                    quality_status=quality_status,
-                    class_name_only_count=class_name_only_count,
-                    summary_contradiction=summary_contradiction,
-                    semantic_warning_count=semantic_warning_count,
-                    class_name_only_detection_ids=class_name_only_detection_ids,
-                )
+            row = result_to_row(
+                image_path=image_path,
+                input_dir=input_dir,
+                yolo_result=yolo_result,
+                vlm_model=args.vlm_model,
+                vlm_response=vlm_response,
+                vlm_raw_response=vlm_raw_response,
+                vlm_parse_success=vlm_parse_success,
+                vlm_parse_error=vlm_parse_error,
+                vlm_fallback_used=vlm_fallback_used,
+                vlm_temperature=args.vlm_temperature,
+                vlm_top_p=args.vlm_top_p,
+                vlm_top_k=args.vlm_top_k,
+                vlm_repeat_penalty=args.vlm_repeat_penalty,
+                vlm_seed=args.vlm_seed,
+                vlm_image_mode=vlm_image_mode,
+                crop_montage_path=crop_montage_path,
+                image_preparation_seconds=image_preparation_seconds,
+                vlm_inference_seconds=vlm_inference_seconds,
+                total_processing_seconds=perf_counter() - started,
+                status="success",
+                image_status=image_status,
+                pipeline_status="success",
+                yolo_status="success",
+                vlm_status=vlm_status,
+                parse_status=parse_status,
+                retry_count=retry_count,
+                failure_reason=failure_reason,
+                ollama_metadata=ollama_metadata,
+                vlm_image_count=vlm_image_count,
+                crop_count=crop_count,
+                full_image_size_limit=full_image_size_limit,
+                montage_size_limit=montage_size_limit,
+                full_image_size=full_image_size,
+                montage_size=montage_size,
+                quality_status=quality_status,
+                class_name_only_count=class_name_only_count,
+                summary_contradiction=summary_contradiction,
+                semantic_warning_count=semantic_warning_count,
+                class_name_only_detection_ids=class_name_only_detection_ids,
             )
-            print("[INFO] Completed: success")
+            rows.append(row)
+            write_image_result_json(result_json_path, row, yolo_result)
+            write_raw_response_if_needed(
+                raw_responses_dir=batch_paths["raw_responses"],
+                image_path=image_path,
+                raw_response=vlm_raw_response,
+                should_save=args.save_raw_response_on_failure and bool(vlm_fallback_used),
+            )
+            write_csv(csv_path, rows)
+            image_summaries.append(_summary_for_row(row))
+            print(f"{prefix} result saved")
+            print(f"{prefix} processing completed")
         except Exception as exc:
-            rows.append(
-                result_to_row(
-                    image_path=image_path,
-                    input_dir=input_dir,
-                    yolo_result=yolo_result,
-                    vlm_model=args.vlm_model,
-                    vlm_response="",
-                    vlm_raw_response=vlm_service.last_raw_response or "",
-                    vlm_parse_success=vlm_service.last_parse_success,
-                    vlm_parse_error=vlm_service.last_parse_error,
-                    vlm_fallback_used=vlm_service.last_fallback_used,
-                    vlm_temperature=args.vlm_temperature,
-                    vlm_top_p=args.vlm_top_p,
-                    vlm_top_k=args.vlm_top_k,
-                    vlm_repeat_penalty=args.vlm_repeat_penalty,
-                    vlm_seed=args.vlm_seed,
-                    vlm_image_mode=(
-                        vlm_service.last_preparation_info.image_mode
-                        if vlm_service.last_preparation_info
-                        else ""
-                    ),
-                    crop_montage_path=None,
-                    image_preparation_seconds=None,
-                    vlm_inference_seconds=None,
-                    total_processing_seconds=perf_counter() - started,
-                    status="error",
-                    error_message=str(exc),
-                    pipeline_status="failed",
-                    yolo_status="failed" if yolo_result is None else "success",
-                    vlm_status=vlm_service.last_vlm_status if yolo_result is not None else "not_run",
-                    parse_status=vlm_service.last_parse_status if yolo_result is not None else "not_attempted",
-                    ollama_metadata=vlm_service.last_ollama_metadata,
-                    quality_status=vlm_service.last_quality_info.quality_status,
-                    class_name_only_count=vlm_service.last_quality_info.class_name_only_count,
-                    summary_contradiction=vlm_service.last_quality_info.summary_contradiction,
-                    semantic_warning_count=vlm_service.last_quality_info.semantic_warning_count,
-                    class_name_only_detection_ids=(
-                        vlm_service.last_quality_info.class_name_only_detection_ids
-                    ),
-                    exception_type=type(exc).__name__,
-                    exception_message=str(exc),
-                )
+            row = result_to_row(
+                image_path=image_path,
+                input_dir=input_dir,
+                yolo_result=yolo_result,
+                vlm_model=args.vlm_model,
+                vlm_response="",
+                vlm_raw_response=vlm_service.last_raw_response or "",
+                vlm_parse_success=vlm_service.last_parse_success,
+                vlm_parse_error=vlm_service.last_parse_error,
+                vlm_fallback_used=vlm_service.last_fallback_used,
+                vlm_temperature=args.vlm_temperature,
+                vlm_top_p=args.vlm_top_p,
+                vlm_top_k=args.vlm_top_k,
+                vlm_repeat_penalty=args.vlm_repeat_penalty,
+                vlm_seed=args.vlm_seed,
+                vlm_image_mode=(
+                    vlm_service.last_preparation_info.image_mode
+                    if vlm_service.last_preparation_info
+                    else ""
+                ),
+                crop_montage_path=None,
+                image_preparation_seconds=None,
+                vlm_inference_seconds=None,
+                total_processing_seconds=perf_counter() - started,
+                status="error",
+                image_status="failed",
+                error_message=str(exc),
+                pipeline_status="failed",
+                yolo_status="failed" if yolo_result is None else "success",
+                vlm_status=vlm_service.last_vlm_status if yolo_result is not None else "not_run",
+                parse_status=vlm_service.last_parse_status if yolo_result is not None else "not_attempted",
+                retry_count=vlm_service.last_retry_count if yolo_result is not None else 0,
+                failure_reason=vlm_service.last_failure_reason if yolo_result is not None else type(exc).__name__,
+                ollama_metadata=vlm_service.last_ollama_metadata,
+                quality_status=vlm_service.last_quality_info.quality_status,
+                class_name_only_count=vlm_service.last_quality_info.class_name_only_count,
+                summary_contradiction=vlm_service.last_quality_info.summary_contradiction,
+                semantic_warning_count=vlm_service.last_quality_info.semantic_warning_count,
+                class_name_only_detection_ids=(
+                    vlm_service.last_quality_info.class_name_only_detection_ids
+                ),
+                exception_type=type(exc).__name__,
+                exception_message=str(exc),
             )
-            print(f"[ERROR] Completed: error: {exc}")
+            rows.append(row)
+            failed_images.append(
+                {
+                    "image_name": image_path.name,
+                    "image_path": str(image_path),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                }
+            )
+            write_image_result_json(result_json_path, row, yolo_result)
+            write_raw_response_if_needed(
+                raw_responses_dir=batch_paths["raw_responses"],
+                image_path=image_path,
+                raw_response=vlm_service.last_raw_response or "",
+                should_save=args.save_raw_response_on_failure,
+            )
+            write_csv(csv_path, rows)
+            image_summaries.append(_summary_for_row(row))
+            print(f"[ERROR] [{index}/{len(images)}] {relative_path} completed with error: {exc}")
+            if not args.continue_on_error:
+                break
 
     write_csv(csv_path, rows)
+    write_json(output_dir / "batch_summary.json", _build_batch_summary(rows, image_summaries, perf_counter() - batch_started))
+    write_json(output_dir / "failed_images.json", failed_images)
     success_count = sum(1 for row in rows if row["status"] == "success")
     failed_count = len(rows) - success_count
     print("[INFO] Batch completed")
@@ -528,6 +669,86 @@ def _format_bool(value: bool | None) -> str:
 
 def _format_csv_value(value: object | None) -> object:
     return "" if value is None else value
+
+
+def _safe_json_stem(image_path: Path) -> str:
+    relative_parts = image_path.with_suffix("").parts[-3:]
+    safe = "_".join(relative_parts)
+    safe = "".join(character if character.isalnum() or character in "-_" else "_" for character in safe)
+    return safe or "image"
+
+
+def _summary_for_row(row: dict[str, object]) -> dict[str, object]:
+    return {
+        "image_name": row["image_name"],
+        "yolo_judgment": row["yolo_judgment"],
+        "detection_count": row["yolo_detection_count"],
+        "vlm_executed": row["vlm_status"] != "not_run",
+        "vlm_status": row["vlm_status"],
+        "retry_count": row["retry_count"],
+        "fallback_used": row["fallback_used"] == "true",
+        "processing_time_ms": _seconds_string_to_ms(row["total_processing_time_seconds"]),
+        "status": row["image_status"],
+    }
+
+
+def _build_batch_summary(
+    rows: list[dict[str, object]],
+    image_summaries: list[dict[str, object]],
+    total_processing_seconds: float,
+) -> dict[str, object]:
+    total_images = len(rows)
+    vlm_rows = [row for row in rows if row["vlm_status"] != "not_run"]
+    processing_seconds = [
+        float(row["total_processing_time_seconds"])
+        for row in rows
+        if str(row["total_processing_time_seconds"]).strip()
+    ]
+    vlm_seconds = [
+        float(row["vlm_inference_time_seconds"])
+        for row in rows
+        if str(row["vlm_inference_time_seconds"]).strip()
+    ]
+    return {
+        "total_images": total_images,
+        "completed_count": sum(1 for row in rows if row["status"] == "success"),
+        "ok_image_count": sum(1 for row in rows if row["yolo_judgment"] == "OK"),
+        "ng_image_count": sum(1 for row in rows if row["yolo_judgment"] == "NG"),
+        "vlm_executed_count": len(vlm_rows),
+        "vlm_skipped_count": sum(1 for row in rows if row["vlm_status"] == "not_run"),
+        "vlm_first_success_count": sum(1 for row in rows if row["vlm_status"] == "success"),
+        "vlm_retry_success_count": sum(1 for row in rows if row["vlm_status"] == "retry_success"),
+        "fallback_used_count": sum(1 for row in rows if row["fallback_used"] == "true"),
+        "final_failed_count": sum(1 for row in rows if row["status"] != "success"),
+        "done_false_count": sum(1 for row in rows if _row_has_failure(row, "done_false")),
+        "empty_content_count": sum(1 for row in rows if _row_has_failure(row, "empty_content")),
+        "invalid_json_count": sum(1 for row in rows if _row_has_failure(row, "json_parse_failed")),
+        "schema_error_count": sum(1 for row in rows if _row_has_failure(row, "validation_failed")),
+        "timeout_count": sum(1 for row in rows if "timeout" in str(row["failure_reason"]).lower()),
+        "total_processing_time_seconds": round(total_processing_seconds, 3),
+        "average_image_processing_time_seconds": _average(processing_seconds),
+        "average_vlm_processing_time_seconds": _average(vlm_seconds),
+        "images": image_summaries,
+    }
+
+
+def _seconds_string_to_ms(value: object) -> int:
+    try:
+        return int(round(float(value) * 1000))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _row_has_failure(row: dict[str, object], failure_name: str) -> bool:
+    return row["vlm_status"] == failure_name or row["parse_status"] == failure_name or failure_name in str(
+        row["failure_reason"]
+    ).split("|")
+
+
+def _average(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return round(sum(values) / len(values), 3)
 
 
 if __name__ == "__main__":

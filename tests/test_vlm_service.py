@@ -333,6 +333,32 @@ def test_vlm_service_records_schema_validation_failure_status(monkeypatch) -> No
     assert service.last_quality_info.quality_status == "not_evaluated"
 
 
+def test_vlm_service_retries_parse_failure_then_succeeds(monkeypatch) -> None:
+    monkeypatch.setattr("service.vlm_service.resize_image_to_jpeg_bytes", lambda *args, **kwargs: b"image")
+    monkeypatch.setattr(
+        "service.vlm_service.create_crop_montage_result",
+        lambda **kwargs: CropMontageResult(b"montage-image", 320, 240, 1),
+    )
+    monkeypatch.setattr("service.vlm_service.read_image_size_from_bytes", lambda image_bytes: (100, 80))
+    responses = iter(["not json", valid_response()])
+
+    class FakeClient:
+        def generate(self, prompt: str, image_bytes_list: list[bytes] | None = None) -> str:
+            return next(responses)
+
+    detection = Detection(0, "open_circuit", 0.91, 1, 2, 3, 4)
+    yolo_result = YoloResult(Path("sample.png"), detections=[detection])
+    service = VlmService(client=FakeClient(), max_retries=1, retry_delay_seconds=0)
+
+    service.describe_defects(Path("result.jpg"), yolo_result)
+
+    assert service.last_parse_success is True
+    assert service.last_fallback_used is False
+    assert service.last_vlm_status == "retry_success"
+    assert service.last_retry_count == 1
+    assert service.last_failure_reason == "json_parse_failed"
+
+
 def test_vlm_service_records_quality_warning_for_class_name_only(monkeypatch) -> None:
     monkeypatch.setattr("service.vlm_service.resize_image_to_jpeg_bytes", lambda *args, **kwargs: b"image")
     monkeypatch.setattr(

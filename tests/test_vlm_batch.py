@@ -16,6 +16,7 @@ from scripts.run_vlm_test_batch import (
     write_csv,
 )
 from vlm.ollama_response import OllamaResponseMetadata
+from vlm.response_parser import VlmQualityInfo
 
 
 def test_discover_images_recurses_supported_extensions_only(tmp_path) -> None:
@@ -316,3 +317,142 @@ def test_result_to_row_records_yolo_failure_status(tmp_path) -> None:
     assert row["fallback_used"] == "false"
     assert row["exception_type"] == "RuntimeError"
     assert row["exception_message"] == "boom"
+
+
+def test_batch_main_processes_and_saves_each_image_sequentially(monkeypatch, tmp_path) -> None:
+    input_dir = tmp_path / "inputs"
+    output_dir = tmp_path / "batch"
+    input_dir.mkdir()
+    first = input_dir / "a.jpg"
+    second = input_dir / "b.jpg"
+    first.write_bytes(b"image")
+    second.write_bytes(b"image")
+    events: list[str] = []
+
+    class FakeYoloService:
+        def detect(self, image_path: Path, output_path: Path | None = None) -> YoloResult:
+            if image_path == second:
+                assert "save:a.jpg" in events
+            events.append(f"yolo:{image_path.name}")
+            if output_path is not None:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"result")
+            return YoloResult(
+                image_path=image_path,
+                detections=[Detection(0, "open_circuit", 0.9, 1, 2, 3, 4)],
+                annotated_image_path=output_path,
+            )
+
+    class FakeVlmService:
+        last_preparation_info = None
+        last_raw_response = '{"ok": true}'
+        last_parse_success = True
+        last_parse_error = ""
+        last_fallback_used = False
+        last_vlm_status = "success"
+        last_parse_status = "success"
+        last_ollama_metadata = None
+        last_quality_info = VlmQualityInfo(quality_status="acceptable")
+        last_retry_count = 0
+        last_failure_reason = ""
+
+        def describe_defects(self, image_path: Path, yolo_result: YoloResult) -> str:
+            events.append(f"vlm:{yolo_result.image_path.name}")
+            return "description"
+
+    original_write = batch.write_image_result_json
+
+    def tracking_write(path: Path, row: dict[str, object], yolo_result: YoloResult | None) -> None:
+        events.append(f"save:{row['image_name']}")
+        original_write(path, row, yolo_result)
+
+    monkeypatch.setattr(batch, "build_yolo_service", lambda args: FakeYoloService())
+    monkeypatch.setattr(batch, "build_vlm_service", lambda args: FakeVlmService())
+    monkeypatch.setattr(batch, "write_image_result_json", tracking_write)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_vlm_test_batch.py",
+            "--input-dir",
+            str(input_dir),
+            "--output-dir",
+            str(output_dir),
+            "--vlm-retry-delay",
+            "0",
+        ],
+    )
+
+    assert batch.main() == 0
+
+    assert events == [
+        "yolo:a.jpg",
+        "vlm:a.jpg",
+        "save:a.jpg",
+        "yolo:b.jpg",
+        "vlm:b.jpg",
+        "save:b.jpg",
+    ]
+    assert list((output_dir / "results").glob("*.json"))
+    assert (output_dir / "batch_summary.json").exists()
+
+
+def test_batch_summary_counts_retry_fallback_and_skipped() -> None:
+    rows = [
+        {
+            "status": "success",
+            "image_status": "completed",
+            "image_name": "ok.jpg",
+            "yolo_judgment": "OK",
+            "yolo_detection_count": 0,
+            "vlm_status": "not_run",
+            "parse_status": "not_attempted",
+            "fallback_used": "false",
+            "retry_count": 0,
+            "failure_reason": "",
+            "total_processing_time_seconds": "1.000",
+            "vlm_inference_time_seconds": "",
+        },
+        {
+            "status": "success",
+            "image_status": "completed",
+            "image_name": "retry.jpg",
+            "yolo_judgment": "NG",
+            "yolo_detection_count": 1,
+            "vlm_status": "retry_success",
+            "parse_status": "success",
+            "fallback_used": "false",
+            "retry_count": 1,
+            "failure_reason": "json_parse_failed",
+            "total_processing_time_seconds": "2.000",
+            "vlm_inference_time_seconds": "0.500",
+        },
+        {
+            "status": "success",
+            "image_status": "completed_with_fallback",
+            "image_name": "fallback.jpg",
+            "yolo_judgment": "NG",
+            "yolo_detection_count": 1,
+            "vlm_status": "done_false",
+            "parse_status": "not_attempted",
+            "fallback_used": "true",
+            "retry_count": 2,
+            "failure_reason": "done_false",
+            "total_processing_time_seconds": "3.000",
+            "vlm_inference_time_seconds": "1.000",
+        },
+    ]
+
+    summary = batch._build_batch_summary(rows, [batch._summary_for_row(row) for row in rows], 6.0)
+
+    assert summary["total_images"] == 3
+    assert summary["ok_image_count"] == 1
+    assert summary["ng_image_count"] == 2
+    assert summary["vlm_executed_count"] == 2
+    assert summary["vlm_skipped_count"] == 1
+    assert summary["vlm_retry_success_count"] == 1
+    assert summary["fallback_used_count"] == 1
+    assert summary["done_false_count"] == 1
+    assert summary["invalid_json_count"] == 1
+    assert summary["average_image_processing_time_seconds"] == 2.0
+    assert summary["average_vlm_processing_time_seconds"] == 0.75
