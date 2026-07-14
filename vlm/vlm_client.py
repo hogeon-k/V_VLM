@@ -50,6 +50,7 @@ class VlmClient:
         self.timeout_seconds = timeout_seconds
         self.last_response_metadata: OllamaResponseMetadata | None = None
         self.last_response_data: dict[str, Any] | None = None
+        self.last_request_summary: dict[str, Any] | None = None
         self.last_error_type: str = ""
         self.last_error_message: str = ""
         self.endpoint = "/api/chat"
@@ -66,6 +67,7 @@ class VlmClient:
         """Send a prompt and one or more images to Ollama and return text."""
         self.last_response_metadata = None
         self.last_response_data = None
+        self.last_request_summary = None
         self.last_error_type = ""
         self.last_error_message = ""
         images = self._collect_images(
@@ -96,6 +98,7 @@ class VlmClient:
                 "seed": self.seed,
             },
         }
+        self.last_request_summary = self._summarize_payload(payload)
 
         try:
             response_data, status_code = self._post_chat(payload)
@@ -160,9 +163,41 @@ class VlmClient:
 
         if self.debug_response:
             print(f"[DEBUG] Ollama status code: {status_code}")
+            if self.last_request_summary is not None:
+                print(f"[DEBUG] Ollama request JSON bytes: {self.last_request_summary['json_size_bytes']}")
+                print(f"[DEBUG] Ollama request image count: {self.last_request_summary['image_count']}")
+                print(f"[DEBUG] Ollama request base64 lengths: {self.last_request_summary['base64_lengths']}")
+                print(f"[DEBUG] Ollama request prompt length: {self.last_request_summary['prompt_length']}")
             for line in build_ollama_debug_lines(response_data):
                 print(line)
         return extract_ollama_content(response_data, metadata)
+
+    def unload_model(self) -> bool:
+        """Ask Ollama to unload this model from its runner."""
+        payload = {
+            "model": self.model_name,
+            "keep_alive": 0,
+        }
+        request = Request(
+            url=f"{self.host}/api/generate",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=min(self.timeout_seconds, 30.0)) as response:
+                body = response.read().decode("utf-8", errors="replace")
+                status_code = int(getattr(response, "status", 200))
+        except (HTTPError, URLError, TimeoutError, socket.timeout):
+            return False
+
+        if status_code != 200:
+            return False
+        try:
+            response_data = json.loads(body)
+        except json.JSONDecodeError:
+            return False
+        return response_data.get("done_reason") == "unload"
 
     def _post_chat(self, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
         request = Request(
@@ -268,3 +303,16 @@ class VlmClient:
             raise FileNotFoundError(f"VLM input image not found: {resolved_image_path}")
 
         return str(resolved_image_path)
+
+    def _summarize_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        message = payload["messages"][0]
+        images = message.get("images", [])
+        base64_lengths = [len(image) for image in images] if isinstance(images, list) else []
+        return {
+            "json_size_bytes": len(json.dumps(payload).encode("utf-8")),
+            "image_count": len(base64_lengths),
+            "base64_lengths": base64_lengths,
+            "prompt_length": len(str(message.get("content", ""))),
+            "format": "schema" if isinstance(payload.get("format"), dict) else payload.get("format"),
+            "has_options": "options" in payload,
+        }

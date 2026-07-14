@@ -412,6 +412,94 @@ def test_vlm_service_retries_done_false_and_timeout_then_succeeds(monkeypatch) -
     assert service.last_failure_reason == "done_false|timeout"
 
 
+def test_vlm_service_downsizes_and_unloads_after_zero_value_response(monkeypatch) -> None:
+    calls: dict[str, object] = {"images": []}
+
+    def fake_resize(image_path: Path, max_size: int, quality: int) -> bytes:
+        return f"full-{max_size}".encode()
+
+    def fake_montage(
+        image_path: Path,
+        detections: object,
+        max_size: int,
+        quality: int,
+        padding: int,
+        min_crop_size: int,
+        max_crop_size: int,
+    ) -> CropMontageResult:
+        return CropMontageResult(f"montage-{max_size}".encode(), max_size, max_size, 1)
+
+    def fake_size(image_bytes: bytes) -> tuple[int, int]:
+        if image_bytes in {b"full-960", b"montage-960"}:
+            return (960, 960)
+        return (640, 640)
+
+    class FakeClient:
+        endpoint = "/api/chat"
+        stream = False
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.unload_calls = 0
+            self.last_response_metadata = None
+
+        def unload_model(self) -> bool:
+            self.unload_calls += 1
+            return True
+
+        def generate(self, prompt: str, image_bytes_list: list[bytes] | None = None) -> str:
+            self.calls += 1
+            calls["images"].append(image_bytes_list)
+            if self.calls == 1:
+                self.last_response_metadata = OllamaResponseMetadata(
+                    http_status=200,
+                    endpoint="/api/chat",
+                    stream=False,
+                    done=False,
+                    content_length=0,
+                )
+                raise OllamaContentError("empty", self.last_response_metadata)
+            self.last_response_metadata = OllamaResponseMetadata(
+                http_status=200,
+                endpoint="/api/chat",
+                stream=False,
+                done=True,
+                content_length=len(valid_response()),
+            )
+            return valid_response()
+
+    monkeypatch.setattr("service.vlm_service.resize_image_to_jpeg_bytes", fake_resize)
+    monkeypatch.setattr("service.vlm_service.create_crop_montage_result", fake_montage)
+    monkeypatch.setattr("service.vlm_service.read_image_size_from_bytes", fake_size)
+
+    client = FakeClient()
+    detection = Detection(0, "missing_hole", 0.91, 1, 2, 3, 4)
+    yolo_result = YoloResult(Path("sample.png"), detections=[detection])
+    service = VlmService(
+        client=client,
+        image_size=960,
+        crop_montage_size=960,
+        image_mode="full_montage",
+        max_retries=1,
+        retry_delay_seconds=0,
+    )
+
+    service.describe_defects(Path("result.jpg"), yolo_result)
+
+    assert client.calls == 2
+    assert client.unload_calls == 1
+    assert calls["images"][0] == [b"full-960", b"montage-960"]
+    assert calls["images"][1] == [b"full-640", b"montage-640"]
+    assert service.last_parse_success is True
+    assert service.last_fallback_used is False
+    assert service.last_preparation_info is not None
+    assert service.last_preparation_info.zero_value_recovery_used is True
+    assert service.last_preparation_info.zero_value_recovery_image_size == 640
+    assert service.last_preparation_info.zero_value_unload_succeeded is True
+    assert service.last_preparation_info.full_image_size == (640, 640)
+    assert service.last_preparation_info.crop_montage_size == (640, 640)
+
+
 def test_vlm_service_uses_fallback_after_retry_exhaustion(monkeypatch) -> None:
     monkeypatch.setattr("service.vlm_service.resize_image_to_jpeg_bytes", lambda *args, **kwargs: b"image")
     monkeypatch.setattr(

@@ -280,11 +280,14 @@ Additional batch stability options:
 --vlm-max-retries 2 `
 --vlm-retry-delay 0.5 `
 --vlm-timeout 120 `
+--vlm-circuit-breaker-threshold 3 `
 --continue-on-error `
 --save-raw-response-on-failure
 ```
 
 `--vlm-max-retries` is the number of retries after the first VLM attempt. `--vlm-retry-delay` waits between retries. `--vlm-timeout` is passed to the Ollama HTTP client. The batch continues after image-level failures by default, while initialization errors such as a missing model can still stop the run.
+
+If Ollama returns a zero-value chat response such as `done=false` with empty `message.content`, the VLM service unloads the model runner, rebuilds the VLM image payload with a conservative 640px retry limit, and retries within the configured retry budget. This does not change the first request, remove JSON Schema, or treat empty content as success. If repeated zero-value fallbacks continue, `--vlm-circuit-breaker-threshold` opens a batch circuit breaker so remaining images still save YOLO results without repeatedly calling a stuck VLM runner.
 
 Expected sequential log shape:
 

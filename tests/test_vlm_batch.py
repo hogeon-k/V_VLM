@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -395,6 +396,88 @@ def test_batch_main_processes_and_saves_each_image_sequentially(monkeypatch, tmp
     ]
     assert list((output_dir / "results").glob("*.json"))
     assert (output_dir / "batch_summary.json").exists()
+
+
+def test_batch_circuit_breaker_skips_vlm_but_keeps_saving(monkeypatch, tmp_path) -> None:
+    input_dir = tmp_path / "inputs"
+    output_dir = tmp_path / "batch"
+    input_dir.mkdir()
+    images = [input_dir / f"{index}.jpg" for index in range(3)]
+    for image in images:
+        image.write_bytes(b"image")
+    events: list[str] = []
+
+    class FakeYoloService:
+        def detect(self, image_path: Path, output_path: Path | None = None) -> YoloResult:
+            events.append(f"yolo:{image_path.name}")
+            if output_path is not None:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"result")
+            return YoloResult(
+                image_path=image_path,
+                detections=[Detection(0, "open_circuit", 0.9, 1, 2, 3, 4)],
+                annotated_image_path=output_path,
+            )
+
+    class FakeVlmService:
+        last_preparation_info = None
+        last_raw_response = ""
+        last_parse_success = False
+        last_parse_error = "Ollama response JSON did not contain assistant content."
+        last_fallback_used = True
+        last_vlm_status = "done_false"
+        last_parse_status = "not_attempted"
+        last_ollama_metadata = OllamaResponseMetadata(done=False, content_length=0)
+        last_quality_info = VlmQualityInfo()
+        last_retry_count = 1
+        last_failure_reason = "done_false"
+        last_error_type = "done_false"
+        last_error_message = "empty"
+
+        def describe_defects(self, image_path: Path, yolo_result: YoloResult) -> str:
+            events.append(f"vlm:{yolo_result.image_path.name}")
+            return "fallback"
+
+    original_write = batch.write_image_result_json
+
+    def tracking_write(path: Path, row: dict[str, object], yolo_result: YoloResult | None) -> None:
+        events.append(f"save:{row['image_name']}:{row['vlm_status']}")
+        original_write(path, row, yolo_result)
+
+    monkeypatch.setattr(batch, "build_yolo_service", lambda args: FakeYoloService())
+    monkeypatch.setattr(batch, "build_vlm_service", lambda args: FakeVlmService())
+    monkeypatch.setattr(batch, "write_image_result_json", tracking_write)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_vlm_test_batch.py",
+            "--input-dir",
+            str(input_dir),
+            "--output-dir",
+            str(output_dir),
+            "--vlm-circuit-breaker-threshold",
+            "2",
+            "--vlm-retry-delay",
+            "0",
+        ],
+    )
+
+    assert batch.main() == 0
+
+    assert events == [
+        "yolo:0.jpg",
+        "vlm:0.jpg",
+        "save:0.jpg:done_false",
+        "yolo:1.jpg",
+        "vlm:1.jpg",
+        "save:1.jpg:done_false",
+        "yolo:2.jpg",
+        "save:2.jpg:circuit_breaker_open",
+    ]
+    assert list((output_dir / "results").glob("*.json"))
+    summary = json.loads((output_dir / "batch_summary.json").read_text(encoding="utf-8"))
+    assert summary["result_save_success_count"] == 3
 
 
 def test_batch_summary_counts_retry_fallback_and_skipped() -> None:

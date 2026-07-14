@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 from pathlib import Path
 from time import perf_counter, sleep
 
@@ -19,6 +21,18 @@ from vlm.response_parser import (
 from vlm.vlm_client import VlmClient
 
 
+ZERO_VALUE_RETRY_IMAGE_SIZE = 640
+
+
+@dataclass(slots=True)
+class VlmImageDiagnostic:
+    label: str
+    byte_length: int
+    sha256: str
+    decoded_size: tuple[int, int]
+    base64_length: int
+
+
 @dataclass(slots=True)
 class VlmPreparationInfo:
     image_mode: str = "full_montage"
@@ -33,6 +47,12 @@ class VlmPreparationInfo:
     crop_montage_path: Path | None = None
     image_preparation_seconds: float | None = None
     inference_seconds: float | None = None
+    prompt_character_count: int = 0
+    request_json_size: int | None = None
+    image_diagnostics: tuple[VlmImageDiagnostic, ...] = ()
+    zero_value_recovery_used: bool = False
+    zero_value_recovery_image_size: int | None = None
+    zero_value_unload_succeeded: bool | None = None
 
 
 class VlmService:
@@ -131,6 +151,7 @@ class VlmService:
             full_image_bytes=full_image_bytes,
             montage_bytes=montage_bytes,
         )
+        image_labels = self._image_labels_for_mode()
 
         self.last_preparation_info = VlmPreparationInfo(
             image_mode=self.image_mode,
@@ -144,10 +165,14 @@ class VlmService:
             crop_montage_size=(montage_result.width, montage_result.height),
             crop_montage_path=crop_montage_path,
             image_preparation_seconds=preparation_seconds,
+            prompt_character_count=len(prompt),
+            image_diagnostics=_build_image_diagnostics(image_labels, image_bytes_list),
         )
 
         inference_started = perf_counter()
         max_attempts = self.max_retries + 1
+        current_image_bytes_list = image_bytes_list
+        zero_value_recovery_used = False
         try:
             for attempt_index in range(max_attempts):
                 attempt_number = attempt_index + 1
@@ -164,9 +189,13 @@ class VlmService:
                 try:
                     response = self.client.generate(
                         prompt,
-                        image_bytes_list=image_bytes_list,
+                        image_bytes_list=current_image_bytes_list,
                     )
                     self.last_ollama_metadata = getattr(self.client, "last_response_metadata", None)
+                    if self.last_preparation_info is not None:
+                        request_summary = getattr(self.client, "last_request_summary", None)
+                        if request_summary is not None:
+                            self.last_preparation_info.request_json_size = request_summary.get("json_size_bytes")
                 except OllamaContentError as exc:
                     self.last_ollama_metadata = exc.metadata
                     self.last_vlm_status = _vlm_status_for_empty_content(exc.metadata)
@@ -176,6 +205,50 @@ class VlmService:
                     self.last_error_message = str(exc)
                     self._print_ollama_metadata()
                     print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} failed: {self.last_vlm_status}")
+                    if (
+                        _is_zero_value_response(exc.metadata)
+                        and attempt_index < self.max_retries
+                    ):
+                        if not zero_value_recovery_used:
+                            unload_succeeded = _unload_client_model(self.client)
+                            recovered_images = self._build_zero_value_retry_images(
+                                image_path=image_path,
+                                yolo_result=yolo_result,
+                            )
+                            current_image_bytes_list = recovered_images
+                            zero_value_recovery_used = True
+                            if self.last_preparation_info is not None:
+                                self.last_preparation_info.zero_value_recovery_used = True
+                                self.last_preparation_info.zero_value_recovery_image_size = (
+                                    ZERO_VALUE_RETRY_IMAGE_SIZE
+                                )
+                                self.last_preparation_info.zero_value_unload_succeeded = unload_succeeded
+                                self.last_preparation_info.image_count = len(recovered_images)
+                                self.last_preparation_info.image_diagnostics = _build_image_diagnostics(
+                                    image_labels,
+                                    recovered_images,
+                                )
+                                sizes = [diagnostic.decoded_size for diagnostic in self.last_preparation_info.image_diagnostics]
+                                if self.image_mode in {"full", "full_montage"} and sizes:
+                                    self.last_preparation_info.full_image_size = sizes[0]
+                                if self.image_mode == "montage" and sizes:
+                                    self.last_preparation_info.crop_montage_size = sizes[0]
+                                elif self.image_mode == "full_montage" and len(sizes) > 1:
+                                    self.last_preparation_info.crop_montage_size = sizes[1]
+                            print(
+                                "[INFO] Zero-value Ollama response detected; "
+                                f"unload_succeeded={str(unload_succeeded).lower()}, "
+                                f"retry_image_size={ZERO_VALUE_RETRY_IMAGE_SIZE}"
+                            )
+                        else:
+                            unload_succeeded = _unload_client_model(self.client)
+                            if self.last_preparation_info is not None:
+                                self.last_preparation_info.zero_value_unload_succeeded = unload_succeeded
+                            print(
+                                "[INFO] Repeated zero-value Ollama response; "
+                                f"unload_succeeded={str(unload_succeeded).lower()}"
+                            )
+                        continue
                     if attempt_index < self.max_retries:
                         continue
                     return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
@@ -320,6 +393,42 @@ class VlmService:
             return [full_image_bytes, montage_bytes]
         raise ValueError(f"Unsupported VLM image mode: {self.image_mode}")
 
+    def _image_labels_for_mode(self) -> list[str]:
+        if self.image_mode == "full":
+            return ["full"]
+        if self.image_mode == "montage":
+            return ["montage"]
+        if self.image_mode == "full_montage":
+            return ["full", "montage"]
+        raise ValueError(f"Unsupported VLM image mode: {self.image_mode}")
+
+    def _build_zero_value_retry_images(
+        self,
+        *,
+        image_path: Path,
+        yolo_result: YoloResult,
+    ) -> list[bytes]:
+        retry_size = min(self.image_size, ZERO_VALUE_RETRY_IMAGE_SIZE)
+        retry_montage_size = min(self.crop_montage_size, ZERO_VALUE_RETRY_IMAGE_SIZE)
+        full_image_bytes = resize_image_to_jpeg_bytes(
+            image_path,
+            max_size=retry_size,
+            quality=self.image_quality,
+        )
+        montage_result = create_crop_montage_result(
+            image_path=image_path,
+            detections=yolo_result.detections,
+            max_size=retry_montage_size,
+            quality=self.image_quality,
+            padding=self.crop_padding,
+            min_crop_size=self.crop_min_size,
+            max_crop_size=self.crop_max_size,
+        )
+        return self._image_bytes_for_mode(
+            full_image_bytes=full_image_bytes,
+            montage_bytes=montage_result.image_bytes,
+        )
+
 
 def _safe_filename_stem(stem: str) -> str:
     safe = "".join(character if character.isalnum() or character in "-_" else "_" for character in stem)
@@ -328,6 +437,38 @@ def _safe_filename_stem(stem: str) -> str:
 
 def _format_optional(value: object | None) -> str:
     return "" if value is None else str(value)
+
+
+def _build_image_diagnostics(
+    labels: list[str],
+    image_bytes_list: list[bytes],
+) -> tuple[VlmImageDiagnostic, ...]:
+    diagnostics: list[VlmImageDiagnostic] = []
+    for label, image_bytes in zip(labels, image_bytes_list, strict=True):
+        diagnostics.append(
+            VlmImageDiagnostic(
+                label=label,
+                byte_length=len(image_bytes),
+                sha256=hashlib.sha256(image_bytes).hexdigest(),
+                decoded_size=read_image_size_from_bytes(image_bytes),
+                base64_length=len(base64.b64encode(image_bytes)),
+            )
+        )
+    return tuple(diagnostics)
+
+
+def _is_zero_value_response(metadata: OllamaResponseMetadata) -> bool:
+    return metadata.done is False and metadata.content_length == 0
+
+
+def _unload_client_model(client: object) -> bool:
+    unload = getattr(client, "unload_model", None)
+    if not callable(unload):
+        return False
+    try:
+        return bool(unload())
+    except Exception:
+        return False
 
 
 def _vlm_status_for_empty_content(metadata: OllamaResponseMetadata) -> str:

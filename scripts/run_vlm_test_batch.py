@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from model.yolo_result import YoloResult
 from scripts.test_yolo_vlm import build_vlm_service, build_yolo_service, positive_int
 from vlm.ollama_response import OllamaResponseMetadata
+from vlm.response_parser import format_yolo_fallback_response
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 GROUND_TRUTH_CATEGORIES = {"open_circuit", "short", "missing_hole", "normal"}
@@ -161,6 +162,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vlm-max-retries", type=int, default=2, help="Maximum VLM retry count per image.")
     parser.add_argument("--vlm-retry-delay", type=float, default=0.5, help="Delay between VLM retries in seconds.")
     parser.add_argument("--vlm-timeout", type=float, default=120.0, help="Ollama HTTP timeout in seconds.")
+    parser.add_argument(
+        "--vlm-circuit-breaker-threshold",
+        type=int,
+        default=3,
+        help="Consecutive zero-value VLM fallbacks before skipping later VLM calls.",
+    )
     parser.add_argument(
         "--continue-on-error",
         action="store_true",
@@ -464,6 +471,8 @@ def main() -> int:
     rows: list[dict[str, object]] = []
     image_summaries: list[dict[str, object]] = []
     failed_images: list[dict[str, object]] = []
+    consecutive_zero_value_fallbacks = 0
+    vlm_circuit_breaker_open = False
     category_counts = Counter(path.relative_to(input_dir).parts[0] for path in images)
     print(f"[INFO] VLM full image size limit: {args.vlm_full_image_size or args.vlm_image_size}")
     print(f"[INFO] VLM montage size limit: {args.vlm_montage_size or args.vlm_crop_montage_size}")
@@ -514,62 +523,116 @@ def main() -> int:
                 vlm_error_message = ""
             else:
                 print(f"{prefix} NG, detection {yolo_result.defect_count} count")
-                print(f"{prefix} VLM started")
-                vlm_response = vlm_service.describe_defects(
-                    yolo_result.annotated_image_path or image_path,
-                    yolo_result,
-                ) or ""
-                retry_count = vlm_service.last_retry_count
-                failure_reason = vlm_service.last_failure_reason
-                vlm_error_type = getattr(vlm_service, "last_error_type", "")
-                vlm_error_message = getattr(vlm_service, "last_error_message", "")
-                if retry_count:
-                    print(f"{prefix} VLM retry count: {retry_count}/{args.vlm_max_retries}")
-                info = vlm_service.last_preparation_info
-                crop_montage_path = info.crop_montage_path if info else None
-                image_preparation_seconds = info.image_preparation_seconds if info else None
-                vlm_inference_seconds = info.inference_seconds if info else None
-                vlm_raw_response = vlm_service.last_raw_response or ""
-                vlm_parse_success = vlm_service.last_parse_success
-                vlm_parse_error = vlm_service.last_parse_error
-                vlm_fallback_used = vlm_service.last_fallback_used
-                vlm_status = vlm_service.last_vlm_status
-                parse_status = vlm_service.last_parse_status
-                ollama_metadata = vlm_service.last_ollama_metadata
-                vlm_image_count = info.image_count if info else None
-                vlm_image_mode = info.image_mode if info else ""
-                crop_count = info.detection_crop_count if info else None
-                full_image_size_limit = info.full_image_size_limit if info else None
-                montage_size_limit = info.crop_montage_size_limit if info else None
-                full_image_size = info.full_image_size if info else None
-                montage_size = info.crop_montage_size if info else None
-                quality = vlm_service.last_quality_info
-                quality_status = quality.quality_status
-                class_name_only_count = quality.class_name_only_count
-                summary_contradiction = quality.summary_contradiction
-                semantic_warning_count = quality.semantic_warning_count
-                class_name_only_detection_ids = quality.class_name_only_detection_ids
-                image_status = "completed_with_fallback" if vlm_fallback_used else "completed"
-                if full_image_size is not None:
-                    print(f"[INFO] VLM full image size: {full_image_size[0]}x{full_image_size[1]}")
-                if montage_size is not None:
-                    print(f"[INFO] VLM crop montage size: {montage_size[0]}x{montage_size[1]}")
-                print(f"[INFO] VLM image mode: {vlm_image_mode}")
-                print(f"[INFO] VLM image count: {vlm_image_count}")
-                if vlm_inference_seconds is not None:
-                    print(f"[INFO] VLM inference time: {vlm_inference_seconds:.3f}s")
-                print(f"[INFO] VLM parse success: {str(vlm_parse_success).lower()}")
-                print(f"[INFO] VLM fallback used: {str(vlm_fallback_used).lower()}")
-                print(f"[INFO] VLM status: {vlm_status}")
-                print(f"[INFO] VLM parse status: {parse_status}")
-                print(f"[INFO] VLM quality status: {quality_status}")
-                print(f"[INFO] Class-name-only visual features: {class_name_only_count}")
-                print(f"[INFO] Summary contradiction: {str(summary_contradiction).lower()}")
-                print(f"[INFO] Semantic warning count: {semantic_warning_count}")
-                if vlm_fallback_used:
-                    print(f"{prefix} VLM final failure, fallback used")
+                if vlm_circuit_breaker_open:
+                    print(f"{prefix} VLM skipped by circuit breaker")
+                    vlm_response = format_yolo_fallback_response(yolo_result)
+                    retry_count = 0
+                    failure_reason = "circuit_breaker_open"
+                    vlm_error_type = "circuit_breaker_open"
+                    vlm_error_message = "VLM skipped after repeated zero-value Ollama responses."
+                    crop_montage_path = None
+                    image_preparation_seconds = None
+                    vlm_inference_seconds = None
+                    vlm_raw_response = ""
+                    vlm_parse_success = False
+                    vlm_parse_error = vlm_error_message
+                    vlm_fallback_used = True
+                    vlm_status = "circuit_breaker_open"
+                    parse_status = "not_attempted"
+                    ollama_metadata = None
+                    vlm_image_count = None
+                    vlm_image_mode = args.vlm_image_mode
+                    crop_count = None
+                    full_image_size_limit = None
+                    montage_size_limit = None
+                    full_image_size = None
+                    montage_size = None
+                    quality_status = "not_evaluated"
+                    class_name_only_count = 0
+                    summary_contradiction = False
+                    semantic_warning_count = 0
+                    class_name_only_detection_ids = ()
+                    image_status = "completed_with_fallback"
                 else:
-                    print(f"{prefix} VLM response validation completed")
+                    print(f"{prefix} VLM started")
+                    vlm_response = vlm_service.describe_defects(
+                        yolo_result.annotated_image_path or image_path,
+                        yolo_result,
+                    ) or ""
+                    retry_count = vlm_service.last_retry_count
+                    failure_reason = vlm_service.last_failure_reason
+                    vlm_error_type = getattr(vlm_service, "last_error_type", "")
+                    vlm_error_message = getattr(vlm_service, "last_error_message", "")
+                    if retry_count:
+                        print(f"{prefix} VLM retry count: {retry_count}/{args.vlm_max_retries}")
+                    info = vlm_service.last_preparation_info
+                    crop_montage_path = info.crop_montage_path if info else None
+                    image_preparation_seconds = info.image_preparation_seconds if info else None
+                    vlm_inference_seconds = info.inference_seconds if info else None
+                    vlm_raw_response = vlm_service.last_raw_response or ""
+                    vlm_parse_success = vlm_service.last_parse_success
+                    vlm_parse_error = vlm_service.last_parse_error
+                    vlm_fallback_used = vlm_service.last_fallback_used
+                    vlm_status = vlm_service.last_vlm_status
+                    parse_status = vlm_service.last_parse_status
+                    ollama_metadata = vlm_service.last_ollama_metadata
+                    vlm_image_count = info.image_count if info else None
+                    vlm_image_mode = info.image_mode if info else ""
+                    crop_count = info.detection_crop_count if info else None
+                    full_image_size_limit = info.full_image_size_limit if info else None
+                    montage_size_limit = info.crop_montage_size_limit if info else None
+                    full_image_size = info.full_image_size if info else None
+                    montage_size = info.crop_montage_size if info else None
+                    quality = vlm_service.last_quality_info
+                    quality_status = quality.quality_status
+                    class_name_only_count = quality.class_name_only_count
+                    summary_contradiction = quality.summary_contradiction
+                    semantic_warning_count = quality.semantic_warning_count
+                    class_name_only_detection_ids = quality.class_name_only_detection_ids
+                    image_status = "completed_with_fallback" if vlm_fallback_used else "completed"
+                    if full_image_size is not None:
+                        print(f"[INFO] VLM full image size: {full_image_size[0]}x{full_image_size[1]}")
+                    if montage_size is not None:
+                        print(f"[INFO] VLM crop montage size: {montage_size[0]}x{montage_size[1]}")
+                    if info and info.request_json_size is not None:
+                        print(f"[INFO] VLM request JSON size: {info.request_json_size}")
+                    if info and info.zero_value_recovery_used:
+                        print(f"[INFO] VLM zero-value recovery used: true")
+                        print(f"[INFO] VLM zero-value retry image size: {info.zero_value_recovery_image_size}")
+                        print(f"[INFO] VLM zero-value unload succeeded: {str(info.zero_value_unload_succeeded).lower()}")
+                    print(f"[INFO] VLM image mode: {vlm_image_mode}")
+                    print(f"[INFO] VLM image count: {vlm_image_count}")
+                    if vlm_inference_seconds is not None:
+                        print(f"[INFO] VLM inference time: {vlm_inference_seconds:.3f}s")
+                    print(f"[INFO] VLM parse success: {str(vlm_parse_success).lower()}")
+                    print(f"[INFO] VLM fallback used: {str(vlm_fallback_used).lower()}")
+                    print(f"[INFO] VLM status: {vlm_status}")
+                    print(f"[INFO] VLM parse status: {parse_status}")
+                    print(f"[INFO] VLM quality status: {quality_status}")
+                    print(f"[INFO] Class-name-only visual features: {class_name_only_count}")
+                    print(f"[INFO] Summary contradiction: {str(summary_contradiction).lower()}")
+                    print(f"[INFO] Semantic warning count: {semantic_warning_count}")
+                    if vlm_fallback_used:
+                        print(f"{prefix} VLM final failure, fallback used")
+                    else:
+                        print(f"{prefix} VLM response validation completed")
+
+                    if vlm_fallback_used and _row_has_failure(
+                        {"vlm_status": vlm_status, "parse_status": parse_status, "failure_reason": failure_reason},
+                        "done_false",
+                    ):
+                        consecutive_zero_value_fallbacks += 1
+                    else:
+                        consecutive_zero_value_fallbacks = 0
+                    if (
+                        args.vlm_circuit_breaker_threshold > 0
+                        and consecutive_zero_value_fallbacks >= args.vlm_circuit_breaker_threshold
+                    ):
+                        vlm_circuit_breaker_open = True
+                        print(
+                            "[WARN] VLM circuit breaker opened after "
+                            f"{consecutive_zero_value_fallbacks} consecutive zero-value fallbacks"
+                        )
 
             row = result_to_row(
                 image_path=image_path,
