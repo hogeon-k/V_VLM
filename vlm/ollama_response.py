@@ -10,8 +10,11 @@ class OllamaResponseMetadata:
     """Safe Ollama response diagnostics. Duration values use Ollama's original units."""
 
     http_status: int | None = None
+    endpoint: str = ""
+    stream: bool | None = None
     done: bool | None = None
     done_reason: str | None = None
+    error: str | None = None
     content_length: int | None = None
     prompt_eval_count: int | None = None
     eval_count: int | None = None
@@ -66,13 +69,18 @@ def normalize_ollama_response(response: Any) -> dict[str, Any]:
 def build_ollama_metadata(
     response_data: Mapping[str, Any],
     http_status: int | None = None,
+    endpoint: str = "",
+    stream: bool | None = None,
 ) -> OllamaResponseMetadata:
     """Build metadata without requiring assistant content to be present."""
     source, content_length = _content_source_and_length(response_data)
     return OllamaResponseMetadata(
         http_status=http_status,
+        endpoint=endpoint,
+        stream=stream,
         done=_optional_bool(response_data.get("done")),
         done_reason=_optional_str(response_data.get("done_reason")),
+        error=_optional_str(response_data.get("error")),
         content_length=content_length,
         prompt_eval_count=_optional_int(response_data.get("prompt_eval_count")),
         eval_count=_optional_int(response_data.get("eval_count")),

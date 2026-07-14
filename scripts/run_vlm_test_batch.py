@@ -56,7 +56,17 @@ CSV_COLUMNS = [
     "fallback_used",
     "retry_count",
     "failure_reason",
+    "vlm_error_type",
+    "vlm_error_message",
+    "pipeline_success",
+    "yolo_success",
+    "vlm_attempted",
+    "vlm_success",
+    "result_saved",
     "http_status",
+    "ollama_endpoint",
+    "ollama_stream",
+    "ollama_error",
     "ollama_done",
     "ollama_done_reason",
     "ollama_content_length",
@@ -236,6 +246,9 @@ def result_to_row(
     parse_status: str = "not_attempted",
     retry_count: int = 0,
     failure_reason: str = "",
+    vlm_error_type: str = "",
+    vlm_error_message: str = "",
+    result_saved: bool = True,
     ollama_metadata: OllamaResponseMetadata | None = None,
     vlm_image_count: int | None = None,
     crop_count: int | None = None,
@@ -296,7 +309,17 @@ def result_to_row(
         "fallback_used": _format_bool(vlm_fallback_used),
         "retry_count": retry_count,
         "failure_reason": failure_reason,
+        "vlm_error_type": vlm_error_type,
+        "vlm_error_message": vlm_error_message,
+        "pipeline_success": _format_bool(status == "success"),
+        "yolo_success": _format_bool(yolo_status == "success"),
+        "vlm_attempted": _format_bool(vlm_status != "not_run"),
+        "vlm_success": _format_bool(vlm_status in {"success", "retry_success"} and not vlm_fallback_used),
+        "result_saved": _format_bool(result_saved),
         "http_status": _format_csv_value(ollama_metadata.http_status if ollama_metadata else None),
+        "ollama_endpoint": ollama_metadata.endpoint if ollama_metadata else "",
+        "ollama_stream": _format_bool(ollama_metadata.stream if ollama_metadata else None),
+        "ollama_error": ollama_metadata.error if ollama_metadata and ollama_metadata.error else "",
         "ollama_done": _format_bool(ollama_metadata.done if ollama_metadata else None),
         "ollama_done_reason": ollama_metadata.done_reason if ollama_metadata and ollama_metadata.done_reason else "",
         "ollama_content_length": _format_csv_value(
@@ -385,6 +408,33 @@ def write_raw_response_if_needed(
     return output_path
 
 
+def _failure_diagnostic_text(vlm_service: object, raw_response: str) -> str:
+    client = getattr(vlm_service, "client", None)
+    metadata = getattr(vlm_service, "last_ollama_metadata", None)
+    response_body = getattr(client, "last_response_data", None)
+    if response_body is None and raw_response:
+        response_body = raw_response
+    diagnostic = {
+        "http_status": metadata.http_status if metadata else None,
+        "endpoint": metadata.endpoint if metadata else getattr(client, "endpoint", ""),
+        "stream": metadata.stream if metadata else getattr(client, "stream", None),
+        "done": metadata.done if metadata else None,
+        "done_reason": metadata.done_reason if metadata else None,
+        "error": metadata.error if metadata else None,
+        "content_length": metadata.content_length if metadata else None,
+        "prompt_eval_count": metadata.prompt_eval_count if metadata else None,
+        "eval_count": metadata.eval_count if metadata else None,
+        "total_duration": metadata.total_duration if metadata else None,
+        "load_duration": metadata.load_duration if metadata else None,
+        "prompt_eval_duration": metadata.prompt_eval_duration if metadata else None,
+        "eval_duration": metadata.eval_duration if metadata else None,
+        "response_body": response_body,
+        "error_type": getattr(vlm_service, "last_error_type", "") or getattr(client, "last_error_type", ""),
+        "error_message": getattr(vlm_service, "last_error_message", "") or getattr(client, "last_error_message", ""),
+    }
+    return json.dumps(diagnostic, ensure_ascii=False, indent=2)
+
+
 def main() -> int:
     """Run the batch and keep processing after per-image failures."""
     args = parse_args()
@@ -460,6 +510,8 @@ def main() -> int:
                 image_status = "completed"
                 retry_count = 0
                 failure_reason = ""
+                vlm_error_type = ""
+                vlm_error_message = ""
             else:
                 print(f"{prefix} NG, detection {yolo_result.defect_count} count")
                 print(f"{prefix} VLM started")
@@ -469,6 +521,8 @@ def main() -> int:
                 ) or ""
                 retry_count = vlm_service.last_retry_count
                 failure_reason = vlm_service.last_failure_reason
+                vlm_error_type = getattr(vlm_service, "last_error_type", "")
+                vlm_error_message = getattr(vlm_service, "last_error_message", "")
                 if retry_count:
                     print(f"{prefix} VLM retry count: {retry_count}/{args.vlm_max_retries}")
                 info = vlm_service.last_preparation_info
@@ -545,6 +599,8 @@ def main() -> int:
                 parse_status=parse_status,
                 retry_count=retry_count,
                 failure_reason=failure_reason,
+                vlm_error_type=vlm_error_type,
+                vlm_error_message=vlm_error_message,
                 ollama_metadata=ollama_metadata,
                 vlm_image_count=vlm_image_count,
                 crop_count=crop_count,
@@ -563,7 +619,7 @@ def main() -> int:
             write_raw_response_if_needed(
                 raw_responses_dir=batch_paths["raw_responses"],
                 image_path=image_path,
-                raw_response=vlm_raw_response,
+                raw_response=_failure_diagnostic_text(vlm_service, vlm_raw_response),
                 should_save=args.save_raw_response_on_failure and bool(vlm_fallback_used),
             )
             write_csv(csv_path, rows)
@@ -604,6 +660,12 @@ def main() -> int:
                 parse_status=vlm_service.last_parse_status if yolo_result is not None else "not_attempted",
                 retry_count=vlm_service.last_retry_count if yolo_result is not None else 0,
                 failure_reason=vlm_service.last_failure_reason if yolo_result is not None else type(exc).__name__,
+                vlm_error_type=(
+                    getattr(vlm_service, "last_error_type", "") if yolo_result is not None else type(exc).__name__
+                ),
+                vlm_error_message=(
+                    getattr(vlm_service, "last_error_message", "") if yolo_result is not None else str(exc)
+                ),
                 ollama_metadata=vlm_service.last_ollama_metadata,
                 quality_status=vlm_service.last_quality_info.quality_status,
                 class_name_only_count=vlm_service.last_quality_info.class_name_only_count,
@@ -628,7 +690,7 @@ def main() -> int:
             write_raw_response_if_needed(
                 raw_responses_dir=batch_paths["raw_responses"],
                 image_path=image_path,
-                raw_response=vlm_service.last_raw_response or "",
+                raw_response=_failure_diagnostic_text(vlm_service, vlm_service.last_raw_response or ""),
                 should_save=args.save_raw_response_on_failure,
             )
             write_csv(csv_path, rows)
@@ -638,14 +700,21 @@ def main() -> int:
                 break
 
     write_csv(csv_path, rows)
-    write_json(output_dir / "batch_summary.json", _build_batch_summary(rows, image_summaries, perf_counter() - batch_started))
+    batch_summary = _build_batch_summary(rows, image_summaries, perf_counter() - batch_started)
+    write_json(output_dir / "batch_summary.json", batch_summary)
     write_json(output_dir / "failed_images.json", failed_images)
     success_count = sum(1 for row in rows if row["status"] == "success")
     failed_count = len(rows) - success_count
     print("[INFO] Batch completed")
     print(f"[INFO] Total images: {len(rows)}")
-    print(f"[INFO] Success: {success_count}")
-    print(f"[INFO] Failed: {failed_count}")
+    print(f"[INFO] Pipeline completed: {success_count}")
+    print(f"[INFO] Pipeline failed: {failed_count}")
+    print(f"[INFO] YOLO success: {batch_summary['yolo_success_count']}")
+    print(f"[INFO] YOLO failed: {batch_summary['yolo_failed_count']}")
+    print(f"[INFO] VLM success: {batch_summary['vlm_success_count']}")
+    print(f"[INFO] VLM fallback: {batch_summary['fallback_used_count']}")
+    print(f"[INFO] VLM skipped for OK: {batch_summary['vlm_skipped_count']}")
+    print(f"[INFO] Result save success: {batch_summary['result_save_success_count']}")
     for category, count in sorted(category_counts.items()):
         print(f"[INFO] Category {category}: {count}")
     print(f"[INFO] Result CSV: {csv_path.resolve()}")
@@ -685,8 +754,11 @@ def _summary_for_row(row: dict[str, object]) -> dict[str, object]:
         "detection_count": row["yolo_detection_count"],
         "vlm_executed": row["vlm_status"] != "not_run",
         "vlm_status": row["vlm_status"],
+        "vlm_success": row.get("vlm_success") == "true",
         "retry_count": row["retry_count"],
         "fallback_used": row["fallback_used"] == "true",
+        "vlm_error_type": row.get("vlm_error_type", ""),
+        "vlm_error_message": row.get("vlm_error_message", ""),
         "processing_time_ms": _seconds_string_to_ms(row["total_processing_time_seconds"]),
         "status": row["image_status"],
     }
@@ -712,13 +784,28 @@ def _build_batch_summary(
     return {
         "total_images": total_images,
         "completed_count": sum(1 for row in rows if row["status"] == "success"),
+        "pipeline_completed_count": sum(1 for row in rows if _row_bool(row, "pipeline_success", row["status"] == "success")),
+        "pipeline_failed_count": sum(1 for row in rows if not _row_bool(row, "pipeline_success", row["status"] == "success")),
+        "yolo_success_count": sum(1 for row in rows if _row_bool(row, "yolo_success", row.get("yolo_status") == "success")),
+        "yolo_failed_count": sum(1 for row in rows if not _row_bool(row, "yolo_success", row.get("yolo_status") == "success")),
         "ok_image_count": sum(1 for row in rows if row["yolo_judgment"] == "OK"),
         "ng_image_count": sum(1 for row in rows if row["yolo_judgment"] == "NG"),
         "vlm_executed_count": len(vlm_rows),
+        "vlm_attempted_count": sum(1 for row in rows if _row_bool(row, "vlm_attempted", row["vlm_status"] != "not_run")),
+        "vlm_success_count": sum(
+            1
+            for row in rows
+            if _row_bool(
+                row,
+                "vlm_success",
+                row["vlm_status"] in {"success", "retry_success"} and row["fallback_used"] != "true",
+            )
+        ),
         "vlm_skipped_count": sum(1 for row in rows if row["vlm_status"] == "not_run"),
         "vlm_first_success_count": sum(1 for row in rows if row["vlm_status"] == "success"),
         "vlm_retry_success_count": sum(1 for row in rows if row["vlm_status"] == "retry_success"),
         "fallback_used_count": sum(1 for row in rows if row["fallback_used"] == "true"),
+        "result_save_success_count": sum(1 for row in rows if _row_bool(row, "result_saved", True)),
         "final_failed_count": sum(1 for row in rows if row["status"] != "success"),
         "done_false_count": sum(1 for row in rows if _row_has_failure(row, "done_false")),
         "empty_content_count": sum(1 for row in rows if _row_has_failure(row, "empty_content")),
@@ -743,6 +830,15 @@ def _row_has_failure(row: dict[str, object], failure_name: str) -> bool:
     return row["vlm_status"] == failure_name or row["parse_status"] == failure_name or failure_name in str(
         row["failure_reason"]
     ).split("|")
+
+
+def _row_bool(row: dict[str, object], key: str, default: bool) -> bool:
+    value = row.get(key)
+    if value in {"true", "false"}:
+        return value == "true"
+    if isinstance(value, bool):
+        return value
+    return default
 
 
 def _average(values: list[float]) -> float:

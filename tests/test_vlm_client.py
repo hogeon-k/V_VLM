@@ -52,6 +52,8 @@ def test_vlm_client_http_payload_contains_stream_format_options_and_images(
     assert result == "ok"
     assert client.last_response_metadata is not None
     assert client.last_response_metadata.response_source == "message.content"
+    assert client.last_response_metadata.endpoint == "/api/chat"
+    assert client.last_response_metadata.stream is False
     assert client.last_response_metadata.content_length == 2
     assert client.last_response_metadata.done is True
     payload = calls["payload"]
@@ -166,6 +168,32 @@ def test_vlm_client_extracts_generate_response_field(monkeypatch: pytest.MonkeyP
     assert client.last_response_metadata is not None
     assert client.last_response_metadata.response_source == "response"
     assert client.last_response_metadata.content_length == len("generated")
+
+
+def test_vlm_client_records_chat_metadata_for_done_true_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_fake_post(
+        monkeypatch,
+        {
+            "message": {"role": "assistant", "content": '{"summary":"ok"}'},
+            "done": True,
+            "done_reason": "stop",
+            "prompt_eval_count": 3,
+            "eval_count": 4,
+            "total_duration": 5,
+        },
+    )
+
+    client = VlmClient()
+
+    assert client.generate("prompt", image_bytes=b"image") == '{"summary":"ok"}'
+    assert client.last_response_metadata is not None
+    assert client.last_response_metadata.endpoint == "/api/chat"
+    assert client.last_response_metadata.stream is False
+    assert client.last_response_metadata.done is True
+    assert client.last_response_metadata.done_reason == "stop"
+    assert client.last_response_metadata.prompt_eval_count == 3
+    assert client.last_response_metadata.eval_count == 4
+    assert client.last_response_metadata.total_duration == 5
 
 
 def test_vlm_client_raises_ollama_error_field(monkeypatch: pytest.MonkeyPatch) -> None:

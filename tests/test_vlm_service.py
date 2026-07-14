@@ -359,6 +359,99 @@ def test_vlm_service_retries_parse_failure_then_succeeds(monkeypatch) -> None:
     assert service.last_failure_reason == "json_parse_failed"
 
 
+def test_vlm_service_retries_done_false_and_timeout_then_succeeds(monkeypatch) -> None:
+    monkeypatch.setattr("service.vlm_service.resize_image_to_jpeg_bytes", lambda *args, **kwargs: b"image")
+    monkeypatch.setattr(
+        "service.vlm_service.create_crop_montage_result",
+        lambda **kwargs: CropMontageResult(b"montage-image", 320, 240, 1),
+    )
+    monkeypatch.setattr("service.vlm_service.read_image_size_from_bytes", lambda image_bytes: (100, 80))
+
+    class FakeClient:
+        endpoint = "/api/chat"
+        stream = False
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.last_response_metadata = None
+
+        def generate(self, prompt: str, image_bytes_list: list[bytes] | None = None) -> str:
+            self.calls += 1
+            if self.calls == 1:
+                self.last_response_metadata = OllamaResponseMetadata(
+                    http_status=200,
+                    endpoint="/api/chat",
+                    stream=False,
+                    done=False,
+                    content_length=0,
+                )
+                raise OllamaContentError("empty", self.last_response_metadata)
+            if self.calls == 2:
+                raise RuntimeError("Ollama HTTP request timed out after 120s")
+            self.last_response_metadata = OllamaResponseMetadata(
+                http_status=200,
+                endpoint="/api/chat",
+                stream=False,
+                done=True,
+                content_length=len(valid_response()),
+            )
+            return valid_response()
+
+    client = FakeClient()
+    detection = Detection(0, "open_circuit", 0.91, 1, 2, 3, 4)
+    yolo_result = YoloResult(Path("sample.png"), detections=[detection])
+    service = VlmService(client=client, max_retries=2, retry_delay_seconds=0)
+
+    service.describe_defects(Path("result.jpg"), yolo_result)
+
+    assert client.calls == 3
+    assert service.last_parse_success is True
+    assert service.last_fallback_used is False
+    assert service.last_vlm_status == "retry_success"
+    assert service.last_retry_count == 2
+    assert service.last_failure_reason == "done_false|timeout"
+
+
+def test_vlm_service_uses_fallback_after_retry_exhaustion(monkeypatch) -> None:
+    monkeypatch.setattr("service.vlm_service.resize_image_to_jpeg_bytes", lambda *args, **kwargs: b"image")
+    monkeypatch.setattr(
+        "service.vlm_service.create_crop_montage_result",
+        lambda **kwargs: CropMontageResult(b"montage-image", 320, 240, 1),
+    )
+    monkeypatch.setattr("service.vlm_service.read_image_size_from_bytes", lambda image_bytes: (100, 80))
+
+    class FakeClient:
+        endpoint = "/api/chat"
+        stream = False
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.last_response_metadata = OllamaResponseMetadata(
+                http_status=200,
+                endpoint="/api/chat",
+                stream=False,
+                done=False,
+                content_length=0,
+            )
+
+        def generate(self, prompt: str, image_bytes_list: list[bytes] | None = None) -> str:
+            self.calls += 1
+            raise OllamaContentError("empty", self.last_response_metadata)
+
+    client = FakeClient()
+    detection = Detection(0, "open_circuit", 0.91, 1, 2, 3, 4)
+    yolo_result = YoloResult(Path("sample.png"), detections=[detection])
+    service = VlmService(client=client, max_retries=2, retry_delay_seconds=0)
+
+    service.describe_defects(Path("result.jpg"), yolo_result)
+
+    assert client.calls == 3
+    assert service.last_parse_success is False
+    assert service.last_fallback_used is True
+    assert service.last_vlm_status == "done_false"
+    assert service.last_retry_count == 2
+
+
 def test_vlm_service_records_quality_warning_for_class_name_only(monkeypatch) -> None:
     monkeypatch.setattr("service.vlm_service.resize_image_to_jpeg_bytes", lambda *args, **kwargs: b"image")
     monkeypatch.setattr(

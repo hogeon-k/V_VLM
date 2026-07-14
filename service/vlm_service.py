@@ -81,6 +81,8 @@ class VlmService:
         self.last_retry_count: int = 0
         self.last_failure_reason: str = ""
         self.last_failure_reasons: list[str] = []
+        self.last_error_type: str = ""
+        self.last_error_message: str = ""
 
     def describe_defects(self, image_path: Path, yolo_result: YoloResult) -> str | None:
         """Explain NG detections with a local Ollama VLM."""
@@ -98,6 +100,8 @@ class VlmService:
         self.last_retry_count = 0
         self.last_failure_reason = ""
         self.last_failure_reasons = []
+        self.last_error_type = ""
+        self.last_error_message = ""
         if yolo_result.defect_count == 0:
             return None
 
@@ -146,11 +150,16 @@ class VlmService:
         max_attempts = self.max_retries + 1
         try:
             for attempt_index in range(max_attempts):
+                attempt_number = attempt_index + 1
                 if attempt_index:
                     self.last_retry_count = attempt_index
                     self.last_vlm_status = "retrying"
                     if self.retry_delay_seconds:
+                        print(f"[INFO] Retrying after {self.retry_delay_seconds:g} seconds")
                         sleep(self.retry_delay_seconds)
+                print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} started")
+                print(f"[INFO] Ollama endpoint: {getattr(self.client, 'endpoint', '')}")
+                print(f"[INFO] Ollama stream: {str(getattr(self.client, 'stream', None)).lower()}")
 
                 try:
                     response = self.client.generate(
@@ -163,6 +172,10 @@ class VlmService:
                     self.last_vlm_status = _vlm_status_for_empty_content(exc.metadata)
                     self.last_failure_reason = self.last_vlm_status
                     self.last_failure_reasons.append(self.last_failure_reason)
+                    self.last_error_type = self.last_vlm_status
+                    self.last_error_message = str(exc)
+                    self._print_ollama_metadata()
+                    print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} failed: {self.last_vlm_status}")
                     if attempt_index < self.max_retries:
                         continue
                     return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
@@ -171,6 +184,10 @@ class VlmService:
                     self.last_vlm_status = "empty_content"
                     self.last_failure_reason = self.last_vlm_status
                     self.last_failure_reasons.append(self.last_failure_reason)
+                    self.last_error_type = self.last_vlm_status
+                    self.last_error_message = str(exc)
+                    self._print_ollama_metadata()
+                    print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} failed: {self.last_vlm_status}")
                     if attempt_index < self.max_retries:
                         continue
                     return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
@@ -179,11 +196,16 @@ class VlmService:
                     self.last_vlm_status = _vlm_status_for_runtime_error(exc)
                     self.last_failure_reason = self.last_vlm_status
                     self.last_failure_reasons.append(self.last_failure_reason)
+                    self.last_error_type = self.last_vlm_status
+                    self.last_error_message = str(exc)
+                    self._print_ollama_metadata()
+                    print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} failed: {self.last_vlm_status}")
                     if attempt_index < self.max_retries:
                         continue
                     return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
 
                 self.last_raw_response = response
+                self._print_ollama_metadata()
                 parse_result = self.response_parser.parse_response(response, yolo_result)
                 self.last_parse_result = parse_result
                 self.last_parse_success = parse_result.parse_success
@@ -194,11 +216,17 @@ class VlmService:
                 if parse_result.parse_success:
                     self.last_vlm_status = "retry_success" if attempt_index else "success"
                     self.last_failure_reason = "|".join(self.last_failure_reasons)
+                    self.last_error_type = ""
+                    self.last_error_message = ""
+                    print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} succeeded")
                     return parse_result.formatted_response
 
                 self.last_vlm_status = self.last_parse_status
                 self.last_failure_reason = self.last_parse_status
                 self.last_failure_reasons.append(self.last_failure_reason)
+                self.last_error_type = self.last_parse_status
+                self.last_error_message = parse_result.parse_error
+                print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} failed: {self.last_parse_status}")
                 if attempt_index < self.max_retries:
                     continue
                 self.last_vlm_status = "success"
@@ -236,6 +264,26 @@ class VlmService:
         self.last_parse_status = "not_attempted"
         self.last_quality_info = parse_result.quality_info
         return parse_result.formatted_response
+
+    def _print_ollama_metadata(self) -> None:
+        metadata = self.last_ollama_metadata
+        if metadata is None:
+            print("[INFO] Ollama HTTP status: ")
+            print("[INFO] Ollama done: ")
+            print("[INFO] Ollama done_reason: ")
+            print("[INFO] Ollama response length: ")
+            return
+        print(f"[INFO] Ollama HTTP status: {_format_optional(metadata.http_status)}")
+        print(f"[INFO] Ollama done: {_format_optional(metadata.done)}")
+        print(f"[INFO] Ollama done_reason: {_format_optional(metadata.done_reason)}")
+        print(f"[INFO] Ollama error: {_format_optional(metadata.error)}")
+        print(f"[INFO] Ollama response length: {_format_optional(metadata.content_length)}")
+        print(f"[INFO] Ollama prompt eval count: {_format_optional(metadata.prompt_eval_count)}")
+        print(f"[INFO] Ollama eval count: {_format_optional(metadata.eval_count)}")
+        print(f"[INFO] Ollama total duration: {_format_optional(metadata.total_duration)}")
+        print(f"[INFO] Ollama load duration: {_format_optional(metadata.load_duration)}")
+        print(f"[INFO] Ollama prompt eval duration: {_format_optional(metadata.prompt_eval_duration)}")
+        print(f"[INFO] Ollama eval duration: {_format_optional(metadata.eval_duration)}")
 
     def _save_crop_montage_if_enabled(
         self,
@@ -278,6 +326,10 @@ def _safe_filename_stem(stem: str) -> str:
     return safe or "image"
 
 
+def _format_optional(value: object | None) -> str:
+    return "" if value is None else str(value)
+
+
 def _vlm_status_for_empty_content(metadata: OllamaResponseMetadata) -> str:
     if metadata.done is False:
         return "done_false"
@@ -286,8 +338,12 @@ def _vlm_status_for_empty_content(metadata: OllamaResponseMetadata) -> str:
 
 def _vlm_status_for_runtime_error(exc: RuntimeError) -> str:
     message = str(exc).lower()
+    if "timed out" in message or "timeout" in message:
+        return "timeout"
     if "http request failed" in message or "status_code=" in message:
         return "http_error"
+    if "failed to connect" in message:
+        return "connection_error"
     if "invalid json" in message:
         return "response_json_error"
     if "ollama returned an error" in message:

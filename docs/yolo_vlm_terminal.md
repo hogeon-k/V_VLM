@@ -119,6 +119,24 @@ Ollama response JSON did not contain assistant content.
 
 as the parse error and uses the YOLO fallback response. Use `--vlm-debug-response` to print safe response-shape diagnostics such as top-level keys, `message.content` presence, content length, `done`, and timing fields. The debug output does not print image bytes, base64 images, or the full request payload.
 
+The current Ollama endpoint is `/api/chat`, and requests explicitly use `stream: false`. A `done=false` status is not forced to success. It is treated as retryable only when the fully-read non-streaming HTTP response has no usable `message.content` or `response` text. In that case, the failure diagnostics preserve endpoint, stream mode, HTTP status, `done`, `done_reason`, Ollama error text, content length, token counts, and duration fields.
+
+VLM attempts are logged like this:
+
+```text
+[INFO] VLM attempt 1/3 started
+[INFO] Ollama endpoint: /api/chat
+[INFO] Ollama stream: false
+[INFO] Ollama HTTP status: 200
+[INFO] Ollama done: false
+[INFO] Ollama done_reason:
+[INFO] Ollama response length: 0
+[INFO] VLM attempt 1/3 failed: done_false
+[INFO] Retrying after 2 seconds
+```
+
+With `--save-raw-response-on-failure`, failure files under `raw_responses/` contain a JSON diagnostic envelope rather than only the final text. The envelope includes the response body when available, plus `error_type` and `error_message`.
+
 ## Single-Image Test
 
 ```powershell
@@ -297,6 +315,16 @@ class_name_only_detection_ids
 image_status
 retry_count
 failure_reason
+vlm_error_type
+vlm_error_message
+pipeline_success
+yolo_success
+vlm_attempted
+vlm_success
+result_saved
+ollama_endpoint
+ollama_stream
+ollama_error
 ```
 
 `vlm_response` stores the final user-facing response. `vlm_raw_response` stores the exact Ollama text before parsing. Multiline values are written through Python's CSV module.
@@ -307,7 +335,7 @@ For normal images with zero detections, VLM analysis is skipped and `vlm_respons
 VLM analysis skipped because no defect was detected.
 ```
 
-`batch_summary.json` stores total image count, OK/NG counts, VLM executed/skipped counts, first-attempt success, retry success, fallback count, final failure count, common failure counters such as `done_false`, `empty_content`, `invalid_json`, `schema_error`, `timeout`, total processing time, average image time, average VLM time, and one compact summary per image.
+`batch_summary.json` stores total image count, pipeline completed/failed counts, YOLO success/failed counts, OK/NG counts, VLM attempted/success/skipped counts, first-attempt success, retry success, fallback count, result save success count, final failure count, common failure counters such as `done_false`, `empty_content`, `invalid_json`, `schema_error`, `timeout`, total processing time, average image time, average VLM time, and one compact summary per image.
 
 ## Repeatability Test
 

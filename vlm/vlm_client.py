@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import socket
 from pathlib import Path
 from typing import Any, Sequence
 from urllib.error import HTTPError, URLError
@@ -48,6 +49,11 @@ class VlmClient:
         self.debug_response = debug_response
         self.timeout_seconds = timeout_seconds
         self.last_response_metadata: OllamaResponseMetadata | None = None
+        self.last_response_data: dict[str, Any] | None = None
+        self.last_error_type: str = ""
+        self.last_error_message: str = ""
+        self.endpoint = "/api/chat"
+        self.stream = False
 
     def generate(
         self,
@@ -58,6 +64,10 @@ class VlmClient:
         image_paths: Sequence[str | Path] | None = None,
     ) -> str:
         """Send a prompt and one or more images to Ollama and return text."""
+        self.last_response_metadata = None
+        self.last_response_data = None
+        self.last_error_type = ""
+        self.last_error_message = ""
         images = self._collect_images(
             image_bytes=image_bytes,
             image_path=image_path,
@@ -91,6 +101,9 @@ class VlmClient:
             response_data, status_code = self._post_chat(payload)
         except Exception as exc:
             self.last_response_metadata = None
+            if not self.last_error_type:
+                self.last_error_type = type(exc).__name__
+            self.last_error_message = str(exc)
             error_text = str(exc)
             error_lower = error_text.lower()
 
@@ -134,7 +147,15 @@ class VlmClient:
                 f"Original error: {type(exc).__name__}: {error_text}"
             ) from exc
 
-        metadata = build_ollama_metadata(response_data, http_status=status_code)
+        self.last_error_type = ""
+        self.last_error_message = ""
+        self.last_response_data = response_data
+        metadata = build_ollama_metadata(
+            response_data,
+            http_status=status_code,
+            endpoint=self.endpoint,
+            stream=self.stream,
+        )
         self.last_response_metadata = metadata
 
         if self.debug_response:
@@ -145,7 +166,7 @@ class VlmClient:
 
     def _post_chat(self, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
         request = Request(
-            url=f"{self.host}/api/chat",
+            url=f"{self.host}{self.endpoint}",
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -156,13 +177,28 @@ class VlmClient:
                 body = response.read().decode("utf-8")
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
+            self.last_error_type = "http_error"
+            self.last_error_message = body
             raise RuntimeError(
                 f"Ollama HTTP request failed. status_code={exc.code}. body={body}"
             ) from exc
+        except (TimeoutError, socket.timeout) as exc:
+            self.last_error_type = "timeout"
+            self.last_error_message = str(exc)
+            raise RuntimeError(f"Ollama HTTP request timed out after {self.timeout_seconds}s") from exc
         except URLError as exc:
+            reason = str(getattr(exc, "reason", exc))
+            if "timed out" in reason.lower() or "timeout" in reason.lower():
+                self.last_error_type = "timeout"
+                self.last_error_message = reason
+                raise RuntimeError(f"Ollama HTTP request timed out after {self.timeout_seconds}s") from exc
+            self.last_error_type = "connection_error"
+            self.last_error_message = str(exc)
             raise RuntimeError(f"Failed to connect to Ollama at {self.host}. {exc}") from exc
 
         if not body.strip():
+            self.last_error_type = "empty_http_body"
+            self.last_error_message = f"status_code={status_code}"
             raise RuntimeError(
                 "Ollama returned an empty HTTP response body. "
                 f"status_code={status_code}"
@@ -171,6 +207,8 @@ class VlmClient:
         try:
             response_data = json.loads(body)
         except json.JSONDecodeError as exc:
+            self.last_error_type = "invalid_http_json"
+            self.last_error_message = exc.msg
             raise RuntimeError(
                 f"Ollama returned invalid JSON. status_code={status_code}. "
                 f"Original error: {exc.msg}"
