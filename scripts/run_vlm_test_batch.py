@@ -87,9 +87,15 @@ CSV_COLUMNS = [
     "montage_height",
     "quality_status",
     "class_name_only_count",
+    "class_conflict_count",
+    "location_leak_count",
+    "language_warning_count",
     "summary_contradiction",
     "semantic_warning_count",
     "class_name_only_detection_ids",
+    "class_conflict_detection_ids",
+    "location_leak_detection_ids",
+    "language_warning_detection_ids",
     "exception_type",
     "exception_message",
 ]
@@ -265,9 +271,15 @@ def result_to_row(
     montage_size: tuple[int, int] | None = None,
     quality_status: str = "not_evaluated",
     class_name_only_count: int = 0,
+    class_conflict_count: int = 0,
+    location_leak_count: int = 0,
+    language_warning_count: int = 0,
     summary_contradiction: bool = False,
     semantic_warning_count: int = 0,
     class_name_only_detection_ids: tuple[int, ...] = (),
+    class_conflict_detection_ids: tuple[int, ...] = (),
+    location_leak_detection_ids: tuple[int, ...] = (),
+    language_warning_detection_ids: tuple[int, ...] = (),
     exception_type: str = "",
     exception_message: str = "",
 ) -> dict[str, object]:
@@ -358,10 +370,22 @@ def result_to_row(
         "montage_height": _format_csv_value(montage_height),
         "quality_status": quality_status,
         "class_name_only_count": class_name_only_count,
+        "class_conflict_count": class_conflict_count,
+        "location_leak_count": location_leak_count,
+        "language_warning_count": language_warning_count,
         "summary_contradiction": _format_bool(summary_contradiction),
         "semantic_warning_count": semantic_warning_count,
         "class_name_only_detection_ids": "|".join(
             str(detection_id) for detection_id in class_name_only_detection_ids
+        ),
+        "class_conflict_detection_ids": "|".join(
+            str(detection_id) for detection_id in class_conflict_detection_ids
+        ),
+        "location_leak_detection_ids": "|".join(
+            str(detection_id) for detection_id in location_leak_detection_ids
+        ),
+        "language_warning_detection_ids": "|".join(
+            str(detection_id) for detection_id in language_warning_detection_ids
         ),
         "exception_type": exception_type,
         "exception_message": exception_message,
@@ -513,9 +537,15 @@ def main() -> int:
                 vlm_image_mode = ""
                 quality_status = "not_evaluated"
                 class_name_only_count = 0
+                class_conflict_count = 0
+                location_leak_count = 0
+                language_warning_count = 0
                 summary_contradiction = False
                 semantic_warning_count = 0
                 class_name_only_detection_ids = ()
+                class_conflict_detection_ids = ()
+                location_leak_detection_ids = ()
+                language_warning_detection_ids = ()
                 image_status = "completed"
                 retry_count = 0
                 failure_reason = ""
@@ -549,9 +579,15 @@ def main() -> int:
                     montage_size = None
                     quality_status = "not_evaluated"
                     class_name_only_count = 0
+                    class_conflict_count = 0
+                    location_leak_count = 0
+                    language_warning_count = 0
                     summary_contradiction = False
                     semantic_warning_count = 0
                     class_name_only_detection_ids = ()
+                    class_conflict_detection_ids = ()
+                    location_leak_detection_ids = ()
+                    language_warning_detection_ids = ()
                     image_status = "completed_with_fallback"
                 else:
                     print(f"{prefix} VLM started")
@@ -586,9 +622,15 @@ def main() -> int:
                     quality = vlm_service.last_quality_info
                     quality_status = quality.quality_status
                     class_name_only_count = quality.class_name_only_count
+                    class_conflict_count = quality.class_conflict_count
+                    location_leak_count = quality.location_leak_count
+                    language_warning_count = quality.language_warning_count
                     summary_contradiction = quality.summary_contradiction
                     semantic_warning_count = quality.semantic_warning_count
                     class_name_only_detection_ids = quality.class_name_only_detection_ids
+                    class_conflict_detection_ids = quality.class_conflict_detection_ids
+                    location_leak_detection_ids = quality.location_leak_detection_ids
+                    language_warning_detection_ids = quality.language_warning_detection_ids
                     image_status = "completed_with_fallback" if vlm_fallback_used else "completed"
                     if full_image_size is not None:
                         print(f"[INFO] VLM full image size: {full_image_size[0]}x{full_image_size[1]}")
@@ -610,6 +652,9 @@ def main() -> int:
                     print(f"[INFO] VLM parse status: {parse_status}")
                     print(f"[INFO] VLM quality status: {quality_status}")
                     print(f"[INFO] Class-name-only visual features: {class_name_only_count}")
+                    print(f"[INFO] Class-conflict visual features: {class_conflict_count}")
+                    print(f"[INFO] Location-leak visual features: {location_leak_count}")
+                    print(f"[INFO] Language warning visual features: {language_warning_count}")
                     print(f"[INFO] Summary contradiction: {str(summary_contradiction).lower()}")
                     print(f"[INFO] Semantic warning count: {semantic_warning_count}")
                     if vlm_fallback_used:
@@ -673,9 +718,15 @@ def main() -> int:
                 montage_size=montage_size,
                 quality_status=quality_status,
                 class_name_only_count=class_name_only_count,
+                class_conflict_count=class_conflict_count,
+                location_leak_count=location_leak_count,
+                language_warning_count=language_warning_count,
                 summary_contradiction=summary_contradiction,
                 semantic_warning_count=semantic_warning_count,
                 class_name_only_detection_ids=class_name_only_detection_ids,
+                class_conflict_detection_ids=class_conflict_detection_ids,
+                location_leak_detection_ids=location_leak_detection_ids,
+                language_warning_detection_ids=language_warning_detection_ids,
             )
             rows.append(row)
             write_image_result_json(result_json_path, row, yolo_result)
@@ -732,10 +783,22 @@ def main() -> int:
                 ollama_metadata=vlm_service.last_ollama_metadata,
                 quality_status=vlm_service.last_quality_info.quality_status,
                 class_name_only_count=vlm_service.last_quality_info.class_name_only_count,
+                class_conflict_count=vlm_service.last_quality_info.class_conflict_count,
+                location_leak_count=vlm_service.last_quality_info.location_leak_count,
+                language_warning_count=vlm_service.last_quality_info.language_warning_count,
                 summary_contradiction=vlm_service.last_quality_info.summary_contradiction,
                 semantic_warning_count=vlm_service.last_quality_info.semantic_warning_count,
                 class_name_only_detection_ids=(
                     vlm_service.last_quality_info.class_name_only_detection_ids
+                ),
+                class_conflict_detection_ids=(
+                    vlm_service.last_quality_info.class_conflict_detection_ids
+                ),
+                location_leak_detection_ids=(
+                    vlm_service.last_quality_info.location_leak_detection_ids
+                ),
+                language_warning_detection_ids=(
+                    vlm_service.last_quality_info.language_warning_detection_ids
                 ),
                 exception_type=type(exc).__name__,
                 exception_message=str(exc),

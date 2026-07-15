@@ -8,9 +8,68 @@ from typing import Any
 from model.yolo_result import YoloResult
 
 ENGLISH_DEFAULT_VISUAL_FEATURE = "No clear visual characteristic could be confirmed."
-DEFAULT_VISUAL_FEATURE = "명확한 시각적 특징을 확인하지 못했습니다."
+DEFAULT_VISUAL_FEATURE = "확대 이미지에서 결함 영역이 작거나 불명확하여 구체적인 시각적 특징을 확인하기 어렵습니다."
 FALLBACK_SUMMARY = (
     "VLM 설명 생성에 실패하여 YOLO 탐지 결과를 기준으로 표시합니다."
+)
+
+CLASS_CONFLICT_TERMS = {
+    "short": (
+        "open_circuit",
+        "open circuit",
+        "missing_hole",
+        "missing hole",
+        "단선",
+        "누락된 홀",
+        "홀이 보이지",
+        "홀 형태가 보이지",
+        "회로가 끊어",
+        "패턴이 끊",
+        "끊어진",
+    ),
+    "open circuit": (
+        "short",
+        "short circuit",
+        "missing_hole",
+        "missing hole",
+        "단락",
+        "연결된 패턴",
+        "두 패턴이 연결",
+        "두 도전성 패턴 사이",
+        "누락된 홀",
+        "홀이 보이지",
+    ),
+    "missing hole": (
+        "short",
+        "short circuit",
+        "open_circuit",
+        "open circuit",
+        "단락",
+        "단선",
+        "패턴 연결",
+        "패턴이 연결",
+        "패턴 끊김",
+        "패턴이 끊",
+        "회로가 끊",
+    ),
+}
+LOCATION_LEAK_TERMS = (
+    "상단",
+    "하단",
+    "좌측",
+    "우측",
+    "오른쪽",
+    "중앙",
+    "위쪽",
+    "아래쪽",
+    "왼쪽",
+    "오른편",
+    "top",
+    "bottom",
+    "left",
+    "right",
+    "center",
+    "corner",
 )
 
 
@@ -35,6 +94,12 @@ class VlmQualityInfo:
     quality_status: str = "not_evaluated"
     class_name_only_count: int = 0
     class_name_only_detection_ids: tuple[int, ...] = ()
+    class_conflict_count: int = 0
+    class_conflict_detection_ids: tuple[int, ...] = ()
+    location_leak_count: int = 0
+    location_leak_detection_ids: tuple[int, ...] = ()
+    language_warning_count: int = 0
+    language_warning_detection_ids: tuple[int, ...] = ()
     summary_contradiction: bool = False
     semantic_warning_count: int = 0
 
@@ -178,6 +243,9 @@ def evaluate_response_quality(
 ) -> VlmQualityInfo:
     """Evaluate explanation quality without changing parse success/fallback behavior."""
     class_name_only_ids: list[int] = []
+    class_conflict_ids: list[int] = []
+    location_leak_ids: list[int] = []
+    language_warning_ids: list[int] = []
     fallback_or_empty_count = 0
     for yolo_detection, vlm_detection in zip(
         yolo_result.detections,
@@ -192,15 +260,32 @@ def evaluate_response_quality(
             class_name_only_ids.append(vlm_detection.detection_id)
         elif quality in {"empty", "fallback"}:
             fallback_or_empty_count += 1
-    summary_contradiction = has_summary_visibility_contradiction(parsed_response)
+        if has_class_conflict(vlm_detection.visual_feature, yolo_detection.class_name):
+            class_conflict_ids.append(vlm_detection.detection_id)
+        if has_location_leak(vlm_detection.visual_feature):
+            location_leak_ids.append(vlm_detection.detection_id)
+        if has_language_warning(vlm_detection.visual_feature):
+            language_warning_ids.append(vlm_detection.detection_id)
+    summary_contradiction = has_summary_contradiction(parsed_response, yolo_result)
     semantic_warning_count = (
-        len(class_name_only_ids) + fallback_or_empty_count + int(summary_contradiction)
+        len(class_name_only_ids)
+        + fallback_or_empty_count
+        + len(class_conflict_ids)
+        + len(location_leak_ids)
+        + len(language_warning_ids)
+        + int(summary_contradiction)
     )
     quality_status = "warning" if semantic_warning_count else "acceptable"
     return VlmQualityInfo(
         quality_status=quality_status,
         class_name_only_count=len(class_name_only_ids),
         class_name_only_detection_ids=tuple(class_name_only_ids),
+        class_conflict_count=len(class_conflict_ids),
+        class_conflict_detection_ids=tuple(class_conflict_ids),
+        location_leak_count=len(location_leak_ids),
+        location_leak_detection_ids=tuple(location_leak_ids),
+        language_warning_count=len(language_warning_ids),
+        language_warning_detection_ids=tuple(language_warning_ids),
         summary_contradiction=summary_contradiction,
         semantic_warning_count=semantic_warning_count,
     )
@@ -220,15 +305,65 @@ def is_class_name_only_visual_feature(visual_feature: str, class_name: str) -> b
     return normalized_feature in class_only_forms
 
 
+def has_class_conflict(visual_feature: str, class_name: str) -> bool:
+    """Return true when visual_feature mentions a different defect class."""
+    normalized_class = _normalize_class_label(class_name)
+    terms = CLASS_CONFLICT_TERMS.get(normalized_class, ())
+    normalized_text = _normalize_search_text(visual_feature)
+    return any(_contains_search_term(normalized_text, term) for term in terms)
+
+
+def has_location_leak(visual_feature: str) -> bool:
+    """Return true when visual_feature includes location words owned by YOLO metadata."""
+    normalized_text = _normalize_search_text(visual_feature)
+    return any(_contains_search_term(normalized_text, term) for term in LOCATION_LEAK_TERMS)
+
+
+def has_language_warning(text: str) -> bool:
+    """Return true for Chinese characters or English-heavy explanation text."""
+    if re.search(r"[\u4e00-\u9fff]", text):
+        return True
+    normalized = _normalize_search_text(text)
+    for class_name in ("short", "open_circuit", "open circuit", "missing_hole", "missing hole"):
+        normalized = normalized.replace(class_name, " ")
+    english_words = re.findall(r"\b[a-zA-Z]{2,}\b", normalized)
+    if not english_words:
+        return False
+    has_hangul = re.search(r"[가-힣]", text) is not None
+    return len(english_words) >= 3 or not has_hangul
+
+
 def visual_feature_quality(visual_feature: str, class_name: str) -> str:
     """Classify one visual_feature quality with a small stable vocabulary."""
     if not visual_feature or not visual_feature.strip():
         return "empty"
-    if visual_feature.strip() in {DEFAULT_VISUAL_FEATURE, ENGLISH_DEFAULT_VISUAL_FEATURE}:
+    if visual_feature.strip() == ENGLISH_DEFAULT_VISUAL_FEATURE:
         return "fallback"
     if is_class_name_only_visual_feature(visual_feature, class_name):
         return "class_name_only"
     return "acceptable"
+
+
+def has_summary_contradiction(
+    parsed_response: ParsedVlmResponse,
+    yolo_result: YoloResult,
+) -> bool:
+    """Detect summary claims that conflict with YOLO or parsed detection metadata."""
+    normalized_summary = _normalize_search_text(parsed_response.summary)
+    if has_summary_visibility_contradiction(parsed_response):
+        return True
+    if _summary_detection_count_conflicts(normalized_summary, len(parsed_response.detections)):
+        return True
+    if _summary_visibility_count_conflicts(parsed_response):
+        return True
+    if _summary_mentions_class_terms(normalized_summary):
+        return True
+    if _summary_mentions_confidence_or_bbox(normalized_summary):
+        return True
+    return any(
+        has_class_conflict(parsed_response.summary, detection.class_name)
+        for detection in yolo_result.detections
+    )
 
 
 def has_summary_visibility_contradiction(parsed_response: ParsedVlmResponse) -> bool:
@@ -339,9 +474,114 @@ def _reject_additional_properties(
 
 def _normalize_class_label(value: str) -> str:
     normalized = value.strip().lower()
+    normalized = normalized.strip(" .:;,\n\t\r")
+    normalized = normalized.replace("_", " ").replace("-", " ")
+    normalized = normalized.strip(" .:;,")
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def _normalize_search_text(value: str) -> str:
+    normalized = value.lower()
     normalized = normalized.replace("_", " ").replace("-", " ")
     normalized = re.sub(r"\s+", " ", normalized)
     return normalized.strip()
+
+
+def _contains_search_term(normalized_text: str, term: str) -> bool:
+    normalized_term = _normalize_search_text(term)
+    if re.fullmatch(r"[a-z ]+", normalized_term):
+        return re.search(rf"\b{re.escape(normalized_term)}\b", normalized_text) is not None
+    return normalized_term in normalized_text
+
+
+def _summary_detection_count_conflicts(summary: str, expected_count: int) -> bool:
+    total_patterns = (
+        r"총\s*(\d+)\s*개",
+        r"전체\s*(\d+)\s*개",
+        r"(\d+)\s*개의?\s*(?:결함|불량|탐지|detection|detections|defect|defects)",
+        r"(한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*(?:개의?\s*)?(?:결함|불량|탐지)",
+    )
+    for pattern in total_patterns:
+        for match in re.finditer(pattern, summary):
+            count = _parse_count_token(match.group(1))
+            if count is not None and count != expected_count:
+                return True
+    return False
+
+
+def _summary_visibility_count_conflicts(parsed_response: ParsedVlmResponse) -> bool:
+    summary = parsed_response.summary.lower()
+    clear_count = _extract_summary_count_before_terms(summary, ("명확", "clear"))
+    unclear_count = _extract_summary_count_before_terms(summary, ("불명확", "추가 확인", "unclear", "review"))
+    if clear_count is None and unclear_count is None:
+        return False
+    actual_clear = sum(1 for detection in parsed_response.detections if detection.visibility == "clear")
+    actual_unclear = sum(1 for detection in parsed_response.detections if detection.visibility == "unclear")
+    if clear_count is not None and clear_count != actual_clear:
+        return True
+    if unclear_count is not None and unclear_count != actual_unclear:
+        return True
+    if clear_count is not None and unclear_count is not None:
+        return clear_count + unclear_count != len(parsed_response.detections)
+    return False
+
+
+def _summary_mentions_class_terms(summary: str) -> bool:
+    terms = (
+        "short",
+        "open_circuit",
+        "open circuit",
+        "missing_hole",
+        "missing hole",
+        "단락",
+        "단선",
+        "누락된 홀",
+    )
+    return any(_normalize_search_text(term) in summary for term in terms)
+
+
+def _summary_mentions_confidence_or_bbox(summary: str) -> bool:
+    if any(term in summary for term in ("confidence", "신뢰도", "bbox", "bounding box", "바운딩", "좌표")):
+        return True
+    if re.search(r"\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)", summary):
+        return True
+    return False
+
+
+def _extract_summary_count_before_terms(summary: str, terms: tuple[str, ...]) -> int | None:
+    for term in terms:
+        term_index = summary.find(term)
+        if term_index < 0:
+            continue
+        prefix = summary[:term_index]
+        matches = list(
+            re.finditer(
+                r"(\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*개?(?:는|은|가|이)?",
+                prefix,
+            )
+        )
+        if matches:
+            return _parse_count_token(matches[-1].group(1))
+    return None
+
+
+def _parse_count_token(value: str) -> int | None:
+    if value.isdigit():
+        return int(value)
+    korean_counts = {
+        "한": 1,
+        "두": 2,
+        "세": 3,
+        "네": 4,
+        "다섯": 5,
+        "여섯": 6,
+        "일곱": 7,
+        "여덟": 8,
+        "아홉": 9,
+        "열": 10,
+    }
+    return korean_counts.get(value)
 
 
 def _format_visibility(value: str) -> str:

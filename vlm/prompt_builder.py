@@ -40,23 +40,34 @@ VLM의 역할:
 11. 실제 단락, 실제 단선, 실제 전기적 연결 또는 실제 전기적 미연결이라고 단정하지 마세요.
 12. YOLO 클래스는 고정 정보입니다. 불량 유형을 재분류하거나 이름을 변경하지 마세요.
 13. visual_feature에는 관찰 가능한 형태, 경계, 끊김, 연결처럼 보이는 패턴, 누락처럼 보이는 영역, 색상 또는 형상 차이만 작성하세요.
-14. visual_feature를 YOLO 클래스명만으로 작성하지 마세요.
-15. "short", "open_circuit", "missing_hole", "<class> defect"만 작성하지 마세요.
-16. 좋은 visual_feature 예시:
+14. visual_feature에는 결함 class 이름만 단독으로 작성할 수 없습니다.
+15. 다음 출력은 금지합니다: "missing_hole", "open_circuit", "short", class 이름만 반복한 문장, class 이름 뒤에 콜론만 붙인 문장.
+16. visual_feature에는 위치 표현을 작성하지 마세요. 위치 정보는 YOLO location 필드에만 존재해야 합니다.
+17. visual_feature에서 금지하는 위치 표현: 상단, 하단, 좌측, 오른쪽, 중앙, corner, top, bottom, left, right, center.
+18. visual_feature에서 입력된 YOLO class와 다른 결함 class를 언급하거나 암시하지 마세요.
+19. YOLO class가 short이면 missing_hole, open_circuit, 누락된 홀, 홀이 보이지 않음, 회로가 끊어짐, 단선을 사용하지 마세요.
+20. YOLO class가 open_circuit이면 short, missing_hole, 단락, 두 패턴이 연결됨, 누락된 홀을 사용하지 마세요.
+21. YOLO class가 missing_hole이면 short, open_circuit, 단락, 단선, 패턴 연결, 패턴 끊김을 사용하지 마세요.
+22. class별 visual_feature 문장 형식 예시:
    - short: "두 도전성 패턴 사이가 가느다란 패턴으로 연결된 것처럼 보입니다."
    - open_circuit: "회로 패턴이 중간에서 끊겨 보이는 구간이 있습니다."
    - missing_hole: "원형 홀 위치에 홀이 보이지 않습니다."
    - unclear: "확대 이미지에서 결함 영역이 작거나 불명확하여 구체적인 시각적 특징을 확인하기 어렵습니다."
-17. 작업자가 검사, 승인, 확인, 수리 또는 보고했다고 표현하지 마세요.
-18. 추가 확인이 필요하지 않다고 단정하지 마세요.
-19. Crop Montage가 작거나 흐리거나 결함 특징이 명확하지 않으면 다음 문장을 사용하세요:
+23. 작업자가 검사, 승인, 확인, 수리 또는 보고했다고 표현하지 마세요.
+24. 추가 확인이 필요하지 않다고 단정하지 마세요.
+25. Crop Montage가 작거나 흐리거나 결함 특징이 명확하지 않으면 class 이름을 복사하지 말고 다음 문장을 정확히 사용하세요:
    "확대 이미지에서 결함 영역이 작거나 불명확하여 구체적인 시각적 특징을 확인하기 어렵습니다."
-20. 관련 시각적 특징이 직접 보일 때만 visibility="clear"를 사용하세요.
-21. 특징이 모호하거나 보이지 않으면 visibility="unclear"를 사용하세요.
-22. visibility가 "unclear"이면 review_required=true로 설정하세요.
-23. 제공된 JSON Schema에 맞는 데이터만 반환하세요.
-24. JSON key 이름과 enum 값은 반드시 영어 원문을 유지하세요.
-25. Markdown, 코드 블록, 제목, 주석 또는 추가 텍스트를 반환하지 마세요."""
+26. 이 문장을 사용한 경우 반드시 visibility="unclear", review_required=true로 설정하세요.
+27. 관련 시각적 특징이 직접 보일 때만 visibility="clear"를 사용하세요.
+28. 특징이 모호하거나 보이지 않으면 visibility="unclear"를 사용하세요.
+29. 설명 문장과 summary는 자연스러운 한국어로만 작성하세요.
+30. 영어 문장, 중국어 문자, 한국어와 영어가 섞인 문장, class 이름을 설명 문장 안에 반복하는 표현을 작성하지 마세요.
+31. summary에는 detections에 이미 작성된 내용만 요약하세요.
+32. summary에 새로운 결함 유형, 위치, confidence, bbox 또는 원인을 추가하지 마세요.
+33. summary는 detection 개수와 clear/unclear 개수를 정확히 유지하세요. 예: "총 3개의 결함이 탐지되었으며, 2개는 시각적 특징이 명확하고 1개는 추가 확인이 필요합니다."
+34. 제공된 JSON Schema에 맞는 데이터만 반환하세요.
+35. JSON key 이름과 enum 값은 반드시 영어 원문을 유지하세요.
+36. Markdown, 코드 블록, 제목, 주석 또는 추가 텍스트를 반환하지 마세요."""
 
 
 IMAGE_ROLE_DESCRIPTIONS = {
@@ -74,12 +85,11 @@ IMAGE_ROLE_DESCRIPTIONS = {
     ),
     "full_montage": (
         "첫 번째 이미지는 전체 PCB 이미지입니다.\n"
-        "전체 이미지는 PCB의 전체 구조, 주변 맥락, 각 YOLO detection의 상대적 위치를 이해하기 위한 참고 자료로만 사용하세요.\n"
+        "전체 이미지는 PCB의 전체 구조와 YOLO detection의 주변 맥락을 이해하는 참고 자료로만 사용하세요.\n"
         "위치, 바운딩 박스, 클래스, 신뢰도, detection ID와 detection 순서는 YOLO가 제공한 값을 최종 기준으로 사용하세요.\n"
         "전체 이미지를 근거로 위치나 바운딩 박스를 새로 계산하거나 수정하지 마세요.\n"
-        "두 번째 이미지는 YOLO detection 영역을 확대한 Crop Montage입니다.\n"
-        "각 montage crop은 아래 detection 목록과 동일한 순서로 배치되어 있습니다.\n"
-        "결함의 형태, 경계, 끊김, 연결처럼 보이는 패턴, 누락처럼 보이는 영역, 색상 차이 등 세부 시각적 특징은 Crop Montage를 가장 우선적인 근거로 설명하세요.\n"
+        "두 번째 이미지는 각 YOLO detection 영역을 확대한 Crop Montage입니다.\n"
+        "각 crop은 아래 detection 목록과 동일한 순서로 배치되어 있습니다.\n"
         "visual_feature를 작성할 때는 Crop Montage에서 직접 확인되는 내용만 작성하세요."
     ),
 }

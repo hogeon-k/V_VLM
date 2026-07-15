@@ -12,6 +12,10 @@ from vlm.response_parser import (
     VlmResponseParser,
     evaluate_response_quality,
     format_parsed_vlm_response,
+    has_class_conflict,
+    has_language_warning,
+    has_location_leak,
+    has_summary_contradiction,
     has_summary_visibility_contradiction,
     is_class_name_only_visual_feature,
     parse_vlm_response,
@@ -36,12 +40,12 @@ def valid_raw_response() -> str:
             "detections": [
                 {
                     "detection_id": 1,
-                    "visual_feature": "A visible gap interrupts the trace.",
+                    "visual_feature": "패턴 경계가 중간에서 불연속적으로 보입니다.",
                     "visibility": "clear",
                     "review_required": False,
                 }
             ],
-            "summary": "One YOLO detection has a visible trace interruption.",
+            "summary": "총 1개의 결함이 탐지되었으며, 1개는 시각적 특징이 명확합니다.",
         }
     )
 
@@ -120,7 +124,7 @@ def test_parser_result_records_success_metadata_and_formats_text() -> None:
     assert "1. open_circuit" in result.formatted_response
     assert "신뢰도: 0.7840" in result.formatted_response
     assert "위치: middle right" in result.formatted_response
-    assert "A visible gap interrupts the trace." in result.formatted_response
+    assert "패턴 경계가 중간에서 불연속적으로 보입니다." in result.formatted_response
     assert "가시성: 명확함" in result.formatted_response
     assert "추가 확인: 불필요" in result.formatted_response
     assert result.quality_info.quality_status == "acceptable"
@@ -147,8 +151,11 @@ def test_parser_result_records_failure_metadata_and_retains_raw_response() -> No
         ("short defect", "short"),
         ("defect short", "short"),
         ("open_circuit", "open_circuit"),
+        ("open_circuit.", "open_circuit"),
+        ("open_circuit:", "open_circuit"),
         ("Open Circuit", "open_circuit"),
         ("open-circuit defect", "open_circuit"),
+        ("short:", "short"),
         ("missing_hole", "missing_hole"),
         ("missing hole defect", "missing_hole"),
     ],
@@ -177,7 +184,8 @@ def test_visual_feature_quality_allows_observable_shape_descriptions(
 
 def test_visual_feature_quality_handles_empty_and_fallback() -> None:
     assert visual_feature_quality("", "short") == "empty"
-    assert visual_feature_quality(DEFAULT_VISUAL_FEATURE, "short") == "fallback"
+    assert visual_feature_quality(DEFAULT_VISUAL_FEATURE, "short") == "acceptable"
+    assert visual_feature_quality("No clear visual characteristic could be confirmed.", "short") == "fallback"
 
 
 def test_evaluate_response_quality_warns_for_class_name_only() -> None:
@@ -202,7 +210,143 @@ def test_evaluate_response_quality_warns_for_class_name_only() -> None:
     assert quality.quality_status == "warning"
     assert quality.class_name_only_count == 1
     assert quality.class_name_only_detection_ids == (1,)
-    assert quality.semantic_warning_count == 1
+    assert quality.semantic_warning_count == 2
+
+
+@pytest.mark.parametrize(
+    ("class_name", "visual_feature"),
+    [
+        ("short", "missing_hole"),
+        ("short", "홀이 보이지 않습니다."),
+        ("short", "회로가 끊어짐이 보입니다."),
+        ("open_circuit", "두 패턴이 연결됨처럼 보입니다."),
+        ("open_circuit", "누락된 홀처럼 보입니다."),
+        ("missing_hole", "패턴이 끊어짐처럼 보입니다."),
+        ("missing_hole", "패턴 연결 형태가 보입니다."),
+    ],
+)
+def test_class_conflict_detects_other_class_language(
+    class_name: str,
+    visual_feature: str,
+) -> None:
+    assert has_class_conflict(visual_feature, class_name) is True
+
+
+def test_class_conflict_allows_matching_visual_description() -> None:
+    assert has_class_conflict("두 도전성 패턴 사이가 가느다란 패턴으로 연결된 것처럼 보입니다.", "short") is False
+
+
+@pytest.mark.parametrize(
+    "visual_feature",
+    [
+        "상단 오른쪽에 누락된 영역이 보입니다.",
+        "bottom right corner에 결함이 보입니다.",
+        "중앙에 경계 차이가 보입니다.",
+    ],
+)
+def test_location_leak_detects_position_words(visual_feature: str) -> None:
+    assert has_location_leak(visual_feature) is True
+
+
+@pytest.mark.parametrize(
+    "visual_feature",
+    [
+        "A visible gap interrupts the trace.",
+        "패턴 경계가 清晰하게 보입니다.",
+        "패턴 edge is visibly broken.",
+    ],
+)
+def test_language_warning_detects_english_or_chinese_text(visual_feature: str) -> None:
+    assert has_language_warning(visual_feature) is True
+
+
+@pytest.mark.parametrize(
+    "visual_feature",
+    [
+        "두 도전성 패턴 사이가 가느다란 패턴으로 연결된 것처럼 보입니다.",
+        DEFAULT_VISUAL_FEATURE,
+    ],
+)
+def test_language_warning_allows_korean_visual_descriptions(visual_feature: str) -> None:
+    assert has_language_warning(visual_feature) is False
+
+
+def test_evaluate_response_quality_records_semantic_warning_detection_ids() -> None:
+    raw = json.dumps(
+        {
+            "final_judgment": "NG",
+            "detections": [
+                {
+                    "detection_id": 1,
+                    "visual_feature": "open_circuit:",
+                    "visibility": "clear",
+                    "review_required": False,
+                },
+                {
+                    "detection_id": 2,
+                    "visual_feature": "상단 오른쪽에서 홀이 보이지 않습니다.",
+                    "visibility": "clear",
+                    "review_required": False,
+                },
+                {
+                    "detection_id": 3,
+                    "visual_feature": "A visible gap interrupts the trace.",
+                    "visibility": "clear",
+                    "review_required": False,
+                },
+            ],
+            "summary": "총 3개의 결함이 탐지되었으며, 3개는 시각적 특징이 명확합니다.",
+        }
+    )
+    parsed = parse_vlm_response(raw, expected_detection_count=3)
+    yolo_result = YoloResult(
+        image_path="sample.jpg",
+        detections=[
+            Detection(0, "open_circuit", 0.9, 1, 2, 3, 4),
+            Detection(1, "short", 0.8, 5, 6, 7, 8),
+            Detection(2, "missing_hole", 0.7, 9, 10, 11, 12),
+        ],
+    )
+
+    quality = evaluate_response_quality(parsed, yolo_result)
+
+    assert quality.quality_status == "warning"
+    assert quality.class_name_only_detection_ids == (1,)
+    assert quality.class_conflict_detection_ids == (2,)
+    assert quality.location_leak_detection_ids == (2,)
+    assert quality.language_warning_detection_ids == (3,)
+    assert quality.semantic_warning_count == 4
+
+
+def test_parser_preserves_raw_response_and_detection_order_with_quality_warning() -> None:
+    raw = json.dumps(
+        {
+            "final_judgment": "NG",
+            "detections": [
+                {
+                    "detection_id": 1,
+                    "visual_feature": "short:",
+                    "visibility": "clear",
+                    "review_required": False,
+                }
+            ],
+            "summary": "총 1개의 결함이 탐지되었습니다.",
+        }
+    )
+    result = VlmResponseParser().parse_response(
+        raw,
+        YoloResult(
+            image_path="sample.jpg",
+            detections=[Detection(0, "short", 0.9, 1, 2, 3, 4)],
+        ),
+    )
+
+    assert result.parse_success is True
+    assert result.raw_response == raw
+    assert result.parsed_response is not None
+    assert [detection.detection_id for detection in result.parsed_response.detections] == [1]
+    assert result.parsed_response.detections[0].visual_feature == "short:"
+    assert result.quality_info.class_name_only_detection_ids == (1,)
 
 
 def test_summary_visibility_contradiction_detects_explicit_all_clear() -> None:
@@ -243,6 +387,104 @@ def test_summary_visibility_contradiction_allows_mixed_ambiguous_summary() -> No
     parsed = parse_vlm_response(raw, expected_detection_count=1)
 
     assert has_summary_visibility_contradiction(parsed) is False
+
+
+def test_summary_contradiction_detects_detection_count_mismatch() -> None:
+    parsed = parse_vlm_response(
+        json.dumps(
+            {
+                "final_judgment": "NG",
+                "detections": [
+                    {
+                        "detection_id": 1,
+                        "visual_feature": "패턴 경계가 불연속적으로 보입니다.",
+                        "visibility": "clear",
+                        "review_required": False,
+                    },
+                    {
+                        "detection_id": 2,
+                        "visual_feature": DEFAULT_VISUAL_FEATURE,
+                        "visibility": "unclear",
+                        "review_required": True,
+                    },
+                    {
+                        "detection_id": 3,
+                        "visual_feature": "패턴 경계가 불연속적으로 보입니다.",
+                        "visibility": "clear",
+                        "review_required": False,
+                    },
+                ],
+                "summary": "두 결함이 탐지되었습니다.",
+            }
+        ),
+        expected_detection_count=3,
+    )
+
+    assert has_summary_contradiction(parsed, YoloResult("sample.jpg", [])) is True
+
+
+def test_summary_contradiction_allows_matching_clear_unclear_counts() -> None:
+    parsed = parse_vlm_response(
+        json.dumps(
+            {
+                "final_judgment": "NG",
+                "detections": [
+                    {
+                        "detection_id": 1,
+                        "visual_feature": "패턴 경계가 불연속적으로 보입니다.",
+                        "visibility": "clear",
+                        "review_required": False,
+                    },
+                    {
+                        "detection_id": 2,
+                        "visual_feature": "패턴 경계가 불연속적으로 보입니다.",
+                        "visibility": "clear",
+                        "review_required": False,
+                    },
+                    {
+                        "detection_id": 3,
+                        "visual_feature": DEFAULT_VISUAL_FEATURE,
+                        "visibility": "unclear",
+                        "review_required": True,
+                    },
+                ],
+                "summary": "총 3개의 결함이 탐지되었으며, 2개는 시각적 특징이 명확하고 1개는 추가 확인이 필요합니다.",
+            }
+        ),
+        expected_detection_count=3,
+    )
+
+    assert has_summary_contradiction(parsed, YoloResult("sample.jpg", [])) is False
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "총 1개의 결함이 탐지되었으며 open_circuit이 보입니다.",
+        "총 1개의 결함이 탐지되었으며 신뢰도 0.91입니다.",
+        "총 1개의 결함이 탐지되었으며 bbox (1, 2, 3, 4)를 확인했습니다.",
+    ],
+)
+def test_summary_contradiction_detects_new_class_confidence_or_bbox(summary: str) -> None:
+    parsed = parse_vlm_response(
+        json.dumps(
+            {
+                "final_judgment": "NG",
+                "detections": [
+                    {
+                        "detection_id": 1,
+                        "visual_feature": "패턴 경계가 불연속적으로 보입니다.",
+                        "visibility": "clear",
+                        "review_required": False,
+                    }
+                ],
+                "summary": summary,
+            }
+        ),
+        expected_detection_count=1,
+    )
+
+    assert has_summary_contradiction(parsed, YoloResult("sample.jpg", [])) is True
 
 
 def test_formatting_is_deterministic_and_yolo_authoritative() -> None:

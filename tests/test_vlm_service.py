@@ -18,12 +18,12 @@ def valid_response() -> str:
             "detections": [
                 {
                     "detection_id": 1,
-                    "visual_feature": "A visible gap is present.",
+                    "visual_feature": "패턴 경계가 중간에서 불연속적으로 보입니다.",
                     "visibility": "clear",
                     "review_required": False,
                 }
             ],
-            "summary": "One defect was described.",
+            "summary": "총 1개의 결함이 탐지되었으며, 1개는 시각적 특징이 명확합니다.",
         }
     )
 
@@ -55,7 +55,7 @@ def test_vlm_service_generates_structured_description_for_ng_result(tmp_path) ->
     assert description is not None
     assert "최종 판정: NG" in description
     assert "탐지된 불량 수: 1개" in description
-    assert "A visible gap is present." in description
+    assert "패턴 경계가 중간에서 불연속적으로 보입니다." in description
     assert service.last_raw_response == valid_response()
     assert service.last_parse_success is True
     assert service.last_fallback_used is False

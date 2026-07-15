@@ -85,9 +85,15 @@ def test_result_to_row_flattens_multiple_detections(tmp_path) -> None:
         status="success",
         quality_status="warning",
         class_name_only_count=2,
+        class_conflict_count=1,
+        location_leak_count=1,
+        language_warning_count=1,
         summary_contradiction=True,
-        semantic_warning_count=3,
+        semantic_warning_count=6,
         class_name_only_detection_ids=(1, 2),
+        class_conflict_detection_ids=(2,),
+        location_leak_detection_ids=(1,),
+        language_warning_detection_ids=(2,),
     )
 
     assert row["category"] == "open_circuit"
@@ -113,9 +119,15 @@ def test_result_to_row_flattens_multiple_detections(tmp_path) -> None:
     assert row["montage_height"] == 640
     assert row["quality_status"] == "warning"
     assert row["class_name_only_count"] == 2
+    assert row["class_conflict_count"] == 1
+    assert row["location_leak_count"] == 1
+    assert row["language_warning_count"] == 1
     assert row["summary_contradiction"] == "true"
-    assert row["semantic_warning_count"] == 3
+    assert row["semantic_warning_count"] == 6
     assert row["class_name_only_detection_ids"] == "1|2"
+    assert row["class_conflict_detection_ids"] == "2"
+    assert row["location_leak_detection_ids"] == "1"
+    assert row["language_warning_detection_ids"] == "2"
     assert row["image_preparation_time_seconds"] == "1.234"
 
 
@@ -184,9 +196,15 @@ def test_csv_columns_include_parse_metadata_and_generation_options() -> None:
     assert "vlm_full_image_height" in CSV_COLUMNS
     assert "quality_status" in CSV_COLUMNS
     assert "class_name_only_count" in CSV_COLUMNS
+    assert "class_conflict_count" in CSV_COLUMNS
+    assert "location_leak_count" in CSV_COLUMNS
+    assert "language_warning_count" in CSV_COLUMNS
     assert "summary_contradiction" in CSV_COLUMNS
     assert "semantic_warning_count" in CSV_COLUMNS
     assert "class_name_only_detection_ids" in CSV_COLUMNS
+    assert "class_conflict_detection_ids" in CSV_COLUMNS
+    assert "location_leak_detection_ids" in CSV_COLUMNS
+    assert "language_warning_detection_ids" in CSV_COLUMNS
 
 
 def test_write_csv_preserves_multiline_values(tmp_path) -> None:
