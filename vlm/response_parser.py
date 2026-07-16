@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from model.yolo_result import YoloResult
@@ -12,6 +12,11 @@ DEFAULT_VISUAL_FEATURE = "확대 이미지에서 결함 영역이 작거나 불�
 FALLBACK_SUMMARY = (
     "VLM 설명 생성에 실패하여 YOLO 탐지 결과를 기준으로 표시합니다."
 )
+SAFE_VISUAL_FEATURE_BY_CLASS = {
+    "short": "확대 이미지에서 두 도전성 패턴 사이의 비정상적인 연결 여부를 명확히 확인하기 어렵습니다.",
+    "open circuit": "확대 이미지에서 회로 패턴의 단절 여부를 명확히 확인하기 어렵습니다.",
+    "missing hole": "확대 이미지에서 원형 홀의 누락 여부를 명확히 확인하기 어렵습니다.",
+}
 
 CLASS_CONFLICT_TERMS = {
     "short": (
@@ -25,7 +30,13 @@ CLASS_CONFLICT_TERMS = {
         "홀 형태가 보이지",
         "회로가 끊어",
         "패턴이 끊",
+        "끊겨",
+        "끊김",
         "끊어진",
+        "단절",
+        "절단",
+        "분리",
+        "이어지지 않",
     ),
     "open circuit": (
         "short",
@@ -36,6 +47,11 @@ CLASS_CONFLICT_TERMS = {
         "연결된 패턴",
         "두 패턴이 연결",
         "두 도전성 패턴 사이",
+        "가느다란 패턴으로 연결",
+        "서로 연결",
+        "비정상적으로 이어",
+        "브리지",
+        "붙어 있",
         "누락된 홀",
         "홀이 보이지",
     ),
@@ -48,6 +64,13 @@ CLASS_CONFLICT_TERMS = {
         "단선",
         "패턴 연결",
         "패턴이 연결",
+        "두 패턴이 연결",
+        "두 회로 패턴 사이",
+        "패턴 사이가 연결",
+        "두 도전성 패턴 사이",
+        "비정상적으로 이어",
+        "브리지",
+        "붙어 있",
         "패턴 끊김",
         "패턴이 끊",
         "회로가 끊",
@@ -121,13 +144,19 @@ class VlmResponseParser:
         try:
             parsed_response = parse_vlm_response(raw_response, yolo_result.defect_count)
             quality_info = evaluate_response_quality(parsed_response, yolo_result)
-            formatted = format_parsed_vlm_response(parsed_response, yolo_result)
+            corrected_response = apply_semantic_corrections(parsed_response, yolo_result)
+            quality_info = _merge_corrected_summary_quality(
+                quality_info,
+                corrected_response,
+                yolo_result,
+            )
+            formatted = format_parsed_vlm_response(corrected_response, yolo_result)
             return VlmParseResult(
                 raw_response=raw_response,
                 parse_success=True,
                 parse_error="",
                 fallback_used=False,
-                parsed_response=parsed_response,
+                parsed_response=corrected_response,
                 formatted_response=formatted,
                 quality_info=quality_info,
             )
@@ -313,6 +342,36 @@ def has_class_conflict(visual_feature: str, class_name: str) -> bool:
     return any(_contains_search_term(normalized_text, term) for term in terms)
 
 
+def apply_semantic_corrections(
+    parsed_response: ParsedVlmResponse,
+    yolo_result: YoloResult,
+) -> ParsedVlmResponse:
+    """Replace only class-conflicting VLM explanations with conservative text."""
+    corrected_detections: list[ParsedVlmDetection] = []
+    changed = False
+    for yolo_detection, vlm_detection in zip(
+        yolo_result.detections,
+        parsed_response.detections,
+        strict=True,
+    ):
+        if has_class_conflict(vlm_detection.visual_feature, yolo_detection.class_name):
+            corrected_detections.append(
+                replace(
+                    vlm_detection,
+                    visual_feature=_safe_visual_feature_for_class(yolo_detection.class_name),
+                    visibility="unclear",
+                    review_required=True,
+                )
+            )
+            changed = True
+        else:
+            corrected_detections.append(vlm_detection)
+
+    if not changed:
+        return parsed_response
+    return replace(parsed_response, detections=corrected_detections)
+
+
 def has_location_leak(visual_feature: str) -> bool:
     """Return true when visual_feature includes location words owned by YOLO metadata."""
     normalized_text = _normalize_search_text(visual_feature)
@@ -419,7 +478,7 @@ def format_parsed_vlm_response(
             ]
         )
 
-    lines.extend(["", "종합 설명:", parsed_response.summary])
+    lines.extend(["", "종합 설명:", _format_deterministic_summary(parsed_response)])
     return "\n".join(lines)
 
 
@@ -460,6 +519,42 @@ def format_yolo_fallback_response(yolo_result: YoloResult) -> str:
 def sanitize_vlm_explanation(response_text: str, yolo_result: YoloResult) -> str:
     """Backward-compatible function name for existing callers."""
     return VlmResponseParser().parse_description(response_text, yolo_result)
+
+
+def _format_deterministic_summary(parsed_response: ParsedVlmResponse) -> str:
+    total_count = len(parsed_response.detections)
+    clear_count = sum(
+        1
+        for detection in parsed_response.detections
+        if detection.visibility == "clear" and not detection.review_required
+    )
+    review_count = sum(1 for detection in parsed_response.detections if detection.review_required)
+    return (
+        f"총 {total_count}개의 결함이 탐지되었으며, "
+        f"{clear_count}개는 시각적 특징이 명확하고 "
+        f"{review_count}개는 추가 확인이 필요합니다."
+    )
+
+
+def _safe_visual_feature_for_class(class_name: str) -> str:
+    normalized_class = _normalize_class_label(class_name)
+    return SAFE_VISUAL_FEATURE_BY_CLASS.get(normalized_class, DEFAULT_VISUAL_FEATURE)
+
+
+def _merge_corrected_summary_quality(
+    quality_info: VlmQualityInfo,
+    corrected_response: ParsedVlmResponse,
+    yolo_result: YoloResult,
+) -> VlmQualityInfo:
+    corrected_summary_contradiction = has_summary_contradiction(corrected_response, yolo_result)
+    if not corrected_summary_contradiction or quality_info.summary_contradiction:
+        return quality_info
+    return replace(
+        quality_info,
+        quality_status="warning",
+        summary_contradiction=True,
+        semantic_warning_count=quality_info.semantic_warning_count + 1,
+    )
 
 
 def _reject_additional_properties(

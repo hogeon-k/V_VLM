@@ -26,6 +26,9 @@ def test_cli_vlm_defaults_and_skip_vlm_flag(monkeypatch) -> None:
     assert args.vlm_top_k == 20
     assert args.vlm_repeat_penalty == 1.1
     assert args.vlm_seed == 42
+    assert args.vlm_max_retries == 2
+    assert args.vlm_retry_delay == 0.5
+    assert args.vlm_timeout == 120.0
     assert args.vlm_debug_response is False
     assert args.vlm_image_size == 960
     assert args.vlm_full_image_size is None
@@ -66,6 +69,12 @@ def test_cli_build_vlm_service_passes_context_options(monkeypatch) -> None:
             "1.2",
             "--vlm-seed",
             "7",
+            "--vlm-max-retries",
+            "3",
+            "--vlm-retry-delay",
+            "1.5",
+            "--vlm-timeout",
+            "90",
             "--vlm-image-size",
             "640",
             "--vlm-full-image-size",
@@ -96,12 +105,15 @@ def test_cli_build_vlm_service_passes_context_options(monkeypatch) -> None:
     assert service.client.top_k == 10
     assert service.client.repeat_penalty == 1.2
     assert service.client.seed == 7
+    assert service.client.timeout_seconds == 90
     assert service.image_size == 768
     assert service.image_mode == "montage"
     assert service.crop_montage_size == 896
     assert service.crop_padding == 120
     assert service.crop_min_size == 180
     assert service.crop_max_size == 420
+    assert service.max_retries == 3
+    assert service.retry_delay_seconds == 1.5
 
 
 def test_cli_detection_rows_include_location(capsys) -> None:
@@ -140,6 +152,9 @@ def test_cli_help_includes_crop_montage_and_debug_options(monkeypatch, capsys) -
     assert "--vlm-top-k" in output
     assert "--vlm-repeat-penalty" in output
     assert "--vlm-seed" in output
+    assert "--vlm-max-retries" in output
+    assert "--vlm-retry-delay" in output
+    assert "--vlm-timeout" in output
     assert "--vlm-debug-response" in output
     assert "--save-crop-montage" in output
     assert "--crop-montage-output-dir" in output
@@ -185,6 +200,8 @@ def test_cli_accepts_vlm_size_experiment_options(monkeypatch, full_size: str, mo
         ("--vlm-montage-size", "0"),
         ("--vlm-montage-size", "-1"),
         ("--vlm-montage-size", "bad"),
+        ("--vlm-max-retries", "-1"),
+        ("--vlm-max-retries", "bad"),
     ],
 )
 def test_cli_rejects_invalid_vlm_size_experiment_options(monkeypatch, option: str, value: str) -> None:

@@ -349,6 +349,73 @@ def test_parser_preserves_raw_response_and_detection_order_with_quality_warning(
     assert result.quality_info.class_name_only_detection_ids == (1,)
 
 
+@pytest.mark.parametrize(
+    ("class_name", "visual_feature", "safe_phrase"),
+    [
+        (
+            "short",
+            "회로 패턴이 중간에서 끊겨 보이는 구간이 있습니다.",
+            "두 도전성 패턴 사이의 비정상적인 연결 여부를 명확히 확인하기 어렵습니다.",
+        ),
+        (
+            "open_circuit",
+            "두 도전성 패턴 사이가 가느다란 패턴으로 연결되어 있습니다.",
+            "회로 패턴의 단절 여부를 명확히 확인하기 어렵습니다.",
+        ),
+        (
+            "missing_hole",
+            "두 회로 패턴 사이가 연결되어 있습니다.",
+            "원형 홀의 누락 여부를 명확히 확인하기 어렵습니다.",
+        ),
+    ],
+)
+def test_parser_corrects_class_conflicting_visual_feature_without_fallback(
+    class_name: str,
+    visual_feature: str,
+    safe_phrase: str,
+) -> None:
+    raw = json.dumps(
+        {
+            "final_judgment": "NG",
+            "detections": [
+                {
+                    "detection_id": 1,
+                    "visual_feature": visual_feature,
+                    "visibility": "clear",
+                    "review_required": False,
+                }
+            ],
+            "summary": "총 1개의 결함이 탐지되었으며, 1개는 시각적 특징이 명확합니다.",
+        }
+    )
+    yolo_result = YoloResult(
+        image_path="sample.jpg",
+        detections=[Detection(0, class_name, 0.9, 1, 2, 3, 4)],
+    )
+
+    result = VlmResponseParser().parse_response(raw, yolo_result)
+
+    assert result.parse_success is True
+    assert result.fallback_used is False
+    assert result.quality_info.quality_status == "warning"
+    assert result.quality_info.class_conflict_detection_ids == (1,)
+    assert result.quality_info.summary_contradiction is True
+    assert result.parsed_response is not None
+    corrected = result.parsed_response.detections[0]
+    assert corrected.visual_feature == f"확대 이미지에서 {safe_phrase}"
+    assert corrected.visibility == "unclear"
+    assert corrected.review_required is True
+    assert f"1. {class_name}" in result.formatted_response
+    assert safe_phrase in result.formatted_response
+    assert "추가 확인: 필요" in result.formatted_response
+
+
+def test_short_connection_description_is_not_marked_as_class_conflict() -> None:
+    visual_feature = "두 도전성 패턴 사이가 가느다란 연결부로 이어져 보입니다."
+
+    assert has_class_conflict(visual_feature, "short") is False
+
+
 def test_summary_visibility_contradiction_detects_explicit_all_clear() -> None:
     raw = json.dumps(
         {
@@ -498,6 +565,51 @@ def test_formatting_is_deterministic_and_yolo_authoritative() -> None:
     assert "신뢰도: 0.6696" in first
     assert "바운딩 박스: (2711, 946, 2739, 979)" in first
     assert "최종 판정: NG" in first
+
+
+def test_formatting_replaces_contradictory_vlm_summary_with_detection_counts() -> None:
+    parsed = parse_vlm_response(
+        json.dumps(
+            {
+                "final_judgment": "NG",
+                "detections": [
+                    {
+                        "detection_id": 1,
+                        "visual_feature": "패턴 경계가 흐리게 보입니다.",
+                        "visibility": "clear",
+                        "review_required": False,
+                    },
+                    {
+                        "detection_id": 2,
+                        "visual_feature": DEFAULT_VISUAL_FEATURE,
+                        "visibility": "unclear",
+                        "review_required": True,
+                    },
+                    {
+                        "detection_id": 3,
+                        "visual_feature": DEFAULT_VISUAL_FEATURE,
+                        "visibility": "unclear",
+                        "review_required": True,
+                    },
+                ],
+                "summary": "총 3개의 결함이 탐지되었으며, 2개는 시각적 특징이 명확하고 1개는 추가 확인이 필요합니다.",
+            }
+        ),
+        expected_detection_count=3,
+    )
+    yolo_result = YoloResult(
+        "sample.jpg",
+        [
+            Detection(0, "short", 0.9, 1, 2, 3, 4),
+            Detection(0, "short", 0.8, 5, 6, 7, 8),
+            Detection(0, "short", 0.7, 9, 10, 11, 12),
+        ],
+    )
+
+    formatted = format_parsed_vlm_response(parsed, yolo_result)
+
+    assert "1개는 시각적 특징이 명확하고 2개는 추가 확인이 필요합니다." in formatted
+    assert "2개는 시각적 특징이 명확하고 1개는 추가 확인이 필요합니다." not in formatted
 
 
 def test_sanitize_vlm_explanation_compatibility_wrapper() -> None:

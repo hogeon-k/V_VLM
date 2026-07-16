@@ -59,7 +59,7 @@ The default is `full_montage`, which preserves the existing image payload behavi
 
 ## Structured Output
 
-The VLM prompt is written primarily in Korean so the model is encouraged to return Korean `visual_feature` and `summary` text. Operator-facing formatted explanations and fallback explanations are also printed in Korean.
+The VLM prompt is written primarily in Korean so the model is encouraged to return Korean `visual_feature` and `summary` text. Operator-facing formatted explanations and fallback explanations are also printed in Korean. The raw VLM `summary` is preserved in the raw response, but the displayed `종합 설명` is recalculated from the parsed detection visibility counts so it cannot contradict the per-detection `clear`/`unclear` values.
 
 The Ollama request still uses the `format` field with a JSON Schema. JSON keys and enum values remain in English for compatibility. The response must contain:
 
@@ -96,6 +96,8 @@ semantic_warning_count
 `quality_status=warning` means the JSON is usable, but at least one explanation quality issue was detected. The current checks flag `visual_feature` values that only repeat the YOLO class name, such as `short`, `open_circuit`, or `<class> defect`, and explicit summary contradictions such as an unclear detection paired with `All defects are clearly visible.`
 
 These warnings do not change the YOLO-authoritative judgment, parse status, fallback behavior, or detection count/ID validation.
+
+When a parsed `visual_feature` semantically conflicts with the YOLO class, the formatter keeps the YOLO class, confidence, location, bounding box, and detection order unchanged. Only the conflicting detection explanation is replaced with conservative class-specific text, and that detection is marked `visibility=unclear` and `review_required=true`. The whole VLM response is not discarded for a correctable per-detection warning.
 
 ## Ollama Response Extraction
 
@@ -196,6 +198,9 @@ Stored request payloads keep the real structure but replace base64 image strings
   --vlm-top-k 20 `
   --vlm-repeat-penalty 1.1 `
   --vlm-seed 42 `
+  --vlm-max-retries 2 `
+  --vlm-retry-delay 0.5 `
+  --vlm-timeout 120 `
   --vlm-full-image-size 960 `
   --vlm-montage-size 960 `
   --vlm-image-mode full_montage
@@ -203,6 +208,16 @@ Stored request payloads keep the real structure but replace base64 image strings
 
 Add `--debug-vlm` to print the raw structured response.
 Add `--vlm-debug-response` to print safe Ollama response-shape diagnostics.
+
+Single-image runs use the same default bounded VLM retry behavior as batch runs:
+
+```text
+--vlm-max-retries 2
+--vlm-retry-delay 0.5
+--vlm-timeout 120
+```
+
+If Ollama returns `done=false` with empty content, the first retry unloads the model runner and rebuilds the VLM image payload with a conservative 640px limit before trying again.
 
 ## Optional Crop Montage Saving
 

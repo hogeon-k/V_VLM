@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.console_encoding import configure_windows_console_encoding
 from service.inspection_service import InspectionService
 from service.vlm_service import VlmService
 from service.yolo_service import YoloService
@@ -23,6 +24,13 @@ def positive_int(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be at least 1")
+    return parsed
+
+
+def non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be at least 0")
     return parsed
 
 
@@ -85,6 +93,9 @@ def parse_args() -> argparse.Namespace:
         default="data/result_images/montage",
         help="Directory used when --save-crop-montage is enabled.",
     )
+    parser.add_argument("--vlm-max-retries", type=non_negative_int, default=2, help="Maximum VLM retry count.")
+    parser.add_argument("--vlm-retry-delay", type=float, default=0.5, help="Delay between VLM retries in seconds.")
+    parser.add_argument("--vlm-timeout", type=float, default=120.0, help="Ollama HTTP timeout in seconds.")
     parser.add_argument("--skip-vlm", action="store_true", help="Run YOLO only and skip VLM explanation.")
     parser.add_argument("--debug-vlm", action="store_true", help="Print the raw VLM response after the sanitized explanation.")
     return parser.parse_args()
@@ -161,6 +172,7 @@ def print_detection_rows(detections: object) -> None:
 
 def main() -> int:
     """Run YOLO and optionally VLM from the terminal."""
+    configure_windows_console_encoding()
     args = parse_args()
     image_path = Path(args.image)
     if not image_path.is_absolute():
@@ -193,6 +205,9 @@ def main() -> int:
         print(f"[INFO] VLM top_k: {args.vlm_top_k}")
         print(f"[INFO] VLM repeat_penalty: {args.vlm_repeat_penalty}")
         print(f"[INFO] VLM seed: {args.vlm_seed}")
+        print(f"[INFO] VLM max retries: {args.vlm_max_retries}")
+        print(f"[INFO] VLM retry delay: {args.vlm_retry_delay}")
+        print(f"[INFO] VLM timeout: {args.vlm_timeout}")
         print(f"[INFO] VLM image mode: {args.vlm_image_mode}")
         print(f"[INFO] VLM full image size limit: {args.vlm_full_image_size or args.vlm_image_size}")
         print(f"[INFO] VLM montage size limit: {args.vlm_montage_size or args.vlm_crop_montage_size}")

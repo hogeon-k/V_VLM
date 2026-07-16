@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from model.yolo_result import YoloResult
+from scripts.console_encoding import configure_windows_console_encoding
 from scripts.test_yolo_vlm import build_vlm_service, build_yolo_service, positive_int
 from vlm.ollama_response import OllamaResponseMetadata
 from vlm.response_parser import format_yolo_fallback_response
@@ -468,6 +469,7 @@ def _failure_diagnostic_text(vlm_service: object, raw_response: str) -> str:
 
 def main() -> int:
     """Run the batch and keep processing after per-image failures."""
+    configure_windows_console_encoding()
     args = parse_args()
     input_dir = _resolve_path(args.input_dir)
     output_dir = _resolve_path(args.output_dir)

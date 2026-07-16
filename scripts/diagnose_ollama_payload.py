@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.console_encoding import configure_windows_console_encoding
 from vlm.ollama_response import build_ollama_metadata
 from vlm.response_parser import parse_vlm_response
 from vlm.response_schema import VLM_RESPONSE_SCHEMA
@@ -408,6 +409,7 @@ def run_diagnostics(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    configure_windows_console_encoding()
     return run_diagnostics(parse_args())
 
 

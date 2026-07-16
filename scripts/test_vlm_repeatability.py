@@ -10,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.console_encoding import configure_windows_console_encoding
 from scripts.test_yolo_vlm import build_vlm_service, build_yolo_service, positive_int
 
 
@@ -124,6 +125,7 @@ def failure_signature(vlm_service: object) -> str:
 
 def main() -> int:
     """Run YOLO once and repeat the VLM call with identical settings."""
+    configure_windows_console_encoding()
     args = parse_args()
     if args.repeat_count < 1:
         print("[ERROR] --repeat-count must be at least 1", file=sys.stderr)
