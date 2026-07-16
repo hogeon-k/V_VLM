@@ -5,7 +5,17 @@ from pathlib import Path
 from model.inspection_result import InspectionResult
 from service.inspection_service import InspectionService
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+IMAGE_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".jpe",
+    ".jfif",
+    ".png",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".webp",
+}
 
 
 class AutoInspectionService:
@@ -19,7 +29,7 @@ class AutoInspectionService:
         if not directory.is_dir():
             raise FileNotFoundError(f"이미지 폴더를 찾을 수 없습니다: {directory}")
         return sorted(
-            path for path in directory.iterdir()
+            path for path in directory.rglob("*")
             if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
         )
 

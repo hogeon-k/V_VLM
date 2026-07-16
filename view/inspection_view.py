@@ -81,7 +81,13 @@ class InspectionView(QWidget):
             self._show_error(str(exc))
             return
         self.folder_label.setText(f"{folder} ({len(images)} images)")
-        self.progress_label.setText("Ready")
+        first_image = images[0]
+        self.progress_label.setText(f"Ready - first image: {first_image.name}")
+        _set_pixmap(self.current_image_label, first_image)
+        self.result_image_label.clear()
+        self.result_image_label.setText("Result Image")
+        self.status_label.setText("READY")
+        self.description.setPlainText("Press Start to begin automatic inspection.")
 
     def _start(self) -> None:
         try:

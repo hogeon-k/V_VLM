@@ -3,6 +3,7 @@ from pathlib import Path
 from model.defect_info import Detection
 from model.yolo_result import YoloResult
 from service.inspection_service import InspectionService
+from service.auto_inspection_service import AutoInspectionService
 
 
 class PassthroughImageService:
@@ -63,3 +64,15 @@ def test_inspection_service_returns_ng_with_vlm_description() -> None:
     assert result.status == "NG"
     assert result.defect_count == 1
     assert result.vlm_explanation == "VLM explanation"
+
+
+def test_auto_inspection_service_lists_nested_images(tmp_path) -> None:
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    image = nested / "sample.JFIF"
+    image.write_bytes(b"fake image bytes")
+    (tmp_path / "note.txt").write_text("ignore", encoding="utf-8")
+
+    images = AutoInspectionService().list_images(tmp_path)
+
+    assert images == [image]
