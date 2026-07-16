@@ -53,6 +53,7 @@ class VlmPreparationInfo:
     zero_value_recovery_used: bool = False
     zero_value_recovery_image_size: int | None = None
     zero_value_unload_succeeded: bool | None = None
+    final_unload_succeeded: bool | None = None
 
 
 class VlmService:
@@ -311,9 +312,13 @@ class VlmService:
                 yolo_result=yolo_result,
             )
         finally:
-            self.last_preparation_info.inference_seconds = (
-                perf_counter() - inference_started
-            )
+            if self.last_preparation_info is not None:
+                self.last_preparation_info.inference_seconds = (
+                    perf_counter() - inference_started
+                )
+                self.last_preparation_info.final_unload_succeeded = _unload_client_model(
+                    self.client
+                )
 
     def _record_fallback(
         self,

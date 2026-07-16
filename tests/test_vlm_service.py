@@ -39,6 +39,13 @@ def test_vlm_service_generates_structured_description_for_ng_result(tmp_path) ->
     Image.new("RGB", (100, 80), "white").save(image_path)
 
     class FakeClient:
+        def __init__(self) -> None:
+            self.unload_calls = 0
+
+        def unload_model(self) -> bool:
+            self.unload_calls += 1
+            return True
+
         def generate(self, prompt: str, image_bytes_list: list[bytes]) -> str:
             assert "open_circuit" in prompt
             assert "위치: 위치 정보 없음" in prompt
@@ -49,7 +56,8 @@ def test_vlm_service_generates_structured_description_for_ng_result(tmp_path) ->
     detection = Detection(0, "open_circuit", 0.91, 1, 2, 3, 4)
     yolo_result = YoloResult(Path("sample.png"), detections=[detection])
 
-    service = VlmService(client=FakeClient())
+    client = FakeClient()
+    service = VlmService(client=client)
     description = service.describe_defects(image_path, yolo_result)
 
     assert description is not None
@@ -63,6 +71,9 @@ def test_vlm_service_generates_structured_description_for_ng_result(tmp_path) ->
     assert service.last_vlm_status == "success"
     assert service.last_parse_status == "success"
     assert service.last_quality_info.quality_status == "acceptable"
+    assert client.unload_calls == 1
+    assert service.last_preparation_info is not None
+    assert service.last_preparation_info.final_unload_succeeded is True
 
 
 def test_vlm_service_passes_full_image_and_montage_bytes(monkeypatch) -> None:
@@ -487,7 +498,7 @@ def test_vlm_service_downsizes_and_unloads_after_zero_value_response(monkeypatch
     service.describe_defects(Path("result.jpg"), yolo_result)
 
     assert client.calls == 2
-    assert client.unload_calls == 1
+    assert client.unload_calls == 2
     assert calls["images"][0] == [b"full-960", b"montage-960"]
     assert calls["images"][1] == [b"full-640", b"montage-640"]
     assert service.last_parse_success is True
@@ -496,6 +507,7 @@ def test_vlm_service_downsizes_and_unloads_after_zero_value_response(monkeypatch
     assert service.last_preparation_info.zero_value_recovery_used is True
     assert service.last_preparation_info.zero_value_recovery_image_size == 640
     assert service.last_preparation_info.zero_value_unload_succeeded is True
+    assert service.last_preparation_info.final_unload_succeeded is True
     assert service.last_preparation_info.full_image_size == (640, 640)
     assert service.last_preparation_info.crop_montage_size == (640, 640)
 
