@@ -16,5 +16,7 @@ class ImageService:
         self.preprocessor = preprocessor or ImagePreprocessor()
 
     def prepare_image(self, image_path: Path) -> Path:
-        # TODO: Validate and preprocess images before inference.
-        return image_path
+        path = Path(image_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"이미지 파일을 찾을 수 없습니다: {path}")
+        return path

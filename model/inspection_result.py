@@ -19,6 +19,7 @@ class YoloDetectionResult:
 @dataclass(slots=True)
 class InspectionResult:
     source_image_path: Path
+    id: int | None = None
     result_image_path: Path | None = None
     status: str = "PENDING"
     detections: list[Detection] = field(default_factory=list)
