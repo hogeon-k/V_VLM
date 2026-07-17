@@ -88,6 +88,10 @@ class MainWindow(QMainWindow):
             button.style().unpolish(button)
             button.style().polish(button)
 
+    def closeEvent(self, event: object) -> None:
+        self.status_view.stop_vlm_status_check()
+        super().closeEvent(event)
+
 
 def _tab_button(text: str) -> QPushButton:
     button = QPushButton(text)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 import sqlite3
 import sys
@@ -254,6 +255,31 @@ def test_selected_row_loads_detail_from_id(monkeypatch, tmp_path) -> None:
     assert view.defect_value.text() == "short"
     assert view.confidence_value.text() == "95.0%"
     assert view.detail.toPlainText() == "VLM explanation"
+
+
+def test_history_table_shows_sequential_number_but_keeps_database_id(monkeypatch, tmp_path) -> None:
+    _app(monkeypatch)
+    first = InspectionResult(
+        source_image_path=tmp_path / "first.png",
+        id=10,
+        status="OK",
+        inspected_at=datetime(2026, 7, 17, 9, 0, 0),
+    )
+    second = InspectionResult(
+        source_image_path=tmp_path / "second.png",
+        id=65,
+        status="NG",
+        inspected_at=datetime(2026, 7, 17, 10, 0, 0),
+    )
+    view = HistoryView(FakeHistoryViewModel([second, first]))
+
+    assert view.table.horizontalHeaderItem(0).text() == "번호"
+    assert view.table.item(0, 0).text() == "1"
+    assert view.table.item(1, 0).text() == "2"
+
+    view.table.selectRow(0)
+
+    assert view._selected_inspection_id() == 10
 
 
 def test_delete_selected_button_removes_selected_row_and_clears_detail(monkeypatch, tmp_path) -> None:

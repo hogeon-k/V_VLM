@@ -70,7 +70,7 @@ class HistoryView(QWidget):
         self.delete_all_button.clicked.connect(self._delete_all)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["ID", "검사 일시", "이미지명", "판정", "불량 유형", "신뢰도"])
+        self.table.setHorizontalHeaderLabels(["번호", "검사 일시", "이미지명", "판정", "불량 유형", "신뢰도"])
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -224,11 +224,12 @@ class HistoryView(QWidget):
         self.table.setSortingEnabled(False)
         self.table.clearSelection()
         self.table.setRowCount(len(self.results))
+        display_numbers = _display_numbers_by_inspection_id(self.results)
         for row_index, result in enumerate(self.results):
             inspection_id = getattr(result, "id", None)
             first_defect = _first_defect(result)
             values = [
-                inspection_id or "",
+                display_numbers.get(int(inspection_id), row_index + 1) if inspection_id is not None else row_index + 1,
                 _dt_text(getattr(result, "inspected_at", None)),
                 getattr(result, "image_name", ""),
                 _status_text(getattr(result, "status", "")),
@@ -236,12 +237,14 @@ class HistoryView(QWidget):
                 _confidence_text(first_defect),
             ]
             for col, value in enumerate(values):
-                item = QTableWidgetItem(str(value))
+                item = QTableWidgetItem()
+                item.setData(Qt.ItemDataRole.DisplayRole, int(value) if col == 0 else str(value))
                 if inspection_id is not None:
                     item.setData(Qt.ItemDataRole.UserRole, int(inspection_id))
                 self.table.setItem(row_index, col, item)
         self.table.resizeColumnsToContents()
         self.table.setSortingEnabled(True)
+        self.table.sortItems(0, Qt.SortOrder.AscendingOrder)
         self.count_label.setText(f"총 {len(self.results)}건")
 
     def _reload_defect_types(self) -> None:
@@ -489,6 +492,25 @@ def _section_title(text: str) -> QLabel:
 def _first_defect(result: object) -> object | None:
     defects = list(getattr(result, "defects", getattr(result, "detections", [])) or [])
     return defects[0] if defects else None
+
+
+def _display_numbers_by_inspection_id(results: list[object]) -> dict[int, int]:
+    numbered_results = [
+        result
+        for result in results
+        if getattr(result, "id", None) is not None
+    ]
+    sorted_results = sorted(
+        numbered_results,
+        key=lambda result: (
+            _dt_text(getattr(result, "inspected_at", None)),
+            int(getattr(result, "id")),
+        ),
+    )
+    return {
+        int(getattr(result, "id")): index + 1
+        for index, result in enumerate(sorted_results)
+    }
 
 
 def _defect_text(defect: object | None) -> str:
