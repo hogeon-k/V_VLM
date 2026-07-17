@@ -28,12 +28,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from view.image_viewer import ImageViewerDialog
 from viewmodel.history_viewmodel import HistoryViewModel
 
 
 class HistoryView(QWidget):
-    go_main_requested = Signal()
-
     def __init__(self, viewmodel: HistoryViewModel | None = None) -> None:
         super().__init__()
         self.viewmodel = viewmodel or HistoryViewModel()
@@ -60,8 +59,6 @@ class HistoryView(QWidget):
         self.refresh_button.clicked.connect(self.reload)
         self.reset_button = QPushButton("초기화")
         self.reset_button.clicked.connect(self.reset_filters)
-        self.main_button = QPushButton("메인 검사 화면")
-        self.main_button.clicked.connect(self.go_main_requested.emit)
 
         self.delete_selected_button = QPushButton("선택 기록 삭제")
         self.delete_selected_button.setObjectName("DangerButton")
@@ -92,6 +89,9 @@ class HistoryView(QWidget):
 
         self.original_image = FitImageLabel("검사 이력을 선택하면 원본 이미지가 표시됩니다.")
         self.yolo_image = FitImageLabel("검사 이력을 선택하면 YOLO 결과 이미지가 표시됩니다.")
+        self.yolo_image.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.yolo_image.setToolTip("클릭하면 확대해서 볼 수 있습니다.")
+        self.yolo_image.clicked.connect(self._open_yolo_image_viewer)
         self.status_value = QLabel("-")
         self.defect_value = QLabel("-")
         self.confidence_value = QLabel("-")
@@ -122,7 +122,6 @@ class HistoryView(QWidget):
         filters.addWidget(self.refresh_button)
         filters.addWidget(self.reset_button)
         filters.addStretch(1)
-        filters.addWidget(self.main_button)
 
         history_panel = QWidget()
         history_layout = QVBoxLayout(history_panel)
@@ -375,6 +374,22 @@ class HistoryView(QWidget):
             return
         QMessageBox.information(self, "검사 기록 삭제", message)
 
+    def _open_yolo_image_viewer(self) -> None:
+        pixmap = self.yolo_image.original_pixmap()
+        if pixmap is None or pixmap.isNull():
+            QMessageBox.information(
+                self,
+                "이미지 없음",
+                "확대할 YOLO 결과 이미지가 없습니다.",
+            )
+            return
+        dialog = ImageViewerDialog(
+            pixmap=pixmap,
+            title="YOLO 결과 이미지 확대 보기",
+            parent=self,
+        )
+        dialog.exec()
+
     def _clear_detail(self, *, clear_selection: bool) -> None:
         if clear_selection:
             self.table.clearSelection()
@@ -401,6 +416,8 @@ class HistoryView(QWidget):
 
 
 class FitImageLabel(QLabel):
+    clicked = Signal()
+
     def __init__(self, text: str) -> None:
         super().__init__(text)
         self._original_pixmap: QPixmap | None = None
@@ -409,6 +426,9 @@ class FitImageLabel(QLabel):
         self.setMinimumSize(1, 1)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setObjectName("ImagePreview")
+
+    def original_pixmap(self) -> QPixmap | None:
+        return self._original_pixmap
 
     def set_image_path(self, path: object, *, missing_text: str) -> None:
         if not path:
@@ -435,6 +455,11 @@ class FitImageLabel(QLabel):
     def resizeEvent(self, event: object) -> None:
         super().resizeEvent(event)
         self._refresh_pixmap()
+
+    def mousePressEvent(self, event: object) -> None:
+        if hasattr(event, "button") and event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
     def sizeHint(self) -> QSize:
         return QSize(260, 180)

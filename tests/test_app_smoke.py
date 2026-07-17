@@ -22,6 +22,19 @@ def test_main_window_smoke(monkeypatch) -> None:
     window.close()
 
 
+def test_top_navigation_returns_history_to_main(monkeypatch) -> None:
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    window = MainWindow()
+    window.history_tab.click()
+    assert window.stack.currentIndex() == 1
+
+    window.inspection_tab.click()
+    assert window.stack.currentIndex() == 0
+    window.close()
+
+
 def test_fit_image_label_scales_pixmap_inside_contents(monkeypatch) -> None:
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance() or QApplication(sys.argv)

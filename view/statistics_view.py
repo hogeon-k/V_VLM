@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QDate, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QDate, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -23,8 +23,6 @@ from viewmodel.statistics_viewmodel import StatisticsViewModel
 
 
 class StatisticsView(QWidget):
-    go_main_requested = Signal()
-
     def __init__(self, viewmodel: StatisticsViewModel | None = None) -> None:
         super().__init__()
         self.viewmodel = viewmodel or StatisticsViewModel()
@@ -46,9 +44,6 @@ class StatisticsView(QWidget):
         self.search_button.clicked.connect(self.reload)
         self.reset_button = QPushButton("초기화")
         self.reset_button.clicked.connect(self.reset_filters)
-        self.main_button = QPushButton("메인 검사 화면")
-        self.main_button.clicked.connect(self.go_main_requested.emit)
-
         self.total_card = StatCard("전체 검사 수")
         self.ok_card = StatCard("OK 수", accent="ok")
         self.ng_card = StatCard("NG 수", accent="ng")
@@ -76,7 +71,6 @@ class StatisticsView(QWidget):
         filters.addWidget(self.search_button)
         filters.addWidget(self.reset_button)
         filters.addStretch(1)
-        filters.addWidget(self.main_button)
 
         cards = QGridLayout()
         cards.setHorizontalSpacing(12)

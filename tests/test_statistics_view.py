@@ -98,14 +98,3 @@ def test_statistics_view_reset_uses_all_dates(monkeypatch) -> None:
 
     assert view.all_dates_checkbox.isChecked()
     assert viewmodel.calls[-1] == {"start_date": None, "end_date": None}
-
-
-def test_statistics_main_button_emits_navigation_signal(monkeypatch) -> None:
-    _app(monkeypatch)
-    emitted: list[bool] = []
-    view = StatisticsView(FakeStatisticsViewModel())  # type: ignore[arg-type]
-    view.go_main_requested.connect(lambda: emitted.append(True))
-
-    view.main_button.click()
-
-    assert emitted == [True]

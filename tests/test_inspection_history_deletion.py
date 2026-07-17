@@ -361,14 +361,3 @@ def test_filter_search_passes_combined_conditions(monkeypatch, tmp_path) -> None
         "status": "NG",
         "defect_type": "short",
     }
-
-
-def test_main_button_emits_navigation_signal(monkeypatch) -> None:
-    _app(monkeypatch)
-    emitted: list[bool] = []
-    view = HistoryView(FakeHistoryViewModel([]))
-    view.go_main_requested.connect(lambda: emitted.append(True))
-
-    view.main_button.click()
-
-    assert emitted == [True]
