@@ -29,6 +29,7 @@ class MainWindow(QMainWindow):
         self.statistics_view = StatisticsView()
         self.status_view = StatusView()
         self.history_view.go_main_requested.connect(lambda: self._show_page(0))
+        self.statistics_view.go_main_requested.connect(lambda: self._show_page(0))
         self.stack.addWidget(self.inspection_view)
         self.stack.addWidget(self.history_view)
         self.stack.addWidget(self.statistics_view)
