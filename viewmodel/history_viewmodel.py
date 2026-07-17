@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from model.inspection_result import InspectionResult
 from repository.inspection_repository import InspectionRepository
+from service.inspection_history_service import DeletionReport, InspectionHistoryService
 
 
 class HistoryViewModel:
-    def __init__(self, inspection_repository: InspectionRepository | None = None) -> None:
+    def __init__(
+        self,
+        inspection_repository: InspectionRepository | None = None,
+        history_service: InspectionHistoryService | None = None,
+    ) -> None:
         self.inspection_repository = inspection_repository or InspectionRepository()
+        self.history_service = history_service or InspectionHistoryService(self.inspection_repository)
 
     def load_recent(self) -> list[InspectionResult]:
         return self.inspection_repository.find_recent()
@@ -31,3 +37,12 @@ class HistoryViewModel:
 
     def defect_types(self) -> list[str]:
         return self.inspection_repository.list_defect_types()
+
+    def history_count(self) -> int:
+        return self.history_service.count()
+
+    def delete_history(self, inspection_id: int) -> DeletionReport:
+        return self.history_service.delete_history(inspection_id)
+
+    def delete_all_history(self) -> DeletionReport:
+        return self.history_service.delete_all_history()

@@ -61,6 +61,43 @@ class InspectionRepository:
             return None
         return self._row_to_result(row)
 
+    def count(self) -> int:
+        self.db_manager.initialize()
+        with self.db_manager.get_connection() as connection:
+            row = connection.execute("SELECT COUNT(*) AS count FROM inspections").fetchone()
+        return int(row["count"])
+
+    def delete_by_id(self, inspection_id: int) -> int:
+        """Delete one inspection row and its child defects in one transaction."""
+        self.db_manager.initialize()
+        with self.db_manager.get_connection() as connection:
+            try:
+                connection.execute("BEGIN")
+                cursor = connection.execute(
+                    "DELETE FROM inspections WHERE id = ?",
+                    (inspection_id,),
+                )
+                deleted_count = int(cursor.rowcount)
+                connection.commit()
+                return deleted_count
+            except Exception:
+                connection.rollback()
+                raise
+
+    def delete_all(self) -> int:
+        """Delete all inspection rows and their child defects in one transaction."""
+        self.db_manager.initialize()
+        with self.db_manager.get_connection() as connection:
+            try:
+                connection.execute("BEGIN")
+                cursor = connection.execute("DELETE FROM inspections")
+                deleted_count = int(cursor.rowcount)
+                connection.commit()
+                return deleted_count
+            except Exception:
+                connection.rollback()
+                raise
+
     def find_recent(self, limit: int = 100) -> list[InspectionResult]:
         return self.search(limit=limit)
 
