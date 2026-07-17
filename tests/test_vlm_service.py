@@ -155,6 +155,67 @@ def test_vlm_service_passes_full_image_and_montage_bytes(monkeypatch) -> None:
     assert service.last_preparation_info.crop_montage_size == (512, 512)
 
 
+def test_vlm_service_limits_vlm_to_first_two_detections(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_montage(**kwargs) -> CropMontageResult:
+        calls["montage_detections"] = list(kwargs["detections"])
+        return CropMontageResult(b"montage-image", 320, 240, 2)
+
+    class FakeClient:
+        def unload_model(self) -> bool:
+            return True
+
+        def generate(self, prompt: str, image_bytes_list: list[bytes] | None = None) -> str:
+            calls["prompt"] = prompt
+            return json.dumps(
+                {
+                    "final_judgment": "NG",
+                    "detections": [
+                        {
+                            "detection_id": 1,
+                            "visual_feature": "첫 번째 crop에서 결함 후보가 보입니다.",
+                            "visibility": "clear",
+                            "review_required": False,
+                        },
+                        {
+                            "detection_id": 2,
+                            "visual_feature": "두 번째 crop에서 결함 후보가 보입니다.",
+                            "visibility": "clear",
+                            "review_required": False,
+                        },
+                    ],
+                    "summary": "총 2개의 결함 설명을 작성했습니다.",
+                }
+            )
+
+    monkeypatch.setattr("service.vlm_service.resize_image_to_jpeg_bytes", lambda *args, **kwargs: b"image")
+    monkeypatch.setattr("service.vlm_service.create_crop_montage_result", fake_montage)
+    monkeypatch.setattr("service.vlm_service.read_image_size_from_bytes", lambda image_bytes: (100, 80))
+
+    detections = [
+        Detection(0, "open_circuit", 0.91, 1, 2, 3, 4),
+        Detection(1, "short", 0.82, 5, 6, 7, 8),
+        Detection(2, "missing_hole", 0.73, 9, 10, 11, 12),
+    ]
+    yolo_result = YoloResult(Path("sample.png"), detections=detections)
+    service = VlmService(client=FakeClient())
+
+    description = service.describe_defects(Path("result.jpg"), yolo_result)
+
+    assert calls["montage_detections"] == detections[:2]
+    assert "탐지 개수: 2" in str(calls["prompt"])
+    assert "탐지 3" not in str(calls["prompt"])
+    assert description is not None
+    assert "탐지된 불량 수: 2개" in description
+    assert "나머지 1개 detection은 VLM 설명에서 생략" in description
+    assert service.last_parse_success is True
+    assert service.last_preparation_info is not None
+    assert service.last_preparation_info.yolo_detection_count == 3
+    assert service.last_preparation_info.vlm_detection_limit == 2
+    assert service.last_preparation_info.omitted_detection_count == 1
+
+
 @pytest.mark.parametrize(
     ("image_mode", "expected_images"),
     [

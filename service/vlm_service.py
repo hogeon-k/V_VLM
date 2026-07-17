@@ -22,6 +22,7 @@ from vlm.vlm_client import VlmClient
 
 
 ZERO_VALUE_RETRY_IMAGE_SIZE = 640
+DEFAULT_MAX_VLM_DETECTIONS = 2
 
 
 @dataclass(slots=True)
@@ -50,6 +51,9 @@ class VlmPreparationInfo:
     prompt_character_count: int = 0
     request_json_size: int | None = None
     image_diagnostics: tuple[VlmImageDiagnostic, ...] = ()
+    yolo_detection_count: int = 0
+    vlm_detection_limit: int = DEFAULT_MAX_VLM_DETECTIONS
+    omitted_detection_count: int = 0
     zero_value_recovery_used: bool = False
     zero_value_recovery_image_size: int | None = None
     zero_value_unload_succeeded: bool | None = None
@@ -73,6 +77,7 @@ class VlmService:
         image_mode: str = "full_montage",
         max_retries: int = 0,
         retry_delay_seconds: float = 0.0,
+        max_vlm_detections: int = DEFAULT_MAX_VLM_DETECTIONS,
     ) -> None:
         self.client = client or VlmClient()
         self.prompt_builder = prompt_builder or PromptBuilder()
@@ -88,6 +93,7 @@ class VlmService:
         self.image_mode = image_mode
         self.max_retries = max(0, int(max_retries))
         self.retry_delay_seconds = max(0.0, float(retry_delay_seconds))
+        self.max_vlm_detections = max(1, int(max_vlm_detections))
         self.last_preparation_info: VlmPreparationInfo | None = None
         self.last_raw_response: str | None = None
         self.last_crop_montage_path: Path | None = None
@@ -126,7 +132,9 @@ class VlmService:
         if yolo_result.defect_count == 0:
             return None
 
-        prompt = self.prompt_builder.build_defect_prompt(yolo_result, image_mode=self.image_mode)
+        vlm_yolo_result = _limit_yolo_result(yolo_result, self.max_vlm_detections)
+        omitted_detection_count = yolo_result.defect_count - vlm_yolo_result.defect_count
+        prompt = self.prompt_builder.build_defect_prompt(vlm_yolo_result, image_mode=self.image_mode)
         preparation_started = perf_counter()
         full_image_bytes = resize_image_to_jpeg_bytes(
             image_path,
@@ -135,7 +143,7 @@ class VlmService:
         )
         montage_result = create_crop_montage_result(
             image_path=image_path,
-            detections=yolo_result.detections,
+            detections=vlm_yolo_result.detections,
             max_size=self.crop_montage_size,
             quality=self.image_quality,
             padding=self.crop_padding,
@@ -168,6 +176,9 @@ class VlmService:
             image_preparation_seconds=preparation_seconds,
             prompt_character_count=len(prompt),
             image_diagnostics=_build_image_diagnostics(image_labels, image_bytes_list),
+            yolo_detection_count=yolo_result.defect_count,
+            vlm_detection_limit=self.max_vlm_detections,
+            omitted_detection_count=omitted_detection_count,
         )
 
         inference_started = perf_counter()
@@ -214,7 +225,7 @@ class VlmService:
                             unload_succeeded = _unload_client_model(self.client)
                             recovered_images = self._build_zero_value_retry_images(
                                 image_path=image_path,
-                                yolo_result=yolo_result,
+                                yolo_result=vlm_yolo_result,
                             )
                             current_image_bytes_list = recovered_images
                             zero_value_recovery_used = True
@@ -252,7 +263,12 @@ class VlmService:
                         continue
                     if attempt_index < self.max_retries:
                         continue
-                    return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
+                    return self._record_fallback(
+                        response="",
+                        parse_error=str(exc),
+                        yolo_result=vlm_yolo_result,
+                        omitted_detection_count=omitted_detection_count,
+                    )
                 except ValueError as exc:
                     self.last_ollama_metadata = getattr(self.client, "last_response_metadata", None)
                     self.last_vlm_status = "empty_content"
@@ -264,7 +280,12 @@ class VlmService:
                     print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} failed: {self.last_vlm_status}")
                     if attempt_index < self.max_retries:
                         continue
-                    return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
+                    return self._record_fallback(
+                        response="",
+                        parse_error=str(exc),
+                        yolo_result=vlm_yolo_result,
+                        omitted_detection_count=omitted_detection_count,
+                    )
                 except RuntimeError as exc:
                     self.last_ollama_metadata = getattr(self.client, "last_response_metadata", None)
                     self.last_vlm_status = _vlm_status_for_runtime_error(exc)
@@ -276,11 +297,16 @@ class VlmService:
                     print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} failed: {self.last_vlm_status}")
                     if attempt_index < self.max_retries:
                         continue
-                    return self._record_fallback(response="", parse_error=str(exc), yolo_result=yolo_result)
+                    return self._record_fallback(
+                        response="",
+                        parse_error=str(exc),
+                        yolo_result=vlm_yolo_result,
+                        omitted_detection_count=omitted_detection_count,
+                    )
 
                 self.last_raw_response = response
                 self._print_ollama_metadata()
-                parse_result = self.response_parser.parse_response(response, yolo_result)
+                parse_result = self.response_parser.parse_response(response, vlm_yolo_result)
                 self.last_parse_result = parse_result
                 self.last_parse_success = parse_result.parse_success
                 self.last_parse_error = parse_result.parse_error
@@ -293,7 +319,11 @@ class VlmService:
                     self.last_error_type = ""
                     self.last_error_message = ""
                     print(f"[INFO] VLM attempt {attempt_number}/{max_attempts} succeeded")
-                    return parse_result.formatted_response
+                    return _append_omitted_detection_note(
+                        parse_result.formatted_response,
+                        described_detection_count=vlm_yolo_result.defect_count,
+                        omitted_detection_count=omitted_detection_count,
+                    )
 
                 self.last_vlm_status = self.last_parse_status
                 self.last_failure_reason = self.last_parse_status
@@ -304,12 +334,17 @@ class VlmService:
                 if attempt_index < self.max_retries:
                     continue
                 self.last_vlm_status = "success"
-                return parse_result.formatted_response
+                return _append_omitted_detection_note(
+                    parse_result.formatted_response,
+                    described_detection_count=vlm_yolo_result.defect_count,
+                    omitted_detection_count=omitted_detection_count,
+                )
 
             return self._record_fallback(
                 response=self.last_raw_response or "",
                 parse_error=self.last_failure_reason or "VLM retry attempts exhausted.",
-                yolo_result=yolo_result,
+                yolo_result=vlm_yolo_result,
+                omitted_detection_count=omitted_detection_count,
             )
         finally:
             if self.last_preparation_info is not None:
@@ -325,6 +360,7 @@ class VlmService:
         response: str,
         parse_error: str,
         yolo_result: YoloResult,
+        omitted_detection_count: int = 0,
     ) -> str:
         parse_result = VlmParseResult(
             raw_response=response,
@@ -341,7 +377,11 @@ class VlmService:
         self.last_fallback_used = parse_result.fallback_used
         self.last_parse_status = "not_attempted"
         self.last_quality_info = parse_result.quality_info
-        return parse_result.formatted_response
+        return _append_omitted_detection_note(
+            parse_result.formatted_response,
+            described_detection_count=yolo_result.defect_count,
+            omitted_detection_count=omitted_detection_count,
+        )
 
     def _print_ollama_metadata(self) -> None:
         metadata = self.last_ollama_metadata
@@ -438,6 +478,30 @@ class VlmService:
 def _safe_filename_stem(stem: str) -> str:
     safe = "".join(character if character.isalnum() or character in "-_" else "_" for character in stem)
     return safe or "image"
+
+
+def _limit_yolo_result(yolo_result: YoloResult, max_detections: int) -> YoloResult:
+    return YoloResult(
+        image_path=yolo_result.image_path,
+        detections=list(yolo_result.detections[:max_detections]),
+        annotated_image_path=yolo_result.annotated_image_path,
+    )
+
+
+def _append_omitted_detection_note(
+    description: str,
+    *,
+    described_detection_count: int,
+    omitted_detection_count: int,
+) -> str:
+    if omitted_detection_count <= 0:
+        return description
+    return (
+        f"{description}\n\n"
+        "VLM 설명 제한:\n"
+        f"- YOLO detection 순서 기준 앞 {described_detection_count}개만 VLM 상세 설명에 사용했습니다.\n"
+        f"- 나머지 {omitted_detection_count}개 detection은 VLM 설명에서 생략되었으며, YOLO 결과를 기준으로 확인하세요."
+    )
 
 
 def _format_optional(value: object | None) -> str:
