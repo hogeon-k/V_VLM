@@ -2,6 +2,7 @@ PySide6
 opencv-python
 Pillow
 ultralytics
+onnxruntime-gpu
 ollama
 torch
 torchvision

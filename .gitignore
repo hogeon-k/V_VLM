@@ -46,6 +46,7 @@ runs/
 
 # Generated verification outputs
 outputs/
+results/
 
 # Logs
 logs/*
@@ -55,6 +56,15 @@ logs/*
 build/
 dist/
 *.spec
+
+# C++ inference build and generated artifacts
+cpp_inference/build/
+cpp_inference/build-*/
+cpp_inference/models/*.onnx
+cpp_inference/models/*.engine
+cpp_inference/models/*.plan
+cpp_inference/results/*
+!cpp_inference/results/.gitkeep
 
 # Editor and OS temporary files
 .vscode/

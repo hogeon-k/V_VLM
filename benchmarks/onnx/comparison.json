@@ -1,0 +1,313 @@
+{
+  "environment": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0"
+  },
+  "models": {
+    "pytorch": "models\\best.pt",
+    "onnx": "models\\best.onnx"
+  },
+  "image": {
+    "path": "data\\images\\01_missing_hole_03.jpg",
+    "shape": [
+      1586,
+      3034
+    ]
+  },
+  "input_settings": {
+    "imgsz": 960,
+    "conf": 0.15,
+    "iou": 0.7,
+    "batch": 1,
+    "device": "0",
+    "warmup": 10,
+    "runs": 100
+  },
+  "onnx_runtime": {
+    "providers": [
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "input_name": "images",
+    "output_name": "output0",
+    "input_shape": [
+      1,
+      3,
+      960,
+      960
+    ],
+    "output_shape": [
+      1,
+      7,
+      18900
+    ]
+  },
+  "detections": {
+    "pytorch": [
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9112392663955688,
+        "bbox": [
+          2077,
+          575,
+          2140,
+          632
+        ]
+      },
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.893036961555481,
+        "bbox": [
+          1337,
+          741,
+          1395,
+          799
+        ]
+      },
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8511297702789307,
+        "bbox": [
+          2644,
+          482,
+          2702,
+          535
+        ]
+      }
+    ],
+    "onnx": [
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9114500284194946,
+        "bbox": [
+          2077,
+          575,
+          2140,
+          632
+        ]
+      },
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8929381370544434,
+        "bbox": [
+          1337,
+          741,
+          1395,
+          799
+        ]
+      },
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8509001135826111,
+        "bbox": [
+          2644,
+          482,
+          2702,
+          535
+        ]
+      }
+    ]
+  },
+  "matches": [
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9112392663955688,
+        "bbox": [
+          2077,
+          575,
+          2140,
+          632
+        ]
+      },
+      "onnx": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9114500284194946,
+        "bbox": [
+          2077,
+          575,
+          2140,
+          632
+        ]
+      },
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence_diff_abs": 0.00021076202392578125,
+      "bbox_diff_abs": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.893036961555481,
+        "bbox": [
+          1337,
+          741,
+          1395,
+          799
+        ]
+      },
+      "onnx": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8929381370544434,
+        "bbox": [
+          1337,
+          741,
+          1395,
+          799
+        ]
+      },
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence_diff_abs": 9.882450103759766e-05,
+      "bbox_diff_abs": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8511297702789307,
+        "bbox": [
+          2644,
+          482,
+          2702,
+          535
+        ]
+      },
+      "onnx": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8509001135826111,
+        "bbox": [
+          2644,
+          482,
+          2702,
+          535
+        ]
+      },
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence_diff_abs": 0.00022965669631958008,
+      "bbox_diff_abs": [
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "accuracy_summary": {
+    "matched_count": 3,
+    "pt_only_count": 0,
+    "onnx_only_count": 0,
+    "classes_match": true,
+    "avg_conf_diff": 0.00017974774042765299,
+    "max_conf_diff": 0.00022965669631958008,
+    "avg_bbox_iou": 1.0,
+    "min_bbox_iou": 1.0
+  },
+  "timing": {
+    "pytorch": {
+      "preprocess_ms": {
+        "avg": 5.0843730002088705,
+        "min": 4.455900001630653,
+        "max": 12.552500003948808,
+        "median": 4.792599997017533,
+        "stdev": 0.9735985262366217
+      },
+      "inference_ms": {
+        "avg": 9.166136999920127,
+        "min": 6.818199995905161,
+        "max": 17.76310000423109,
+        "median": 10.373900000558933,
+        "stdev": 2.0543785261874845
+      },
+      "postprocess_ms": {
+        "avg": 1.9036249998316634,
+        "min": 1.5819000036572106,
+        "max": 3.0186999938450754,
+        "median": 1.8337500005145557,
+        "stdev": 0.2667145121767436
+      },
+      "total_ms": {
+        "avg": 43.389788999411394,
+        "min": 38.57859999698121,
+        "max": 66.76889999653213,
+        "median": 43.41049999857205,
+        "stdev": 4.03430686943917
+      }
+    },
+    "onnx": {
+      "preprocess_ms": {
+        "avg": 13.671385000270675,
+        "min": 10.59979999990901,
+        "max": 50.71499999758089,
+        "median": 12.811900003725896,
+        "stdev": 4.267162186969035
+      },
+      "inference_ms": {
+        "avg": 8.72148800001014,
+        "min": 8.002400005352683,
+        "max": 11.432200000854209,
+        "median": 8.405349999520695,
+        "stdev": 0.7399760515653165
+      },
+      "postprocess_ms": {
+        "avg": 0.6166729999677045,
+        "min": 0.5527999965124764,
+        "max": 1.382399997964967,
+        "median": 0.574049998249393,
+        "stdev": 0.1360419717849773
+      },
+      "total_ms": {
+        "avg": 23.01253400015412,
+        "min": 19.240100002207328,
+        "max": 61.19899999612244,
+        "median": 21.96045000164304,
+        "stdev": 4.58716678018346
+      }
+    },
+    "speedup_pt_over_onnx_total": 1.8854850578002755
+  },
+  "judgement": {
+    "status": "PASS",
+    "warnings": [],
+    "limits": {
+      "pt_only": 0,
+      "onnx_only": 0,
+      "avg_conf_diff": 0.01,
+      "max_conf_diff": 0.03,
+      "avg_bbox_iou": 0.99,
+      "min_bbox_iou": 0.95
+    }
+  },
+  "notes": [
+    "PyTorch stage timings use Ultralytics result.speed values; total_ms is measured wall time around model.predict.",
+    "ONNX Runtime CUDA timing is measured around session.run; provider-level GPU synchronization is not exposed directly."
+  ]
+}
