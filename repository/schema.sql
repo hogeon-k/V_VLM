@@ -5,7 +5,10 @@ CREATE TABLE IF NOT EXISTS inspections (
     result_image_path TEXT,
     status TEXT NOT NULL,
     defect_count INTEGER NOT NULL DEFAULT 0,
+    vlm_status TEXT NOT NULL DEFAULT 'NOT_REQUESTED',
     vlm_description TEXT,
+    vlm_error_message TEXT,
+    vlm_updated_at TEXT,
     inspected_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

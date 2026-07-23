@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from model.defect_info import Detection
 from model.inspection_result import InspectionResult
+from model.inspection_result import VLM_STATUS_COMPLETED, VLM_STATUS_FAILED, VLM_STATUS_NOT_REQUESTED
 from repository.db_manager import DBManager
 from repository.inspection_repository import InspectionRepository
 from service.inspection_history_service import (
@@ -255,6 +256,81 @@ def test_selected_row_loads_detail_from_id(monkeypatch, tmp_path) -> None:
     assert view.defect_value.text() == "short"
     assert view.confidence_value.text() == "95.0%"
     assert view.detail.toPlainText() == "VLM explanation"
+
+
+def test_history_detail_enables_vlm_generation_for_ng_without_description(monkeypatch, tmp_path) -> None:
+    _app(monkeypatch)
+    result = InspectionResult(
+        source_image_path=tmp_path / "source.png",
+        result_image_path=tmp_path / "result.png",
+        id=10,
+        status="NG",
+        detections=[Detection(0, "short", 0.95, 1, 2, 3, 4)],
+        vlm_status=VLM_STATUS_NOT_REQUESTED,
+    )
+    view = HistoryView(FakeHistoryViewModel([result]))
+
+    view.table.selectRow(0)
+
+    assert view.generate_vlm_button.isEnabled()
+    assert view.generate_vlm_button.text() == "VLM 설명 생성"
+    assert "VLM 설명은 아직 생성되지 않았습니다." in view.detail.toPlainText()
+
+
+def test_history_vlm_completion_does_not_replace_different_selected_detail(monkeypatch, tmp_path) -> None:
+    _app(monkeypatch)
+    first = InspectionResult(
+        source_image_path=tmp_path / "first.png",
+        id=10,
+        status="NG",
+        detections=[Detection(0, "short", 0.95, 1, 2, 3, 4)],
+    )
+    second = InspectionResult(
+        source_image_path=tmp_path / "second.png",
+        id=20,
+        status="NG",
+        detections=[Detection(0, "open", 0.9, 5, 6, 7, 8)],
+    )
+    view = HistoryView(FakeHistoryViewModel([first, second]))
+    view.table.selectRow(0)
+
+    updated_second = InspectionResult(
+        source_image_path=tmp_path / "second.png",
+        id=20,
+        status="NG",
+        detections=[Detection(0, "open", 0.9, 5, 6, 7, 8)],
+        vlm_explanation="second VLM",
+        vlm_status=VLM_STATUS_COMPLETED,
+    )
+    view._on_vlm_finished(20, updated_second)
+
+    assert "second VLM" not in view.detail.toPlainText()
+    assert view._selected_inspection_id() == 10
+
+
+def test_history_vlm_failure_refreshes_selected_detail(monkeypatch, tmp_path) -> None:
+    _app(monkeypatch)
+    result = InspectionResult(
+        source_image_path=tmp_path / "source.png",
+        id=10,
+        status="NG",
+        detections=[Detection(0, "short", 0.95, 1, 2, 3, 4)],
+        vlm_status=VLM_STATUS_FAILED,
+        vlm_error_message="timeout",
+    )
+    messages: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda _parent, _title, text: messages.append(text),
+    )
+    view = HistoryView(FakeHistoryViewModel([result]))
+    view.table.selectRow(0)
+
+    view._on_vlm_failed(10, "timeout")
+
+    assert "timeout" in view.detail.toPlainText()
+    assert messages == ["VLM 분석 실패: timeout"]
 
 
 def test_history_table_shows_sequential_number_but_keeps_database_id(monkeypatch, tmp_path) -> None:

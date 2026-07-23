@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QDate, QObject, QThread, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -32,12 +32,34 @@ from view.image_viewer import ImageViewerDialog
 from viewmodel.history_viewmodel import HistoryViewModel
 
 
+class HistoryVlmWorker(QObject):
+    finished = Signal(int, object)
+    failed = Signal(int, str)
+
+    def __init__(self, viewmodel: HistoryViewModel, inspection_id: int) -> None:
+        super().__init__()
+        self.viewmodel = viewmodel
+        self.inspection_id = inspection_id
+
+    def run(self) -> None:
+        try:
+            result = self.viewmodel.run_vlm_for_inspection(self.inspection_id)
+        except Exception as exc:
+            self.failed.emit(self.inspection_id, str(exc))
+            return
+        self.finished.emit(self.inspection_id, result)
+
+
 class HistoryView(QWidget):
     def __init__(self, viewmodel: HistoryViewModel | None = None) -> None:
         super().__init__()
         self.viewmodel = viewmodel or HistoryViewModel()
         self.results: list[object] = []
         self._has_any_records = False
+        self._selected_detail: object | None = None
+        self._vlm_thread: QThread | None = None
+        self._vlm_worker: HistoryVlmWorker | None = None
+        self._vlm_processing_id: int | None = None
 
         self.all_dates_checkbox = QCheckBox("전체 기간")
         self.all_dates_checkbox.setChecked(True)
@@ -68,9 +90,12 @@ class HistoryView(QWidget):
         self.delete_all_button.setObjectName("DangerButton")
         self.delete_all_button.setEnabled(False)
         self.delete_all_button.clicked.connect(self._delete_all)
+        self.generate_vlm_button = QPushButton("VLM 설명 생성")
+        self.generate_vlm_button.setEnabled(False)
+        self.generate_vlm_button.clicked.connect(self._start_vlm_generation)
 
-        self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["번호", "검사 일시", "이미지명", "판정", "불량 유형", "신뢰도"])
+        self.table = QTableWidget(0, 7)
+        self.table.setHorizontalHeaderLabels(["번호", "검사 일시", "이미지명", "판정", "불량 유형", "신뢰도", "VLM"])
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -180,7 +205,11 @@ class HistoryView(QWidget):
         form.addRow("이미지명", self.image_name_value)
         layout.addWidget(info_group)
 
-        layout.addWidget(_section_title("VLM 설명"))
+        vlm_header = QHBoxLayout()
+        vlm_header.addWidget(_section_title("VLM 설명"))
+        vlm_header.addStretch(1)
+        vlm_header.addWidget(self.generate_vlm_button)
+        layout.addLayout(vlm_header)
         layout.addWidget(self.vlm_text, 1)
 
         scroll = QScrollArea()
@@ -235,6 +264,7 @@ class HistoryView(QWidget):
                 _status_text(getattr(result, "status", "")),
                 _defect_text(first_defect),
                 _confidence_text(first_defect),
+                _vlm_status_text(getattr(result, "vlm_status", None), getattr(result, "vlm_description", None)),
             ]
             for col, value in enumerate(values):
                 item = QTableWidgetItem()
@@ -274,6 +304,7 @@ class HistoryView(QWidget):
         self._render_detail(result)
 
     def _render_detail(self, result: object) -> None:
+        self._selected_detail = result
         self.original_image.set_image_path(
             getattr(result, "original_image_path", None),
             missing_text="원본 이미지를 찾을 수 없습니다.",
@@ -293,7 +324,101 @@ class HistoryView(QWidget):
         self.confidence_value.setText(_confidence_text(first_defect))
         self.inspected_at_value.setText(_dt_text(getattr(result, "inspected_at", None)) or "-")
         self.image_name_value.setText(str(getattr(result, "image_name", "") or "-"))
-        self.vlm_text.setPlainText(getattr(result, "vlm_description", None) or "VLM 분석 결과가 없습니다.")
+        self.vlm_text.setPlainText(_vlm_detail_text(result))
+        self._sync_vlm_button(result)
+
+    def _start_vlm_generation(self) -> None:
+        inspection_id = self._selected_inspection_id()
+        if inspection_id is None:
+            QMessageBox.information(self, "VLM 설명 생성", "VLM을 실행할 검사 기록을 선택해주세요.")
+            return
+        if self._vlm_thread is not None:
+            QMessageBox.information(self, "VLM 설명 생성", "이미 VLM 분석이 진행 중입니다.")
+            return
+
+        self._vlm_processing_id = inspection_id
+        self._set_current_row_vlm_status("분석 중")
+        self.vlm_text.setPlainText("VLM 분석 중...")
+        self.generate_vlm_button.setEnabled(False)
+        self.generate_vlm_button.setText("VLM 분석 중")
+
+        self._vlm_thread = QThread()
+        self._vlm_worker = HistoryVlmWorker(self.viewmodel, inspection_id)
+        self._vlm_worker.moveToThread(self._vlm_thread)
+        self._vlm_thread.started.connect(self._vlm_worker.run)
+        self._vlm_worker.finished.connect(self._on_vlm_finished)
+        self._vlm_worker.failed.connect(self._on_vlm_failed)
+        self._vlm_worker.finished.connect(self._vlm_thread.quit)
+        self._vlm_worker.failed.connect(self._vlm_thread.quit)
+        self._vlm_worker.finished.connect(self._vlm_worker.deleteLater)
+        self._vlm_worker.failed.connect(self._vlm_worker.deleteLater)
+        self._vlm_thread.finished.connect(self._cleanup_vlm_thread)
+        self._vlm_thread.finished.connect(self._vlm_thread.deleteLater)
+        self._vlm_thread.start()
+
+    def _on_vlm_finished(self, inspection_id: int, result: object) -> None:
+        self._replace_result(result)
+        self._set_row_vlm_status(inspection_id, _vlm_status_text(getattr(result, "vlm_status", None), getattr(result, "vlm_description", None)))
+        if self._selected_inspection_id() == inspection_id:
+            self._render_detail(result)
+
+    def _on_vlm_failed(self, inspection_id: int, message: str) -> None:
+        result = self.viewmodel.load_detail(inspection_id)
+        if result is not None:
+            self._replace_result(result)
+            self._set_row_vlm_status(inspection_id, _vlm_status_text(getattr(result, "vlm_status", None), getattr(result, "vlm_description", None)))
+            if self._selected_inspection_id() == inspection_id:
+                self._render_detail(result)
+        elif self._selected_inspection_id() == inspection_id:
+            self.vlm_text.setPlainText(f"VLM 분석 실패:\n{message}")
+            self._sync_vlm_button(None)
+        QMessageBox.warning(self, "VLM 설명 생성", f"VLM 분석 실패: {message}")
+
+    def _cleanup_vlm_thread(self) -> None:
+        self._vlm_thread = None
+        self._vlm_worker = None
+        self._vlm_processing_id = None
+        selected_id = self._selected_inspection_id()
+        if selected_id is not None:
+            result = self.viewmodel.load_detail(selected_id)
+            if result is not None:
+                self._render_detail(result)
+
+    def _replace_result(self, updated_result: object) -> None:
+        updated_id = getattr(updated_result, "id", None)
+        if updated_id is None:
+            return
+        for index, result in enumerate(self.results):
+            if getattr(result, "id", None) == updated_id:
+                self.results[index] = updated_result
+                return
+
+    def _set_current_row_vlm_status(self, text: str) -> None:
+        inspection_id = self._selected_inspection_id()
+        if inspection_id is not None:
+            self._set_row_vlm_status(inspection_id, text)
+
+    def _set_row_vlm_status(self, inspection_id: int, text: str) -> None:
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            if item is None or item.data(Qt.ItemDataRole.UserRole) != inspection_id:
+                continue
+            vlm_item = self.table.item(row, 6)
+            if vlm_item is not None:
+                vlm_item.setText(text)
+            return
+
+    def _sync_vlm_button(self, result: object | None) -> None:
+        if result is None:
+            self.generate_vlm_button.setEnabled(False)
+            self.generate_vlm_button.setText("VLM 설명 생성")
+            return
+        vlm_status = getattr(result, "vlm_status", None)
+        can_run = getattr(result, "status", None) == "NG" and vlm_status != "PROCESSING"
+        self.generate_vlm_button.setEnabled(can_run and self._vlm_thread is None)
+        self.generate_vlm_button.setText(
+            "VLM 다시 생성" if _has_vlm_description(result) else "VLM 설명 생성"
+        )
 
     def _selected_inspection_id(self) -> int | None:
         if not self.table.selectedItems():
@@ -396,6 +521,7 @@ class HistoryView(QWidget):
     def _clear_detail(self, *, clear_selection: bool) -> None:
         if clear_selection:
             self.table.clearSelection()
+        self._selected_detail = None
         self.original_image.clear_image("검사 이력을 선택하면 원본 이미지가 표시됩니다.")
         self.yolo_image.clear_image("검사 이력을 선택하면 YOLO 결과 이미지가 표시됩니다.")
         self.status_value.setText("-")
@@ -407,6 +533,7 @@ class HistoryView(QWidget):
         self.inspected_at_value.setText("-")
         self.image_name_value.setText("-")
         self.vlm_text.setPlainText("검사 이력을 선택하면 상세 결과가 표시됩니다.")
+        self._sync_vlm_button(None)
 
     def _update_delete_buttons(self) -> None:
         self.delete_selected_button.setEnabled(self._selected_inspection_id() is not None)
@@ -528,6 +655,40 @@ def _confidence_text(defect: object | None) -> str:
     numeric = float(value)
     percent = numeric * 100 if numeric <= 1 else numeric
     return f"{percent:.1f}%"
+
+
+def _has_vlm_description(result: object) -> bool:
+    description = getattr(result, "vlm_description", None)
+    return bool(str(description).strip()) if description is not None else False
+
+
+def _vlm_status_text(status: object, description: object | None = None) -> str:
+    status_text = str(status or "")
+    if status_text == "PROCESSING":
+        return "분석 중"
+    if status_text == "COMPLETED" or description:
+        return "완료"
+    if status_text == "FAILED":
+        return "실패"
+    return "미생성"
+
+
+def _vlm_detail_text(result: object) -> str:
+    status = str(getattr(result, "vlm_status", "") or "")
+    description = getattr(result, "vlm_description", None)
+    error_message = getattr(result, "vlm_error_message", None)
+    updated_at = _dt_text(getattr(result, "vlm_updated_at", None))
+    if status == "PROCESSING":
+        return "VLM 분석 중..."
+    if description:
+        text = str(description)
+        return f"{text}\n\n완료 시각: {updated_at}" if updated_at else text
+    if status == "FAILED":
+        message = str(error_message or "알 수 없는 오류")
+        return f"VLM 분석 실패:\n{message}"
+    if getattr(result, "status", None) == "OK":
+        return "정상 이미지입니다. 탐지된 불량이 없습니다."
+    return "VLM 설명은 아직 생성되지 않았습니다.\n이력 화면에서 VLM 설명 생성을 실행할 수 있습니다."
 
 
 def _status_text(status: object) -> str:

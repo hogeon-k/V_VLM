@@ -5,6 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from model.inspection_result import InspectionResult
+from model.inspection_result import (
+    VLM_STATUS_COMPLETED,
+    VLM_STATUS_NOT_REQUESTED,
+    VLM_STATUS_PROCESSING,
+)
 from repository.defect_repository import DefectRepository
 from repository.db_manager import DBManager
 
@@ -22,14 +27,16 @@ class InspectionRepository:
         """Persist an inspection and all defects in one transaction."""
         self.db_manager.initialize()
         inspected_at = inspection_result.inspected_at or datetime.now()
+        vlm_status = _vlm_status_for_save(inspection_result)
         with self.db_manager.get_connection() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO inspections (
                     image_name, original_image_path, result_image_path,
-                    status, defect_count, vlm_description, inspected_at
+                    status, defect_count, vlm_status, vlm_description,
+                    vlm_error_message, vlm_updated_at, inspected_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     inspection_result.image_name,
@@ -37,7 +44,10 @@ class InspectionRepository:
                     str(inspection_result.result_image_path) if inspection_result.result_image_path else None,
                     inspection_result.status,
                     inspection_result.defect_count,
+                    vlm_status,
                     inspection_result.vlm_description,
+                    inspection_result.vlm_error_message,
+                    _datetime_text(inspection_result.vlm_updated_at),
                     inspected_at.isoformat(timespec="seconds"),
                 ),
             )
@@ -48,7 +58,11 @@ class InspectionRepository:
                 connection=connection,
             )
             inspection_result.id = inspection_id
+            inspection_result.vlm_status = vlm_status
             return inspection_id
+
+    def get_by_id(self, inspection_id: int) -> InspectionResult | None:
+        return self.find_by_id(inspection_id)
 
     def find_by_id(self, inspection_id: int) -> InspectionResult | None:
         self.db_manager.initialize()
@@ -97,6 +111,45 @@ class InspectionRepository:
             except Exception:
                 connection.rollback()
                 raise
+
+    def try_mark_vlm_processing(self, inspection_id: int) -> bool:
+        """Atomically reserve one inspection row for VLM generation."""
+        self.db_manager.initialize()
+        now = datetime.now().isoformat(timespec="seconds")
+        with self.db_manager.get_connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE inspections
+                SET vlm_status = ?, vlm_error_message = NULL, vlm_updated_at = ?
+                WHERE id = ? AND vlm_status != ?
+                """,
+                (VLM_STATUS_PROCESSING, now, inspection_id, VLM_STATUS_PROCESSING),
+            )
+            return int(cursor.rowcount) == 1
+
+    def update_vlm_result(
+        self,
+        inspection_id: int,
+        status: str,
+        description: str | None,
+        error_message: str | None,
+    ) -> bool:
+        """Update VLM fields for an existing inspection row."""
+        self.db_manager.initialize()
+        now = datetime.now().isoformat(timespec="seconds")
+        with self.db_manager.get_connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE inspections
+                SET vlm_status = ?,
+                    vlm_description = ?,
+                    vlm_error_message = ?,
+                    vlm_updated_at = ?
+                WHERE id = ?
+                """,
+                (status, description, error_message, now, inspection_id),
+            )
+            return int(cursor.rowcount) == 1
 
     def find_recent(self, limit: int = 100) -> list[InspectionResult]:
         return self.search(limit=limit)
@@ -155,9 +208,33 @@ class InspectionRepository:
             status=row["status"],
             detections=self.defect_repository.find_by_inspection_id(int(row["id"])),
             vlm_explanation=row["vlm_description"],
+            vlm_status=_vlm_status_from_row(row),
+            vlm_error_message=row["vlm_error_message"] if "vlm_error_message" in row.keys() else None,
+            vlm_updated_at=_parse_datetime(row["vlm_updated_at"]) if "vlm_updated_at" in row.keys() else None,
             inspected_at=_parse_datetime(row["inspected_at"]),
         )
         return result
+
+
+def _vlm_status_for_save(inspection_result: InspectionResult) -> str:
+    if inspection_result.vlm_status and inspection_result.vlm_status != VLM_STATUS_NOT_REQUESTED:
+        return inspection_result.vlm_status
+    if inspection_result.vlm_description:
+        return VLM_STATUS_COMPLETED
+    return VLM_STATUS_NOT_REQUESTED
+
+
+def _vlm_status_from_row(row: Any) -> str:
+    keys = row.keys()
+    if "vlm_status" in keys and row["vlm_status"]:
+        return str(row["vlm_status"])
+    if row["vlm_description"]:
+        return VLM_STATUS_COMPLETED
+    return VLM_STATUS_NOT_REQUESTED
+
+
+def _datetime_text(value: datetime | None) -> str | None:
+    return value.isoformat(timespec="seconds") if value is not None else None
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
