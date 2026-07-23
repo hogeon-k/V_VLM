@@ -1,0 +1,609 @@
+{
+  "image_name": "04_open_circuit_02.jpg",
+  "image_path": "datasets\\pcb\\images\\test\\04_open_circuit_02.jpg",
+  "status": "PASS",
+  "status_reason": "Detection counts, classes, confidence, and boxes are within thresholds.",
+  "pytorch_detection_count": 3,
+  "onnx_detection_count": 3,
+  "matched_count": 3,
+  "pytorch_only_count": 0,
+  "onnx_only_count": 0,
+  "classes_match": true,
+  "confidence_diff_mean": 0.00020255645116170248,
+  "confidence_diff_max": 0.0004411637783050537,
+  "bbox_iou_mean": 1.0,
+  "bbox_iou_min": 1.0,
+  "pytorch_timing": {
+    "preprocess_ms": {
+      "mean_ms": 7.167469999330933,
+      "median_ms": 6.7698999991989695,
+      "min_ms": 5.703700000594836,
+      "max_ms": 8.921200002077967,
+      "std_ms": 1.0568592515678525,
+      "p95_ms": 8.88833000062732
+    },
+    "inference_ms": {
+      "mean_ms": 10.284155000408646,
+      "median_ms": 10.017699998570606,
+      "min_ms": 7.561700003861915,
+      "max_ms": 14.112299999396782,
+      "std_ms": 1.9654953236315256,
+      "p95_ms": 13.155839994942653
+    },
+    "postprocess_ms": {
+      "mean_ms": 2.9095199995936127,
+      "median_ms": 2.7744500002881978,
+      "min_ms": 2.3166000028140843,
+      "max_ms": 3.785199995036237,
+      "std_ms": 0.4295718297101466,
+      "p95_ms": 3.5676499974215403
+    },
+    "total_ms": {
+      "mean_ms": 65.09471999925154,
+      "median_ms": 65.12334999933955,
+      "min_ms": 52.5197000024491,
+      "max_ms": 81.60959999804618,
+      "std_ms": 8.36329946283849,
+      "p95_ms": 76.43979499734996
+    }
+  },
+  "onnx_timing": {
+    "preprocess_ms": {
+      "mean_ms": 16.252375000112806,
+      "median_ms": 15.11084999947343,
+      "min_ms": 12.146100001700688,
+      "max_ms": 21.687499996914994,
+      "std_ms": 2.75786460373859,
+      "p95_ms": 20.66377999872202
+    },
+    "inference_ms": {
+      "mean_ms": 9.466684999642894,
+      "median_ms": 9.08519999939017,
+      "min_ms": 8.14649999665562,
+      "max_ms": 12.716299999738112,
+      "std_ms": 1.2365896732404713,
+      "p95_ms": 11.604515001454274
+    },
+    "postprocess_ms": {
+      "mean_ms": 0.6957000005058944,
+      "median_ms": 0.5979000015940983,
+      "min_ms": 0.5010000022593886,
+      "max_ms": 1.1040000026696362,
+      "std_ms": 0.2064315177245818,
+      "p95_ms": 1.0778749972814694
+    },
+    "total_ms": {
+      "mean_ms": 26.420109999889974,
+      "median_ms": 25.231100000382867,
+      "min_ms": 20.799600002646912,
+      "max_ms": 33.10000000055879,
+      "std_ms": 3.7082999639839422,
+      "p95_ms": 32.37059000384761
+    }
+  },
+  "speedup": 2.4638322853130674,
+  "onnx_provider": "CUDAExecutionProvider",
+  "error_message": "",
+  "pytorch_detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.8150784373283386,
+      "bbox": [
+        475,
+        2239,
+        535,
+        2305
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.27734413743019104,
+      "bbox": [
+        436,
+        1722,
+        485,
+        1774
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.20168444514274597,
+      "bbox": [
+        127,
+        1237,
+        192,
+        1285
+      ]
+    }
+  ],
+  "onnx_detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.8150727152824402,
+      "bbox": [
+        475,
+        2239,
+        535,
+        2305
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.27750492095947266,
+      "bbox": [
+        436,
+        1722,
+        485,
+        1774
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.20212560892105103,
+      "bbox": [
+        127,
+        1237,
+        192,
+        1285
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.8150784373283386,
+        "bbox": [
+          475,
+          2239,
+          535,
+          2305
+        ]
+      },
+      "onnx": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.8150727152824402,
+        "bbox": [
+          475,
+          2239,
+          535,
+          2305
+        ]
+      },
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence_diff_abs": 5.7220458984375e-06
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.27734413743019104,
+        "bbox": [
+          436,
+          1722,
+          485,
+          1774
+        ]
+      },
+      "onnx": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.27750492095947266,
+        "bbox": [
+          436,
+          1722,
+          485,
+          1774
+        ]
+      },
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence_diff_abs": 0.0001607835292816162
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.20168444514274597,
+        "bbox": [
+          127,
+          1237,
+          192,
+          1285
+        ]
+      },
+      "onnx": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.20212560892105103,
+        "bbox": [
+          127,
+          1237,
+          192,
+          1285
+        ]
+      },
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence_diff_abs": 0.0004411637783050537
+    }
+  ],
+  "warnings": [],
+  "timing_rows": [
+    {
+      "backend": "pytorch",
+      "repeat_index": 0,
+      "preprocess_ms": 6.791200001316611,
+      "inference_ms": 9.631200002331752,
+      "postprocess_ms": 2.4355999994440936,
+      "total_ms": 71.87939999857917,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 1,
+      "preprocess_ms": 6.3413999960175715,
+      "inference_ms": 8.86249999894062,
+      "postprocess_ms": 3.003900004841853,
+      "total_ms": 58.67559999751393,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 2,
+      "preprocess_ms": 5.916000001889188,
+      "inference_ms": 7.738600004813634,
+      "postprocess_ms": 2.434099995298311,
+      "total_ms": 57.59010000474518,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 3,
+      "preprocess_ms": 6.748599997081328,
+      "inference_ms": 10.33109999843873,
+      "postprocess_ms": 2.6866999978665262,
+      "total_ms": 65.54909999977099,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 4,
+      "preprocess_ms": 6.634899997152388,
+      "inference_ms": 12.479099998017773,
+      "postprocess_ms": 2.604999994218815,
+      "total_ms": 60.731900004611816,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 5,
+      "preprocess_ms": 5.850599998666439,
+      "inference_ms": 7.561700003861915,
+      "postprocess_ms": 2.4508000060450286,
+      "total_ms": 53.27699999907054,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 6,
+      "preprocess_ms": 6.539399997564033,
+      "inference_ms": 7.770600001094863,
+      "postprocess_ms": 2.3166000028140843,
+      "total_ms": 53.263100002368446,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 7,
+      "preprocess_ms": 5.703700000594836,
+      "inference_ms": 7.647800004633609,
+      "postprocess_ms": 2.505399999790825,
+      "total_ms": 52.5197000024491,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 8,
+      "preprocess_ms": 7.148999997298233,
+      "inference_ms": 11.048400003346615,
+      "postprocess_ms": 3.3702000000630505,
+      "total_ms": 61.208599996462,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 9,
+      "preprocess_ms": 5.934700006037019,
+      "inference_ms": 9.704299998702481,
+      "postprocess_ms": 2.718700001423713,
+      "total_ms": 57.70529999426799,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 10,
+      "preprocess_ms": 6.6617999982554466,
+      "inference_ms": 10.478900003363378,
+      "postprocess_ms": 3.4757999965222552,
+      "total_ms": 64.69759999890812,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 11,
+      "preprocess_ms": 6.57610000052955,
+      "inference_ms": 9.01970000268193,
+      "postprocess_ms": 3.424700000323355,
+      "total_ms": 65.8010999977705,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 12,
+      "preprocess_ms": 7.823899999493733,
+      "inference_ms": 10.52670000353828,
+      "postprocess_ms": 2.7160999961779453,
+      "total_ms": 70.487700002559,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 13,
+      "preprocess_ms": 8.88660000055097,
+      "inference_ms": 12.331799996900372,
+      "postprocess_ms": 2.7707999979611486,
+      "total_ms": 71.66879999567755,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 14,
+      "preprocess_ms": 7.903099998657126,
+      "inference_ms": 12.007799996354152,
+      "postprocess_ms": 3.031599997484591,
+      "total_ms": 62.432800004899036,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 15,
+      "preprocess_ms": 7.756599996355362,
+      "inference_ms": 9.26880000042729,
+      "postprocess_ms": 2.9539000024669804,
+      "total_ms": 67.67810000019381,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 16,
+      "preprocess_ms": 8.241199997428339,
+      "inference_ms": 12.518199997430202,
+      "postprocess_ms": 3.1710000039311126,
+      "total_ms": 73.9285999952699,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 17,
+      "preprocess_ms": 8.522999996785074,
+      "inference_ms": 13.105499994708225,
+      "postprocess_ms": 3.5561999975470826,
+      "total_ms": 76.16769999731332,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 18,
+      "preprocess_ms": 8.921200002077967,
+      "inference_ms": 14.112299999396782,
+      "postprocess_ms": 3.785199995036237,
+      "total_ms": 81.60959999804618,
+      "provider": "0"
+    },
+    {
+      "backend": "pytorch",
+      "repeat_index": 19,
+      "preprocess_ms": 8.446400002867449,
+      "inference_ms": 9.538099999190308,
+      "postprocess_ms": 2.778100002615247,
+      "total_ms": 75.02259999455418,
+      "provider": "0"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 0,
+      "preprocess_ms": 12.871300001279451,
+      "inference_ms": 8.486999999149702,
+      "postprocess_ms": 0.7893000001786277,
+      "total_ms": 22.151199998916127,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 1,
+      "preprocess_ms": 13.89750000089407,
+      "inference_ms": 11.320199999317992,
+      "postprocess_ms": 0.531600002432242,
+      "total_ms": 25.753800000529736,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 2,
+      "preprocess_ms": 14.97630000085337,
+      "inference_ms": 8.59100000525359,
+      "postprocess_ms": 0.5419999943114817,
+      "total_ms": 24.113300001772586,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 3,
+      "preprocess_ms": 17.27969999774359,
+      "inference_ms": 10.167000000365078,
+      "postprocess_ms": 0.5203000036999583,
+      "total_ms": 27.970499999355525,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 4,
+      "preprocess_ms": 16.29740000498714,
+      "inference_ms": 9.021400001074653,
+      "postprocess_ms": 0.5390000005718321,
+      "total_ms": 25.862599999527447,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 5,
+      "preprocess_ms": 14.965800000936724,
+      "inference_ms": 9.163800001260825,
+      "postprocess_ms": 0.5729000040446408,
+      "total_ms": 24.708400000235997,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 6,
+      "preprocess_ms": 14.756099997612182,
+      "inference_ms": 8.603499998571351,
+      "postprocess_ms": 0.5391999948187731,
+      "total_ms": 23.903000001155306,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 7,
+      "preprocess_ms": 15.24539999809349,
+      "inference_ms": 8.769100000790786,
+      "postprocess_ms": 0.6417999975383282,
+      "total_ms": 24.660600000061095,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 8,
+      "preprocess_ms": 14.286300000094343,
+      "inference_ms": 8.813599997665733,
+      "postprocess_ms": 0.5134000020916574,
+      "total_ms": 23.616800004674587,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 9,
+      "preprocess_ms": 14.86039999872446,
+      "inference_ms": 8.531699997547548,
+      "postprocess_ms": 0.5243000050541013,
+      "total_ms": 23.919699997350108,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 10,
+      "preprocess_ms": 17.710700005409308,
+      "inference_ms": 9.148999997705687,
+      "postprocess_ms": 0.6228999991435558,
+      "total_ms": 27.487399995152373,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 11,
+      "preprocess_ms": 17.35019999614451,
+      "inference_ms": 12.716299999738112,
+      "postprocess_ms": 0.7885000013629906,
+      "total_ms": 30.861799998092465,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 12,
+      "preprocess_ms": 21.687499996914994,
+      "inference_ms": 9.56229999428615,
+      "postprocess_ms": 1.0764999969978817,
+      "total_ms": 32.332200004020706,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 13,
+      "preprocess_ms": 19.53219999995781,
+      "inference_ms": 9.859999998298008,
+      "postprocess_ms": 1.1040000026696362,
+      "total_ms": 30.50529999745777,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 14,
+      "preprocess_ms": 19.73030000226572,
+      "inference_ms": 9.207499999320135,
+      "postprocess_ms": 0.855400001455564,
+      "total_ms": 29.79819999745814,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 15,
+      "preprocess_ms": 19.26880000246456,
+      "inference_ms": 10.740999998233747,
+      "postprocess_ms": 1.0296000036760233,
+      "total_ms": 31.04670000175247,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 16,
+      "preprocess_ms": 20.609899998817127,
+      "inference_ms": 11.546000001544598,
+      "postprocess_ms": 0.9380999981658533,
+      "total_ms": 33.10000000055879,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 17,
+      "preprocess_ms": 14.598399997339584,
+      "inference_ms": 8.510300001944415,
+      "postprocess_ms": 0.7536999983130954,
+      "total_ms": 23.870199998782482,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 18,
+      "preprocess_ms": 12.146100001700688,
+      "inference_ms": 8.14649999665562,
+      "postprocess_ms": 0.5010000022593886,
+      "total_ms": 20.799600002646912,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "backend": "onnx",
+      "repeat_index": 19,
+      "preprocess_ms": 12.977200000023004,
+      "inference_ms": 8.426500004134141,
+      "postprocess_ms": 0.5305000013322569,
+      "total_ms": 21.940899998298846,
+      "provider": "CUDAExecutionProvider"
+    }
+  ]
+}

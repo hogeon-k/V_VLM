@@ -1,0 +1,40 @@
+{
+  "python_version": "3.11.9",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "opencv_version": "5.0.0",
+  "pytorch_model_path": "models\\best.pt",
+  "onnx_model_path": "models\\best.onnx",
+  "pytorch_model_size_bytes": 5552723,
+  "onnx_model_size_bytes": 10776549,
+  "started_at": "2026-07-23T15:24:03",
+  "cli_args": {
+    "images": "datasets\\pcb\\images\\test",
+    "pytorch_model": "models\\best.pt",
+    "onnx_model": "models\\best.onnx",
+    "output": "benchmarks\\onnx\\test_report",
+    "imgsz": 960,
+    "conf": 0.15,
+    "iou": 0.7,
+    "match_iou": 0.5,
+    "device": "0",
+    "warmup": 5,
+    "repeat": 20,
+    "save_all_images": false,
+    "fail_on_warning": false,
+    "extensions": ".jpg,.jpeg,.png,.bmp,.webp",
+    "recursive": false,
+    "max_images": null,
+    "seed": null
+  },
+  "pytorch_version": "2.5.1+cu121",
+  "cuda_available": true,
+  "gpu_name": "NVIDIA GeForce RTX 4060",
+  "pytorch_device": "0",
+  "ultralytics_version": "8.4.90",
+  "onnxruntime_version": "1.20.1",
+  "onnxruntime_available_providers": [
+    "TensorrtExecutionProvider",
+    "CUDAExecutionProvider",
+    "CPUExecutionProvider"
+  ]
+}
