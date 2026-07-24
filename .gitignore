@@ -48,6 +48,13 @@ runs/
 outputs/
 results/
 
+# C++ ONNX batch generated details
+benchmarks/cpp_onnx/batch_test/python/
+benchmarks/cpp_onnx/batch_test/cpp/
+benchmarks/cpp_onnx/batch_test/comparisons/
+benchmarks/cpp_onnx/batch_test/failure_cases/*
+!benchmarks/cpp_onnx/batch_test/failure_cases/.gitkeep
+
 # Logs
 logs/*
 !logs/.gitkeep

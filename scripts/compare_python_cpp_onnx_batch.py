@@ -719,6 +719,7 @@ def to_jsonable(value: Any) -> Any:
 def _create_output_dirs(output_dir: Path) -> None:
     for name in ("python", "cpp", "comparisons", "failure_cases"):
         (output_dir / name).mkdir(parents=True, exist_ok=True)
+    (output_dir / "failure_cases" / ".gitkeep").touch()
 
 
 def _timing_sample(image_name: str, backend: str, repeat_index: int, data: dict[str, Any]) -> TimingSample:
