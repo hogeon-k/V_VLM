@@ -20,6 +20,7 @@ from scripts.compare_pytorch_onnx_batch import (
     judge_status,
     percentile,
     run_batch,
+    speed_comparison_validity,
     timing_stats,
     validate_args,
 )
@@ -44,6 +45,7 @@ def make_args(tmp_path: Path, image_dir: Path) -> argparse.Namespace:
         repeat=2,
         save_all_images=False,
         fail_on_warning=False,
+        require_cuda=False,
         extensions=".jpg,.png",
         recursive=False,
         max_images=None,
@@ -62,8 +64,8 @@ def timed_result(detections: list[Detection], backend: str = "pytorch", total: f
     return TimedDetectionsResult(
         detections=detections,
         timings=[
-            TimingSample(backend, 0, 1.0, total - 2.0, 1.0, total, provider),
-            TimingSample(backend, 1, 1.0, total, 1.0, total + 2.0, provider),
+            TimingSample("image.jpg", backend, 0, 1.0, total - 2.0, 1.0, total, provider),
+            TimingSample("image.jpg", backend, 1, 1.0, total, 1.0, total + 2.0, provider),
         ],
         providers=[provider] if backend == "onnx" else [],
     )
@@ -203,7 +205,9 @@ def test_run_batch_writes_json_csv_and_mismatch_files(tmp_path: Path, monkeypatc
     assert result.summary["counts"]["fail_count"] == 1
     assert (args.output / "summary.json").exists()
     assert (args.output / "image_results.csv").exists()
-    assert (args.output / "timing.csv").exists()
+    assert (args.output / "timing_raw.csv").exists()
+    assert (args.output / "timing_statistics.csv").exists()
+    assert (args.output / "benchmark_report.md").exists()
     assert "[WARNING] warn.jpg" in (args.output / "mismatch_images.txt").read_text(encoding="utf-8")
     assert "[FAIL] fail.jpg" in (args.output / "mismatch_images.txt").read_text(encoding="utf-8")
 
@@ -228,7 +232,7 @@ def test_timing_csv_contains_per_image_repeat_rows(tmp_path: Path, monkeypatch: 
         class_names={1: "short"},
     )
 
-    with (args.output / "timing.csv").open(encoding="utf-8-sig", newline="") as handle:
+    with (args.output / "timing_raw.csv").open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     assert len(rows) == 4
     assert {row["backend"] for row in rows} == {"pytorch", "onnx"}
@@ -322,3 +326,42 @@ def test_run_batch_returns_code_2_for_input_errors(tmp_path: Path) -> None:
     result = run_batch(args, pytorch_runner=lambda _path: timed_result([]), onnx_runner=lambda _path: timed_result([], "onnx"))
 
     assert result.exit_code == 2
+
+
+def test_timing_stats_includes_count_and_fps() -> None:
+    stats = timing_stats([10.0, 20.0])
+
+    assert stats["count"] == 2
+    assert stats["fps"] == pytest.approx(1000.0 / 15.0)
+
+
+def test_speed_comparison_validity_requires_cuda_devices(tmp_path: Path) -> None:
+    args = argparse.Namespace(warmup=10, repeat=50)
+    image = tmp_path / "one.jpg"
+    result = argparse.Namespace(status="PASS")
+    environment = {"cuda_available": True}
+
+    ok, reason = speed_comparison_validity(
+        args,
+        [image],
+        [result],
+        [
+            TimingSample("one.jpg", "pytorch", 0, 1.0, 2.0, 1.0, 4.0, "cuda:0"),
+            TimingSample("one.jpg", "onnx", 0, 1.0, 1.0, 1.0, 3.0, "CUDAExecutionProvider"),
+        ],
+        environment,
+    )
+
+    assert ok is True
+    assert "Both backends used CUDA" in reason
+
+    ok, reason = speed_comparison_validity(
+        args,
+        [image],
+        [result],
+        [TimingSample("one.jpg", "pytorch", 0, 1.0, 2.0, 1.0, 4.0, "cuda:0")],
+        environment,
+    )
+
+    assert ok is False
+    assert "CUDAExecutionProvider" in reason

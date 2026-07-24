@@ -1,0 +1,40 @@
+{
+  "model": "models\\best.onnx",
+  "exists": true,
+  "loaded": true,
+  "checker_passed": true,
+  "error": null,
+  "inputs": [
+    {
+      "name": "images",
+      "shape": [
+        1,
+        3,
+        960,
+        960
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output0",
+      "shape": [
+        1,
+        7,
+        18900
+      ]
+    }
+  ],
+  "opsets": [
+    {
+      "domain": "ai.onnx",
+      "version": 17
+    }
+  ],
+  "opset": 17,
+  "producer_name": "pytorch",
+  "producer_version": "2.5.1",
+  "dynamic_shape": false,
+  "file_size_bytes": 10776549,
+  "sha256": "a09230192923f641107411a56ded1d2403fe56b783f51d589400295066a30685"
+}

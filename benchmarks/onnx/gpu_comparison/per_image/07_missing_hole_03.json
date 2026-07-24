@@ -1,0 +1,1367 @@
+{
+  "image_name": "07_missing_hole_03.jpg",
+  "image_path": "datasets\\pcb\\images\\test\\07_missing_hole_03.jpg",
+  "status": "PASS",
+  "status_reason": "Detection counts, classes, confidence, and boxes are within thresholds.",
+  "pytorch_detection_count": 5,
+  "onnx_detection_count": 5,
+  "matched_count": 5,
+  "pytorch_only_count": 0,
+  "onnx_only_count": 0,
+  "classes_match": true,
+  "confidence_diff_mean": 0.00018836259841918944,
+  "confidence_diff_max": 0.0003756284713745117,
+  "bbox_iou_mean": 1.0,
+  "bbox_iou_min": 1.0,
+  "pytorch_timing": {
+    "preprocess_ms": {
+      "count": 50,
+      "mean_ms": 10.63832200539764,
+      "median_ms": 10.615900013362989,
+      "min_ms": 5.932700005359948,
+      "max_ms": 15.911099995719269,
+      "std_ms": 2.6032492506882736,
+      "p95_ms": 14.55486500490224,
+      "fps": 93.99978676079019
+    },
+    "inference_ms": {
+      "count": 50,
+      "mean_ms": 13.53006599820219,
+      "median_ms": 12.515399983385578,
+      "min_ms": 8.015300001716241,
+      "max_ms": 28.277000004891306,
+      "std_ms": 3.764867865716291,
+      "p95_ms": 20.272314987960264,
+      "fps": 73.90946948321428
+    },
+    "postprocess_ms": {
+      "count": 50,
+      "mean_ms": 3.813089999021031,
+      "median_ms": 3.4537000028649345,
+      "min_ms": 2.2991999867372215,
+      "max_ms": 8.0199999792967,
+      "std_ms": 1.2695076760291786,
+      "p95_ms": 6.821769996895452,
+      "fps": 262.25449707631844
+    },
+    "total_ms": {
+      "count": 50,
+      "mean_ms": 74.38646399881691,
+      "median_ms": 75.7578999910038,
+      "min_ms": 49.24399999435991,
+      "max_ms": 101.49090000777505,
+      "std_ms": 12.21526053146049,
+      "p95_ms": 92.14491499296855,
+      "fps": 13.443306029654867
+    }
+  },
+  "onnx_timing": {
+    "preprocess_ms": {
+      "count": 50,
+      "mean_ms": 22.017222001450136,
+      "median_ms": 20.84630000172183,
+      "min_ms": 16.1777000175789,
+      "max_ms": 37.735700025223196,
+      "std_ms": 4.876040724938664,
+      "p95_ms": 31.1588550102897,
+      "fps": 45.41899063987892
+    },
+    "inference_ms": {
+      "count": 50,
+      "mean_ms": 11.835390001069754,
+      "median_ms": 11.476750019937754,
+      "min_ms": 8.9637000055518,
+      "max_ms": 17.726799997035414,
+      "std_ms": 2.254979176291754,
+      "p95_ms": 16.84426000720123,
+      "fps": 84.49235723618858
+    },
+    "postprocess_ms": {
+      "count": 50,
+      "mean_ms": 1.568828002200462,
+      "median_ms": 1.4118000108283013,
+      "min_ms": 0.8536000095773488,
+      "max_ms": 6.347299990011379,
+      "std_ms": 0.8898944611237908,
+      "p95_ms": 2.6208600029349323,
+      "fps": 637.4185051499494
+    },
+    "total_ms": {
+      "count": 50,
+      "mean_ms": 35.43042000208516,
+      "median_ms": 33.99155000806786,
+      "min_ms": 26.26879999297671,
+      "max_ms": 57.275099999969825,
+      "std_ms": 6.708430958374607,
+      "p95_ms": 48.122239991789684,
+      "fps": 28.22433377705226
+    }
+  },
+  "speedup": 2.0995083883972896,
+  "onnx_provider": "CUDAExecutionProvider",
+  "error_message": "",
+  "pytorch_detections": [
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.92176753282547,
+      "bbox": [
+        2107,
+        1034,
+        2181,
+        1123
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.9138675928115845,
+      "bbox": [
+        1857,
+        286,
+        1933,
+        364
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.8845520615577698,
+      "bbox": [
+        1692,
+        521,
+        1765,
+        600
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.8536537885665894,
+      "bbox": [
+        847,
+        1023,
+        931,
+        1122
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.6721959710121155,
+      "bbox": [
+        1089,
+        754,
+        1161,
+        843
+      ]
+    }
+  ],
+  "onnx_detections": [
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.9219426512718201,
+      "bbox": [
+        2107,
+        1034,
+        2181,
+        1123
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.9139595031738281,
+      "bbox": [
+        1857,
+        286,
+        1933,
+        364
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.884353518486023,
+      "bbox": [
+        1692,
+        521,
+        1765,
+        600
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.8535531759262085,
+      "bbox": [
+        847,
+        1023,
+        931,
+        1122
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.67257159948349,
+      "bbox": [
+        1089,
+        754,
+        1161,
+        843
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.92176753282547,
+        "bbox": [
+          2107,
+          1034,
+          2181,
+          1123
+        ]
+      },
+      "onnx": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9219426512718201,
+        "bbox": [
+          2107,
+          1034,
+          2181,
+          1123
+        ]
+      },
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence_diff_abs": 0.00017511844635009766
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9138675928115845,
+        "bbox": [
+          1857,
+          286,
+          1933,
+          364
+        ]
+      },
+      "onnx": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9139595031738281,
+        "bbox": [
+          1857,
+          286,
+          1933,
+          364
+        ]
+      },
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence_diff_abs": 9.191036224365234e-05
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8845520615577698,
+        "bbox": [
+          1692,
+          521,
+          1765,
+          600
+        ]
+      },
+      "onnx": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.884353518486023,
+        "bbox": [
+          1692,
+          521,
+          1765,
+          600
+        ]
+      },
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence_diff_abs": 0.00019854307174682617
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8536537885665894,
+        "bbox": [
+          847,
+          1023,
+          931,
+          1122
+        ]
+      },
+      "onnx": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8535531759262085,
+        "bbox": [
+          847,
+          1023,
+          931,
+          1122
+        ]
+      },
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence_diff_abs": 0.00010061264038085938
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.6721959710121155,
+        "bbox": [
+          1089,
+          754,
+          1161,
+          843
+        ]
+      },
+      "onnx": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.67257159948349,
+        "bbox": [
+          1089,
+          754,
+          1161,
+          843
+        ]
+      },
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence_diff_abs": 0.0003756284713745117
+    }
+  ],
+  "warnings": [],
+  "timing_rows": [
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 0,
+      "preprocess_ms": 9.656300011556596,
+      "inference_ms": 17.923599982168525,
+      "postprocess_ms": 3.8912000018171966,
+      "total_ms": 92.60179998818785,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 1,
+      "preprocess_ms": 10.06010000128299,
+      "inference_ms": 11.896599986357614,
+      "postprocess_ms": 3.403700015041977,
+      "total_ms": 85.71340001071803,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 2,
+      "preprocess_ms": 12.344199989456683,
+      "inference_ms": 12.299199996050447,
+      "postprocess_ms": 3.018400020664558,
+      "total_ms": 80.7253000093624,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 3,
+      "preprocess_ms": 10.597100015729666,
+      "inference_ms": 13.203900016378611,
+      "postprocess_ms": 3.0473000078927726,
+      "total_ms": 72.41130000329576,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 4,
+      "preprocess_ms": 14.60270001552999,
+      "inference_ms": 16.200899990508333,
+      "postprocess_ms": 8.0199999792967,
+      "total_ms": 94.51109997462481,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 5,
+      "preprocess_ms": 11.255399993387982,
+      "inference_ms": 13.844199973391369,
+      "postprocess_ms": 4.019200016045943,
+      "total_ms": 83.41419999487698,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 6,
+      "preprocess_ms": 9.23630001489073,
+      "inference_ms": 8.769400010351092,
+      "postprocess_ms": 2.913099975557998,
+      "total_ms": 61.940599989611655,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 7,
+      "preprocess_ms": 10.634700010996312,
+      "inference_ms": 10.351400007493794,
+      "postprocess_ms": 2.522399998269975,
+      "total_ms": 58.19470001733862,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 8,
+      "preprocess_ms": 5.943800002569333,
+      "inference_ms": 9.256099991034716,
+      "postprocess_ms": 3.412399993976578,
+      "total_ms": 49.24399999435991,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 9,
+      "preprocess_ms": 5.932700005359948,
+      "inference_ms": 12.6676999789197,
+      "postprocess_ms": 3.5097000072710216,
+      "total_ms": 56.03989999508485,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 10,
+      "preprocess_ms": 7.063900004141033,
+      "inference_ms": 8.015300001716241,
+      "postprocess_ms": 2.3575999948661774,
+      "total_ms": 51.265600020997226,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 11,
+      "preprocess_ms": 5.992999998852611,
+      "inference_ms": 11.150900012580678,
+      "postprocess_ms": 3.146500006550923,
+      "total_ms": 58.381999988341704,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 12,
+      "preprocess_ms": 9.772200020961463,
+      "inference_ms": 12.172099988674745,
+      "postprocess_ms": 3.346100013004616,
+      "total_ms": 68.98389998241328,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 13,
+      "preprocess_ms": 9.221200016327202,
+      "inference_ms": 12.363099987851456,
+      "postprocess_ms": 2.825999981723726,
+      "total_ms": 68.80330000421964,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 14,
+      "preprocess_ms": 8.171599998604506,
+      "inference_ms": 8.40670001343824,
+      "postprocess_ms": 2.394099981756881,
+      "total_ms": 52.86309999064542,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 15,
+      "preprocess_ms": 6.631299998844042,
+      "inference_ms": 8.493200002703816,
+      "postprocess_ms": 3.241300000809133,
+      "total_ms": 55.420200020307675,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 16,
+      "preprocess_ms": 8.288299984997138,
+      "inference_ms": 13.962900004116818,
+      "postprocess_ms": 3.6097999836783856,
+      "total_ms": 67.50370000372641,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 17,
+      "preprocess_ms": 11.884300009114668,
+      "inference_ms": 13.718800008064136,
+      "postprocess_ms": 2.738600014708936,
+      "total_ms": 77.56760000484064,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 18,
+      "preprocess_ms": 13.60400000703521,
+      "inference_ms": 10.387299989815801,
+      "postprocess_ms": 3.0206999799702317,
+      "total_ms": 77.48629999696277,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 19,
+      "preprocess_ms": 13.259700004709885,
+      "inference_ms": 11.567600013222545,
+      "postprocess_ms": 3.45359998755157,
+      "total_ms": 84.88979999674484,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 20,
+      "preprocess_ms": 8.519800001522526,
+      "inference_ms": 10.458199976710603,
+      "postprocess_ms": 2.874600002542138,
+      "total_ms": 88.32079998683184,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 21,
+      "preprocess_ms": 11.086099984822795,
+      "inference_ms": 16.867199999978766,
+      "postprocess_ms": 4.430400003911927,
+      "total_ms": 87.6163000066299,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 22,
+      "preprocess_ms": 12.053600017679855,
+      "inference_ms": 10.075300000607967,
+      "postprocess_ms": 3.0169999809004366,
+      "total_ms": 80.76209999853745,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 23,
+      "preprocess_ms": 14.041599992197007,
+      "inference_ms": 16.062800015788525,
+      "postprocess_ms": 4.3018000142183155,
+      "total_ms": 78.93700001295656,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 24,
+      "preprocess_ms": 14.496399991912767,
+      "inference_ms": 17.785500007448718,
+      "postprocess_ms": 7.266100001288578,
+      "total_ms": 91.58649999881163,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 25,
+      "preprocess_ms": 9.187699994072318,
+      "inference_ms": 13.526900002034381,
+      "postprocess_ms": 5.712499987566844,
+      "total_ms": 71.85710000339895,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 26,
+      "preprocess_ms": 8.954399992944673,
+      "inference_ms": 11.878799996338785,
+      "postprocess_ms": 3.777700010687113,
+      "total_ms": 69.77000000188127,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 27,
+      "preprocess_ms": 8.385399996768683,
+      "inference_ms": 11.339299991959706,
+      "postprocess_ms": 2.867800008971244,
+      "total_ms": 70.97179998527281,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 28,
+      "preprocess_ms": 11.469999997643754,
+      "inference_ms": 11.765100003685802,
+      "postprocess_ms": 4.025800008093938,
+      "total_ms": 75.23369998671114,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 29,
+      "preprocess_ms": 12.083400011761114,
+      "inference_ms": 11.909499997273088,
+      "postprocess_ms": 3.707099996972829,
+      "total_ms": 80.57270001154393,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 30,
+      "preprocess_ms": 12.424600019585341,
+      "inference_ms": 14.43219999782741,
+      "postprocess_ms": 3.438499988988042,
+      "total_ms": 79.26239998778328,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 31,
+      "preprocess_ms": 13.714900007471442,
+      "inference_ms": 15.029999980470166,
+      "postprocess_ms": 4.3227999994996935,
+      "total_ms": 84.34940001461655,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 32,
+      "preprocess_ms": 15.911099995719269,
+      "inference_ms": 18.955999985337257,
+      "postprocess_ms": 3.453800018178299,
+      "total_ms": 84.87330001662485,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 33,
+      "preprocess_ms": 14.324700023280457,
+      "inference_ms": 21.957799996016547,
+      "postprocess_ms": 4.494099994190037,
+      "total_ms": 101.49090000777505,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 34,
+      "preprocess_ms": 14.913399994838983,
+      "inference_ms": 13.925099978223443,
+      "postprocess_ms": 5.848000000696629,
+      "total_ms": 85.17659999779426,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 35,
+      "preprocess_ms": 6.851700018160045,
+      "inference_ms": 10.63060000888072,
+      "postprocess_ms": 3.111700003501028,
+      "total_ms": 65.80749998101965,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 36,
+      "preprocess_ms": 7.521999999880791,
+      "inference_ms": 12.162699975306168,
+      "postprocess_ms": 3.2352000125683844,
+      "total_ms": 63.24109999695793,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 37,
+      "preprocess_ms": 9.30450001033023,
+      "inference_ms": 11.390200001187623,
+      "postprocess_ms": 2.956700016511604,
+      "total_ms": 63.941000000340864,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 38,
+      "preprocess_ms": 11.87200000276789,
+      "inference_ms": 12.19509998918511,
+      "postprocess_ms": 4.010899981949478,
+      "total_ms": 68.61469999421388,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 39,
+      "preprocess_ms": 12.348900025244802,
+      "inference_ms": 15.859300008742139,
+      "postprocess_ms": 4.445700003998354,
+      "total_ms": 77.20660002087243,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 40,
+      "preprocess_ms": 13.891800015699118,
+      "inference_ms": 14.451800001552328,
+      "postprocess_ms": 4.074900003615767,
+      "total_ms": 87.28639999753796,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 41,
+      "preprocess_ms": 10.195700015174225,
+      "inference_ms": 12.019599991617724,
+      "postprocess_ms": 3.477899997960776,
+      "total_ms": 66.61769998027012,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 42,
+      "preprocess_ms": 9.306099993409589,
+      "inference_ms": 16.535700007807463,
+      "postprocess_ms": 6.278699991526082,
+      "total_ms": 76.28209999529645,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 43,
+      "preprocess_ms": 8.905399998184294,
+      "inference_ms": 13.665400008903816,
+      "postprocess_ms": 3.6204999778419733,
+      "total_ms": 78.07600000523962,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 44,
+      "preprocess_ms": 10.133700008736923,
+      "inference_ms": 13.707000005524606,
+      "postprocess_ms": 2.740099997026846,
+      "total_ms": 67.04749999335036,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 45,
+      "preprocess_ms": 12.82770000398159,
+      "inference_ms": 15.586000023176894,
+      "postprocess_ms": 3.619700000854209,
+      "total_ms": 72.91749998694286,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 46,
+      "preprocess_ms": 12.826899997889996,
+      "inference_ms": 21.349299990106374,
+      "postprocess_ms": 4.814399988390505,
+      "total_ms": 75.13769998331554,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 47,
+      "preprocess_ms": 11.384500015992671,
+      "inference_ms": 28.277000004891306,
+      "postprocess_ms": 7.305400009499863,
+      "total_ms": 89.990200009197,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 48,
+      "preprocess_ms": 11.15960002061911,
+      "inference_ms": 15.808099997229874,
+      "postprocess_ms": 3.2338000019080937,
+      "total_ms": 80.35979999112897,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 49,
+      "preprocess_ms": 7.665700017241761,
+      "inference_ms": 10.244900011457503,
+      "postprocess_ms": 2.2991999867372215,
+      "total_ms": 58.05500000133179,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 0,
+      "preprocess_ms": 33.357500011334196,
+      "inference_ms": 13.194500003010035,
+      "postprocess_ms": 1.7152000218629837,
+      "total_ms": 48.27829997520894,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 1,
+      "preprocess_ms": 19.52880001044832,
+      "inference_ms": 12.970300012966618,
+      "postprocess_ms": 1.0607999865897,
+      "total_ms": 33.568000013474375,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 2,
+      "preprocess_ms": 22.265100007643923,
+      "inference_ms": 10.51800002460368,
+      "postprocess_ms": 1.1132000072393566,
+      "total_ms": 33.90040001249872,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 3,
+      "preprocess_ms": 26.380900002550334,
+      "inference_ms": 11.271800001850352,
+      "postprocess_ms": 0.8756000024732202,
+      "total_ms": 38.53230000822805,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 4,
+      "preprocess_ms": 23.955500015290454,
+      "inference_ms": 11.679999995976686,
+      "postprocess_ms": 1.254800008609891,
+      "total_ms": 36.89770001801662,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 5,
+      "preprocess_ms": 22.20159998978488,
+      "inference_ms": 10.439799982123077,
+      "postprocess_ms": 1.0483999794814736,
+      "total_ms": 33.6949999909848,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 6,
+      "preprocess_ms": 24.841300008120015,
+      "inference_ms": 11.49130001431331,
+      "postprocess_ms": 1.045000011799857,
+      "total_ms": 37.38799999700859,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 7,
+      "preprocess_ms": 26.60359998117201,
+      "inference_ms": 13.185300020268187,
+      "postprocess_ms": 1.501299993833527,
+      "total_ms": 41.29850000026636,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 8,
+      "preprocess_ms": 20.202300016535446,
+      "inference_ms": 9.868399996776134,
+      "postprocess_ms": 1.2759999954141676,
+      "total_ms": 31.35650002514012,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 9,
+      "preprocess_ms": 16.338099987478927,
+      "inference_ms": 8.9637000055518,
+      "postprocess_ms": 0.9584000217728317,
+      "total_ms": 26.26879999297671,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 10,
+      "preprocess_ms": 20.345900004031137,
+      "inference_ms": 9.33259999146685,
+      "postprocess_ms": 0.8671999967191368,
+      "total_ms": 30.55349999340251,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 11,
+      "preprocess_ms": 22.6494999951683,
+      "inference_ms": 9.055100003024563,
+      "postprocess_ms": 1.3205999857746065,
+      "total_ms": 33.03190000588074,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 12,
+      "preprocess_ms": 20.963699993444607,
+      "inference_ms": 13.554999983171001,
+      "postprocess_ms": 1.5937999996822327,
+      "total_ms": 36.119199998211116,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 13,
+      "preprocess_ms": 20.72890000999905,
+      "inference_ms": 11.702800024067983,
+      "postprocess_ms": 2.51130000106059,
+      "total_ms": 34.949000022606924,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 14,
+      "preprocess_ms": 19.178399990778416,
+      "inference_ms": 12.97140002134256,
+      "postprocess_ms": 4.113800008781254,
+      "total_ms": 36.277800012612715,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 15,
+      "preprocess_ms": 17.216899985214695,
+      "inference_ms": 17.092299996875226,
+      "postprocess_ms": 1.49350002175197,
+      "total_ms": 35.81199998734519,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 16,
+      "preprocess_ms": 19.509300007484853,
+      "inference_ms": 11.462200025562197,
+      "postprocess_ms": 1.2833999935537577,
+      "total_ms": 32.2683000122197,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 17,
+      "preprocess_ms": 17.183999996632338,
+      "inference_ms": 9.34610000695102,
+      "postprocess_ms": 1.0896000021602958,
+      "total_ms": 27.629399992292747,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 18,
+      "preprocess_ms": 16.44000000669621,
+      "inference_ms": 9.004499996080995,
+      "postprocess_ms": 1.424300018697977,
+      "total_ms": 26.875500014284626,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 19,
+      "preprocess_ms": 19.164899975294247,
+      "inference_ms": 9.957300004316494,
+      "postprocess_ms": 0.8756999741308391,
+      "total_ms": 30.004999978700653,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 20,
+      "preprocess_ms": 28.75810000114143,
+      "inference_ms": 14.458500023465604,
+      "postprocess_ms": 1.2937999854329973,
+      "total_ms": 44.51819998212159,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 21,
+      "preprocess_ms": 31.29030001582578,
+      "inference_ms": 13.075800001388416,
+      "postprocess_ms": 1.5919000143185258,
+      "total_ms": 45.96850002417341,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 22,
+      "preprocess_ms": 23.549100005766377,
+      "inference_ms": 13.823899993440136,
+      "postprocess_ms": 1.7151999927591532,
+      "total_ms": 39.09839998232201,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 23,
+      "preprocess_ms": 30.99820000352338,
+      "inference_ms": 16.541100019821897,
+      "postprocess_ms": 1.812900009099394,
+      "total_ms": 49.36080001061782,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 24,
+      "preprocess_ms": 19.487100013066083,
+      "inference_ms": 9.598300006473437,
+      "postprocess_ms": 1.5896999975666404,
+      "total_ms": 30.68560000974685,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 25,
+      "preprocess_ms": 18.10380001552403,
+      "inference_ms": 9.74439998390153,
+      "postprocess_ms": 1.0039999906439334,
+      "total_ms": 28.86150000267662,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 26,
+      "preprocess_ms": 22.654100001091138,
+      "inference_ms": 10.673599987057969,
+      "postprocess_ms": 1.5141000039875507,
+      "total_ms": 34.850799973355606,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 27,
+      "preprocess_ms": 26.241099985782057,
+      "inference_ms": 12.400799983879551,
+      "postprocess_ms": 1.484000007621944,
+      "total_ms": 40.140400000382215,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 28,
+      "preprocess_ms": 37.735700025223196,
+      "inference_ms": 17.726799997035414,
+      "postprocess_ms": 1.799699995899573,
+      "total_ms": 57.275099999969825,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 29,
+      "preprocess_ms": 30.683100019814447,
+      "inference_ms": 14.52999998582527,
+      "postprocess_ms": 2.7105000044684857,
+      "total_ms": 47.93150001205504,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 30,
+      "preprocess_ms": 23.38689999305643,
+      "inference_ms": 17.32159999664873,
+      "postprocess_ms": 6.347299990011379,
+      "total_ms": 47.06330000772141,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 31,
+      "preprocess_ms": 19.89809999940917,
+      "inference_ms": 12.27809998090379,
+      "postprocess_ms": 1.6190999886021018,
+      "total_ms": 33.80609999294393,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 32,
+      "preprocess_ms": 17.69489998696372,
+      "inference_ms": 12.873500003479421,
+      "postprocess_ms": 1.409200020134449,
+      "total_ms": 31.98640001937747,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 33,
+      "preprocess_ms": 23.622200009413064,
+      "inference_ms": 10.014500003308058,
+      "postprocess_ms": 0.8536000095773488,
+      "total_ms": 34.499900008086115,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 34,
+      "preprocess_ms": 16.914899984840304,
+      "inference_ms": 9.183300018776208,
+      "postprocess_ms": 1.3245000154711306,
+      "total_ms": 27.429900015704334,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 35,
+      "preprocess_ms": 27.965999994194135,
+      "inference_ms": 11.095199995907024,
+      "postprocess_ms": 1.127199997426942,
+      "total_ms": 40.199600014602765,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 36,
+      "preprocess_ms": 24.124399991706014,
+      "inference_ms": 13.219699991168454,
+      "postprocess_ms": 1.4144000015221536,
+      "total_ms": 38.7707999907434,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 37,
+      "preprocess_ms": 19.23429997987114,
+      "inference_ms": 10.489899985259399,
+      "postprocess_ms": 1.1402000091038644,
+      "total_ms": 30.872999981511384,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 38,
+      "preprocess_ms": 19.230599980801344,
+      "inference_ms": 10.391199990408495,
+      "postprocess_ms": 1.6062000067904592,
+      "total_ms": 31.237199989845976,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 39,
+      "preprocess_ms": 18.624299991643056,
+      "inference_ms": 10.466400010045618,
+      "postprocess_ms": 1.6583999968133867,
+      "total_ms": 30.758899985812604,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 40,
+      "preprocess_ms": 16.1777000175789,
+      "inference_ms": 9.66139999218285,
+      "postprocess_ms": 1.6098000050988048,
+      "total_ms": 27.458199998363853,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 41,
+      "preprocess_ms": 17.26520000374876,
+      "inference_ms": 10.872699989704415,
+      "postprocess_ms": 1.2635000166483223,
+      "total_ms": 29.409100010525435,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 42,
+      "preprocess_ms": 16.498700017109513,
+      "inference_ms": 9.265200002118945,
+      "postprocess_ms": 1.4928000164218247,
+      "total_ms": 27.266400022199377,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 43,
+      "preprocess_ms": 18.152300006477162,
+      "inference_ms": 12.456800002837554,
+      "postprocess_ms": 0.9331000037491322,
+      "total_ms": 31.546899990644306,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 44,
+      "preprocess_ms": 19.307400012621656,
+      "inference_ms": 10.148500005016103,
+      "postprocess_ms": 1.8745000124908984,
+      "total_ms": 31.340000015916303,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 45,
+      "preprocess_ms": 21.662300016032532,
+      "inference_ms": 13.629499997477978,
+      "postprocess_ms": 1.1733999999705702,
+      "total_ms": 36.472000007051975,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 46,
+      "preprocess_ms": 20.970400015357882,
+      "inference_ms": 13.54620000347495,
+      "postprocess_ms": 2.0696000137832016,
+      "total_ms": 36.59980001975782,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 47,
+      "preprocess_ms": 22.217099991394207,
+      "inference_ms": 13.241499982541427,
+      "postprocess_ms": 2.422699995804578,
+      "total_ms": 37.88910000002943,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 48,
+      "preprocess_ms": 16.668399999616668,
+      "inference_ms": 11.894900002516806,
+      "postprocess_ms": 0.8646999776829034,
+      "total_ms": 29.435799981001765,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "07_missing_hole_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 49,
+      "preprocess_ms": 22.688199998810887,
+      "inference_ms": 10.0838000071235,
+      "postprocess_ms": 1.299499999731779,
+      "total_ms": 34.082700003637,
+      "provider": "CUDAExecutionProvider"
+    }
+  ]
+}

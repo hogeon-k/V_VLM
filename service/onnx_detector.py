@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
+import os
 import statistics
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +21,103 @@ DEFAULT_CLASS_NAMES = {
     1: "short",
     2: "missing_hole",
 }
+
+_DLL_DIRECTORY_HANDLES: dict[Path, object | None] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class TorchCudaPreloadResult:
+    attempted: bool
+    success: bool
+    error: str | None = None
+    cuda_available: bool | None = None
+    torch_version: str | None = None
+    torch_cuda_version: str | None = None
+    cudnn_version: int | None = None
+
+
+def package_subdir(package_name: str, *parts: str) -> Path | None:
+    try:
+        spec = importlib.util.find_spec(package_name)
+    except (ImportError, ValueError):
+        return None
+    if spec is None:
+        return None
+    locations = spec.submodule_search_locations
+    if locations:
+        base = Path(next(iter(locations)))
+    elif spec.origin:
+        base = Path(spec.origin).resolve().parent
+    else:
+        return None
+    return base.joinpath(*parts)
+
+
+def windows_dll_directory_candidates() -> list[Path]:
+    candidates: list[Path] = [
+        Path(sys.prefix) / "Lib" / "site-packages" / "torch" / "lib",
+        Path(sys.prefix) / "Lib" / "site-packages" / "onnxruntime" / "capi",
+    ]
+    torch_lib = package_subdir("torch", "lib")
+    ort_capi = package_subdir("onnxruntime", "capi")
+    for candidate in (torch_lib, ort_capi):
+        if candidate is not None:
+            candidates.append(candidate)
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate.absolute()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(resolved)
+    return unique
+
+
+def register_windows_dll_directories() -> list[Path]:
+    if os.name != "nt":
+        return []
+
+    registered: list[Path] = []
+    for candidate in windows_dll_directory_candidates():
+        if not candidate.is_dir():
+            continue
+        if candidate in registered:
+            continue
+        if candidate not in _DLL_DIRECTORY_HANDLES:
+            handle = os.add_dll_directory(str(candidate)) if hasattr(os, "add_dll_directory") else None
+            _DLL_DIRECTORY_HANDLES[candidate] = handle
+        registered.append(candidate)
+    return registered
+
+
+def preload_torch_cuda_dlls() -> TorchCudaPreloadResult:
+    try:
+        import torch
+    except Exception as exc:
+        return TorchCudaPreloadResult(attempted=True, success=False, error=f"{type(exc).__name__}: {exc}")
+
+    try:
+        cuda_available = bool(torch.cuda.is_available())
+        result = {
+            "cuda_available": cuda_available,
+            "torch_version": str(torch.__version__),
+            "torch_cuda_version": str(torch.version.cuda),
+            "cudnn_version": torch.backends.cudnn.version(),
+        }
+        if not cuda_available:
+            return TorchCudaPreloadResult(attempted=True, success=False, error="torch.cuda.is_available() returned False", **result)
+        torch.cuda.init()
+        tensor = torch.zeros(1, device="cuda")
+        torch.cuda.synchronize()
+        del tensor
+        return TorchCudaPreloadResult(attempted=True, success=True, **result)
+    except Exception as exc:
+        return TorchCudaPreloadResult(attempted=True, success=False, error=f"{type(exc).__name__}: {exc}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,16 +365,37 @@ class OnnxDetector:
         conf: float = 0.15,
         iou: float = 0.5,
         class_names: dict[int, str] | None = None,
+        requested_provider: str = "CUDAExecutionProvider",
+        require_cuda: bool = False,
+        preload_torch_cuda: bool = True,
+        register_windows_dlls: bool = True,
     ) -> None:
         self.model_path = Path(model_path)
         self.imgsz = imgsz
         self.conf = conf
         self.iou = iou
         self.class_names = class_names or DEFAULT_CLASS_NAMES
+        self.require_cuda = require_cuda
+        self.preload_torch_cuda = preload_torch_cuda
+        self.register_windows_dlls = register_windows_dlls
+        self.requested_provider = requested_provider
+        self.actual_providers: list[str] = []
+        self.using_cuda = False
+        self.registered_dll_directories: list[str] = []
+        self.cuda_preload_attempted = False
+        self.cuda_preload_success = False
+        self.cuda_initialization_error: str | None = None
         self._session: Any | None = None
         self._input_name = ""
         self._output_name = ""
         self._input_shape: list[Any] = []
+
+    def _requested_providers(self, available: list[str]) -> list[Any]:
+        if self.requested_provider == "CPUExecutionProvider":
+            return ["CPUExecutionProvider"]
+        if self.requested_provider in available:
+            return [(self.requested_provider, {"device_id": 0}), "CPUExecutionProvider"]
+        return ["CPUExecutionProvider"]
 
     def _load_session(self) -> Any:
         if not self.model_path.exists():
@@ -282,20 +403,46 @@ class OnnxDetector:
         if self._session is not None:
             return self._session
 
+        if self.register_windows_dlls:
+            self.registered_dll_directories = [str(path) for path in register_windows_dll_directories()]
+        if self.requested_provider == "CUDAExecutionProvider" and self.preload_torch_cuda:
+            preload = preload_torch_cuda_dlls()
+            self.cuda_preload_attempted = preload.attempted
+            self.cuda_preload_success = preload.success
+            self.cuda_initialization_error = preload.error
+            if self.require_cuda and not preload.success:
+                raise RuntimeError(
+                    "CUDAExecutionProvider was required, but PyTorch CUDA preload failed. "
+                    "Run scripts/diagnose_onnxruntime_cuda.py to inspect CUDA, cuDNN, DLL, and PATH dependencies. "
+                    f"Reason: {preload.error}"
+                )
+
         try:
             import onnxruntime as ort
         except ImportError as exc:
             raise RuntimeError("onnxruntime is not installed. Install onnxruntime-gpu or onnxruntime.") from exc
 
         available = ort.get_available_providers()
-        providers = [provider for provider in ("CUDAExecutionProvider", "CPUExecutionProvider") if provider in available]
-        if not providers:
-            providers = ["CPUExecutionProvider"]
+        providers = self._requested_providers(available)
 
         try:
             self._session = ort.InferenceSession(str(self.model_path), providers=providers)
-        except Exception:
+        except Exception as exc:
+            if self.require_cuda:
+                raise RuntimeError(
+                    "CUDAExecutionProvider was required, but ONNX Runtime failed to create a CUDA session. "
+                    "Run scripts/diagnose_onnxruntime_cuda.py to inspect CUDA, cuDNN, DLL, and PATH dependencies. "
+                    f"Reason: {type(exc).__name__}: {exc}"
+                ) from exc
             self._session = ort.InferenceSession(str(self.model_path), providers=["CPUExecutionProvider"])
+
+        self.actual_providers = list(self._session.get_providers())
+        self.using_cuda = "CUDAExecutionProvider" in self.actual_providers
+        if self.require_cuda and not self.using_cuda:
+            raise RuntimeError(
+                "CUDAExecutionProvider was required, but ONNX Runtime created a CPU-only session. "
+                "Run scripts/diagnose_onnxruntime_cuda.py to inspect CUDA, cuDNN, DLL, and PATH dependencies."
+            )
 
         inputs = self._session.get_inputs()
         outputs = self._session.get_outputs()

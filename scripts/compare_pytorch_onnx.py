@@ -97,6 +97,7 @@ def synchronize_cuda() -> None:
 
 
 def run_pytorch_once(model: Any, image_path: Path, imgsz: int, conf: float, iou: float, device: str) -> tuple[list[Detection], dict[str, float]]:
+    synchronize_cuda()
     start_total = time.perf_counter()
     prediction = model.predict(
         source=str(image_path),

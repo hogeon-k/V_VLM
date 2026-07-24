@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import sys
+import types
+
 import numpy as np
 import pytest
 
 from model.defect_info import Detection
+from service import onnx_detector
 from service.onnx_detector import (
     LetterboxInfo,
+    OnnxDetector,
     bbox_iou,
     class_aware_nms,
     detection_to_dict,
     letterbox,
     postprocess_output,
+    register_windows_dll_directories,
     restore_boxes_to_original,
     validate_onnx_output,
+    windows_dll_directory_candidates,
     xywh_to_xyxy,
 )
 
@@ -113,3 +120,118 @@ def test_detection_to_dict_structure() -> None:
         "confidence": 0.8,
         "bbox": [1, 2, 3, 4],
     }
+
+
+def test_windows_dll_directory_candidates_are_deduplicated(monkeypatch, tmp_path) -> None:
+    torch_pkg = tmp_path / "torch"
+    ort_pkg = tmp_path / "onnxruntime"
+    monkeypatch.setattr(onnx_detector.sys, "prefix", str(tmp_path))
+    monkeypatch.setattr(onnx_detector, "package_subdir", lambda name, *parts: {"torch": torch_pkg / "lib", "onnxruntime": ort_pkg / "capi"}.get(name))
+
+    candidates = windows_dll_directory_candidates()
+
+    assert candidates == [
+        tmp_path / "Lib" / "site-packages" / "torch" / "lib",
+        tmp_path / "Lib" / "site-packages" / "onnxruntime" / "capi",
+        torch_pkg / "lib",
+        ort_pkg / "capi",
+    ]
+
+
+def test_register_windows_dll_directories_registers_existing_unique_paths(monkeypatch, tmp_path) -> None:
+    first = tmp_path / "torch" / "lib"
+    second = tmp_path / "onnxruntime" / "capi"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    handles: list[str] = []
+    monkeypatch.setattr(onnx_detector.os, "name", "nt")
+    monkeypatch.setattr(onnx_detector, "windows_dll_directory_candidates", lambda: [first, first, second, tmp_path / "missing"])
+    monkeypatch.setattr(onnx_detector.os, "add_dll_directory", lambda path: handles.append(path) or object(), raising=False)
+    onnx_detector._DLL_DIRECTORY_HANDLES.clear()
+
+    registered = register_windows_dll_directories()
+    registered_again = register_windows_dll_directories()
+
+    assert registered == [first, second]
+    assert registered_again == [first, second]
+    assert handles == [str(first), str(second)]
+
+
+def test_register_windows_dll_directories_noop_on_non_windows(monkeypatch) -> None:
+    monkeypatch.setattr(onnx_detector.os, "name", "posix")
+
+    assert register_windows_dll_directories() == []
+
+
+class _FakeNode:
+    def __init__(self, name: str, shape: list[int]) -> None:
+        self.name = name
+        self.shape = shape
+
+
+class _FakeSession:
+    def __init__(self, _model_path: str, providers: list[object]) -> None:
+        self._providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if providers and providers[0] != "CPUExecutionProvider" else ["CPUExecutionProvider"]
+
+    def get_providers(self) -> list[str]:
+        return self._providers
+
+    def get_inputs(self) -> list[_FakeNode]:
+        return [_FakeNode("images", [1, 3, 960, 960])]
+
+    def get_outputs(self) -> list[_FakeNode]:
+        return [_FakeNode("output0", [1, 7, 18900])]
+
+
+def _install_fake_onnxruntime(monkeypatch, session_cls: type[_FakeSession] = _FakeSession) -> None:
+    fake_ort = types.SimpleNamespace(
+        get_available_providers=lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        InferenceSession=session_cls,
+    )
+    monkeypatch.setitem(sys.modules, "onnxruntime", fake_ort)
+
+
+def test_onnx_detector_cuda_session_success_sets_provider_state(monkeypatch, tmp_path) -> None:
+    model = tmp_path / "best.onnx"
+    model.write_bytes(b"fake")
+    _install_fake_onnxruntime(monkeypatch)
+    monkeypatch.setattr(onnx_detector, "register_windows_dll_directories", lambda: [tmp_path / "torch" / "lib"])
+    monkeypatch.setattr(onnx_detector, "preload_torch_cuda_dlls", lambda: onnx_detector.TorchCudaPreloadResult(True, True))
+
+    detector = OnnxDetector(model)
+    detector._load_session()
+
+    assert detector.using_cuda is True
+    assert detector.actual_providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    assert detector.cuda_preload_attempted is True
+    assert detector.cuda_preload_success is True
+    assert detector.registered_dll_directories == [str(tmp_path / "torch" / "lib")]
+
+
+def test_onnx_detector_cpu_request_skips_torch_cuda_preload(monkeypatch, tmp_path) -> None:
+    model = tmp_path / "best.onnx"
+    model.write_bytes(b"fake")
+    _install_fake_onnxruntime(monkeypatch)
+    monkeypatch.setattr(onnx_detector, "preload_torch_cuda_dlls", lambda: pytest.fail("CPU mode must not preload torch CUDA"))
+
+    detector = OnnxDetector(model, requested_provider="CPUExecutionProvider")
+    detector._load_session()
+
+    assert detector.using_cuda is False
+    assert detector.cuda_preload_attempted is False
+
+
+def test_onnx_detector_require_cuda_raises_on_fallback(monkeypatch, tmp_path) -> None:
+    model = tmp_path / "best.onnx"
+    model.write_bytes(b"fake")
+
+    class CpuOnlySession(_FakeSession):
+        def __init__(self, _model_path: str, providers: list[object]) -> None:
+            self._providers = ["CPUExecutionProvider"]
+
+    _install_fake_onnxruntime(monkeypatch, CpuOnlySession)
+    monkeypatch.setattr(onnx_detector, "preload_torch_cuda_dlls", lambda: onnx_detector.TorchCudaPreloadResult(True, True))
+
+    detector = OnnxDetector(model, require_cuda=True)
+    with pytest.raises(RuntimeError, match="CPU-only session"):
+        detector._load_session()

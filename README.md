@@ -216,6 +216,69 @@ Pascal VOC XML 파일을 `data/annotations/` 아래에 두거나 [tools/convert_
 
 기본 출력 위치는 `runs/compare/`입니다.
 
+## ONNX 변환 검증 및 평가
+
+현재 ONNX 기준 모델은 `models/best.onnx`이며, PyTorch 원본 모델은 `models/best.pt`입니다. 변환 조건은 고정 입력 `1 x 3 x 960 x 960`, batch size `1`, dynamic shape 미사용, 기본 opset `12`를 기준으로 관리합니다. ONNX simplify 적용 여부는 변환 실행 조건에 따라 별도 기록해야 하며, 이 저장소의 검증 스크립트는 실제 ONNX 파일의 input/output shape, opset, producer, SHA256을 읽어 결과에 남깁니다.
+
+ONNX 모델 유효성 검사와 메타데이터 생성:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\validate_onnx_model.py `
+  --model models\best.onnx `
+  --source-model models\best.pt `
+  --data datasets\pcb\data.yaml `
+  --output benchmarks\onnx\onnx_validation.json `
+  --metadata-output models\model_metadata.json
+```
+
+생성되는 `models/model_metadata.json`에는 모델명, 원본 모델, task, input/output 이름과 shape, batch size, dynamic 여부, opset, 클래스 순서, ONNX 파일 크기, SHA256, 생성 시각이 저장됩니다. 클래스 이름은 `datasets/pcb/data.yaml`의 `names` 순서를 우선 사용합니다.
+
+ONNX 단독 평가 및 PyTorch 비교:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_onnx.py `
+  --model models\best.onnx `
+  --pytorch-model models\best.pt `
+  --data datasets\pcb\data.yaml `
+  --split test `
+  --imgsz 960 `
+  --conf 0.001 `
+  --iou 0.7 `
+  --match-iou 0.5 `
+  --device 0 `
+  --output benchmarks\onnx
+```
+
+평가에서 `--iou`는 NMS IoU이고, `--match-iou`는 GT와 prediction의 정답 매칭 IoU입니다. 매칭은 같은 클래스끼리만 confidence 내림차순의 one-to-one greedy 방식으로 수행합니다. mAP는 IoU `0.50:0.05:0.95` 구간에서 101-point interpolated precision envelope 방식으로 계산합니다. Ultralytics 내부 metric 객체를 그대로 쓰는 방식은 아니므로, 이 제한은 결과 JSON의 `matching.method`에도 기록됩니다.
+
+기본 PASS/WARNING 기준:
+
+| 항목 | 기준 |
+| --- | --- |
+| `abs(mAP50 difference)` | `<= 0.01` |
+| `abs(mAP50-95 difference)` | `<= 0.01` |
+| `abs(precision difference)` | `<= 0.02` |
+| `abs(recall difference)` | `<= 0.02` |
+| `class mismatch count` | `0` |
+| `new FP count` | `0` |
+| `new FN count` | `0` |
+| `average matched box IoU` | `>= 0.99` |
+
+치명적인 실행 오류나 모델 오류는 `FAIL`, 기준 초과는 `WARNING`, 기준 만족은 `PASS`로 기록됩니다. 기준값은 `scripts\evaluate_onnx.py`의 CLI 인자로 조정할 수 있습니다.
+
+주요 결과 파일:
+
+- `benchmarks/onnx/onnx_validation.json`: ONNX checker 결과와 모델 입출력 정보
+- `benchmarks/onnx/onnx_metrics.json`: ONNX 전체 및 클래스별 Precision, Recall, F1, mAP, TP/FP/FN
+- `benchmarks/onnx/onnx_predictions.json`: 이미지별 ONNX 예측 결과
+- `benchmarks/onnx/pytorch_metrics.json`: 동일 조건의 PyTorch 평가 지표
+- `benchmarks/onnx/pytorch_predictions.json`: 이미지별 PyTorch 예측 결과
+- `benchmarks/onnx/pytorch_vs_onnx.csv`: 이미지별 PyTorch/ONNX 탐지 수와 매칭 요약
+- `benchmarks/onnx/final_comparison.json`: 최종 PASS/WARNING/FAIL 판정과 차이 요약
+- `benchmarks/onnx/failure_cases/failure_cases.json`: ONNX FP/FN 감사 기록
+
+ONNX Runtime은 `CUDAExecutionProvider`를 우선 사용하고 사용 불가하면 `CPUExecutionProvider`로 fallback합니다. 이 정보는 평가 결과의 `runtime.providers`에 기록됩니다.
+
 ## 예측 오류 분석
 
 `compare_predictions.py`는 PCB 테스트 이미지와 YOLO TXT 정답 라벨을 직접 매칭해 TP/FP/FN을 계산합니다.

@@ -42,6 +42,7 @@ CSV_ENCODING = "utf-8-sig"
 
 @dataclass(frozen=True, slots=True)
 class TimingSample:
+    image_name: str
     backend: str
     repeat_index: int
     preprocess_ms: float | None
@@ -117,6 +118,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--repeat", type=int, default=20)
     parser.add_argument("--save-all-images", action="store_true")
     parser.add_argument("--fail-on-warning", action="store_true")
+    parser.add_argument("--require-cuda", action="store_true", help="Abort unless both PyTorch and ONNX Runtime use CUDA.")
     parser.add_argument("--extensions", default=",".join(SUPPORTED_EXTENSIONS))
     parser.add_argument("--recursive", action="store_true")
     parser.add_argument("--max-images", type=int)
@@ -179,15 +181,18 @@ def extensions_from_arg(value: str) -> tuple[str, ...]:
 
 def timing_stats(samples: list[float]) -> dict[str, float | None]:
     if not samples:
-        return {"mean_ms": None, "median_ms": None, "min_ms": None, "max_ms": None, "std_ms": None, "p95_ms": None}
+        return {"count": 0, "mean_ms": None, "median_ms": None, "min_ms": None, "max_ms": None, "std_ms": None, "p95_ms": None, "fps": None}
     values = sorted(float(value) for value in samples)
+    mean_ms = float(statistics.fmean(values))
     return {
-        "mean_ms": float(statistics.fmean(values)),
+        "count": len(values),
+        "mean_ms": mean_ms,
         "median_ms": float(statistics.median(values)),
         "min_ms": float(values[0]),
         "max_ms": float(values[-1]),
         "std_ms": float(statistics.stdev(values)) if len(values) > 1 else 0.0,
         "p95_ms": percentile(values, 95.0),
+        "fps": 1000.0 / mean_ms if mean_ms > 0 else None,
     }
 
 
@@ -213,6 +218,34 @@ def summarize_backend_timings(timings: list[TimingSample]) -> dict[str, dict[str
         values = [float(value) for sample in timings if (value := getattr(sample, field_name)) is not None]
         result[field_name] = timing_stats(values)
     return result
+
+
+def summarize_timing_rows(timing_rows: list[TimingSample], backend: str) -> dict[str, dict[str, float | None]]:
+    return summarize_backend_timings([sample for sample in timing_rows if sample.backend == backend])
+
+
+def speed_comparison_validity(
+    args: argparse.Namespace,
+    images: list[Path],
+    results: list[ImageComparison],
+    timing_rows: list[TimingSample],
+    environment: dict[str, Any],
+) -> tuple[bool, str]:
+    pytorch_devices = sorted({sample.provider for sample in timing_rows if sample.backend == "pytorch" and sample.provider})
+    onnx_providers = sorted({sample.provider for sample in timing_rows if sample.backend == "onnx" and sample.provider})
+    if not any(device.startswith("cuda") for device in pytorch_devices):
+        return False, f"PyTorch actual device is not CUDA: {pytorch_devices or ['unknown']}"
+    if "CUDAExecutionProvider" not in onnx_providers:
+        return False, f"ONNX Runtime did not use CUDAExecutionProvider: {onnx_providers or ['unknown']}"
+    if not images:
+        return False, "No images were benchmarked."
+    if args.warmup < 0 or args.repeat < 1:
+        return False, "Invalid warm-up or repeat count."
+    if any(result.status == "ERROR" for result in results):
+        return False, "At least one image had a fatal inference error."
+    if environment.get("cuda_available") is not True:
+        return False, "torch.cuda.is_available() was not true."
+    return True, "Both backends used CUDA with the same image set, batch size, thresholds, warm-up, and repeat count."
 
 
 def compare_detection_sets(
@@ -346,10 +379,62 @@ def build_summary(
     ]
     pt_total = [sample.total_ms for sample in timing_rows if sample.backend == "pytorch"]
     onnx_total = [sample.total_ms for sample in timing_rows if sample.backend == "onnx"]
+    pt_inference = [sample.inference_ms for sample in timing_rows if sample.backend == "pytorch" and sample.inference_ms is not None]
+    onnx_inference = [sample.inference_ms for sample in timing_rows if sample.backend == "onnx" and sample.inference_ms is not None]
     speedups = [result.speedup for result in processed if result.speedup is not None]
+    pytorch_timing = summarize_timing_rows(timing_rows, "pytorch")
+    onnx_timing = summarize_timing_rows(timing_rows, "onnx")
+    speed_valid, speed_reason = speed_comparison_validity(args, images, results, timing_rows, environment)
+    accuracy_valid = (
+        sum(result.pytorch_only_count or 0 for result in processed) == 0
+        and sum(result.onnx_only_count or 0 for result in processed) == 0
+        and all(result.classes_match is not False for result in processed)
+        and (max(matched_conf_diffs) if matched_conf_diffs else 0.0) <= PASS_CONFIDENCE_DIFF_MAX
+        and (min(matched_ious) if matched_ious else 1.0) >= PASS_BBOX_IOU_MIN
+        and _count_status(results, "ERROR") == 0
+    )
 
     status = final_status(results)
+    if status == "PASS" and not speed_valid:
+        status = "WARNING"
+    speedup = {
+        "total_mean": calculate_speedup(timing_stats(pt_total)["mean_ms"], timing_stats(onnx_total)["mean_ms"]),
+        "total_median": calculate_speedup(timing_stats(pt_total)["median_ms"], timing_stats(onnx_total)["median_ms"]),
+        "total_p95": calculate_speedup(timing_stats(pt_total)["p95_ms"], timing_stats(onnx_total)["p95_ms"]),
+        "inference_mean": calculate_speedup(timing_stats(pt_inference)["mean_ms"], timing_stats(onnx_inference)["mean_ms"]),
+    }
     return {
+        "final_status": status,
+        "accuracy_comparison_valid": accuracy_valid,
+        "speed_comparison_valid": speed_valid,
+        "speed_comparison_reason": speed_reason,
+        "image_count": len(images),
+        "detection_summary": {
+            "pytorch_detection_count": sum(result.pytorch_detection_count or 0 for result in processed),
+            "onnx_detection_count": sum(result.onnx_detection_count or 0 for result in processed),
+            "matched_detection_count": sum(result.matched_count or 0 for result in processed),
+            "pytorch_only_count": sum(result.pytorch_only_count or 0 for result in processed),
+            "onnx_only_count": sum(result.onnx_only_count or 0 for result in processed),
+            "total_pytorch_detections": sum(result.pytorch_detection_count or 0 for result in processed),
+            "total_onnx_detections": sum(result.onnx_detection_count or 0 for result in processed),
+            "total_matched_detections": sum(result.matched_count or 0 for result in processed),
+            "total_pytorch_only": sum(result.pytorch_only_count or 0 for result in processed),
+            "total_onnx_only": sum(result.onnx_only_count or 0 for result in processed),
+        },
+        "accuracy_summary": {
+            "confidence_diff_mean": _mean_or_none(matched_conf_diffs),
+            "confidence_diff_max": max(matched_conf_diffs) if matched_conf_diffs else None,
+            "bbox_iou_mean": _mean_or_none(matched_ious),
+            "bbox_iou_min": min(matched_ious) if matched_ious else None,
+        },
+        "pytorch_timing": pytorch_timing,
+        "onnx_timing": onnx_timing,
+        "speedup": speedup,
+        "providers": {
+            "pytorch_actual_device": next((sample.provider for sample in timing_rows if sample.backend == "pytorch" and sample.provider), environment.get("pytorch_device")),
+            "onnx_actual_providers": sorted({provider for sample in timing_rows if sample.backend == "onnx" and (provider := sample.provider)}),
+        },
+        "environment": environment,
         "run_info": {
             "started_at": datetime.now().isoformat(timespec="seconds"),
             "command": " ".join(sys.argv),
@@ -368,7 +453,7 @@ def build_summary(
         },
         "onnx_runtime": {
             "available_providers": environment.get("onnxruntime_available_providers", []),
-            "selected_providers": sorted({provider for sample in timing_rows if (provider := sample.provider)}),
+            "selected_providers": sorted({provider for sample in timing_rows if sample.backend == "onnx" and (provider := sample.provider)}),
         },
         "thresholds": {
             "imgsz": args.imgsz,
@@ -389,7 +474,7 @@ def build_summary(
             "warning_rate": _rate(_count_status(results, "WARNING"), len(results)),
             "fail_rate": _rate(_count_status(results, "FAIL"), len(results)),
         },
-        "detection_summary": {
+        "legacy_detection_summary": {
             "total_pytorch_detections": sum(result.pytorch_detection_count or 0 for result in processed),
             "total_onnx_detections": sum(result.onnx_detection_count or 0 for result in processed),
             "total_matched_detections": sum(result.matched_count or 0 for result in processed),
@@ -416,7 +501,6 @@ def build_summary(
         "warning_images": [result.image_name for result in results if result.status == "WARNING"],
         "fail_images": [result.image_name for result in results if result.status == "FAIL"],
         "error_images": [result.image_name for result in results if result.status == "ERROR"],
-        "final_status": status,
     }
 
 
@@ -489,40 +573,65 @@ def build_real_runners(
     class_names: dict[int, str],
 ) -> tuple[PytorchRunner, OnnxRunner]:
     from ultralytics import YOLO
+    import torch
+
+    if args.require_cuda:
+        if not torch.cuda.is_available():
+            raise RuntimeError("GPU benchmark aborted: torch.cuda.is_available() returned False.")
+        requested_device = f"cuda:{args.device}" if str(args.device).isdigit() else str(args.device)
+        if not requested_device.startswith("cuda"):
+            raise RuntimeError(f"GPU benchmark aborted: requested PyTorch device is not CUDA: {args.device}")
 
     pytorch_model = YOLO(str(args.pytorch_model))
-    onnx_detector = OnnxDetector(args.onnx_model, imgsz=args.imgsz, conf=args.conf, iou=args.iou, class_names=class_names)
-
-    for _ in range(args.warmup):
-        run_pytorch_once(pytorch_model, warmup_image, args.imgsz, args.conf, args.iou, str(args.device))
-    for _ in range(args.warmup):
-        onnx_detector.detect_timed(warmup_image)
+    onnx_detector = OnnxDetector(args.onnx_model, imgsz=args.imgsz, conf=args.conf, iou=args.iou, class_names=class_names, require_cuda=args.require_cuda)
+    onnx_detector._load_session()
+    run_pytorch_once(pytorch_model, warmup_image, args.imgsz, args.conf, args.iou, str(args.device))
+    actual_pt_device = pytorch_actual_device(pytorch_model)
+    print(f"PyTorch actual device: {actual_pt_device}")
+    print(f"ONNX actual providers: {onnx_detector.actual_providers}")
+    print(f"CUDA required: {args.require_cuda}")
+    if args.require_cuda and not actual_pt_device.startswith("cuda"):
+        raise RuntimeError(f"GPU benchmark aborted: PyTorch actual device is not CUDA: {actual_pt_device}")
+    if args.require_cuda and not onnx_detector.using_cuda:
+        raise RuntimeError(
+            "GPU benchmark aborted: PyTorch is using CUDA, but ONNX Runtime is using CPUExecutionProvider. "
+            "Run scripts/diagnose_onnxruntime_cuda.py before benchmarking."
+        )
 
     def run_pt(image_path: Path) -> TimedDetectionsResult:
         detections: list[Detection] = []
         timings: list[TimingSample] = []
+        for _ in range(args.warmup):
+            run_pytorch_once(pytorch_model, image_path, args.imgsz, args.conf, args.iou, str(args.device))
         for repeat_index in range(args.repeat):
             detections, timing = run_pytorch_once(pytorch_model, image_path, args.imgsz, args.conf, args.iou, str(args.device))
+            actual_device = pytorch_actual_device(pytorch_model)
             timings.append(
                 TimingSample(
+                    image_name=image_path.name,
                     backend="pytorch",
                     repeat_index=repeat_index,
                     preprocess_ms=timing.get("preprocess_ms"),
                     inference_ms=timing.get("inference_ms"),
                     postprocess_ms=timing.get("postprocess_ms"),
                     total_ms=float(timing["total_ms"]),
-                    provider=str(args.device),
+                    provider=actual_device,
                 )
             )
+        if args.require_cuda and not (timings and timings[-1].provider.startswith("cuda")):
+            raise RuntimeError(f"GPU benchmark aborted: PyTorch actual device is not CUDA: {timings[-1].provider if timings else 'unknown'}")
         return TimedDetectionsResult(detections=detections, timings=timings)
 
     def run_onnx(image_path: Path) -> TimedDetectionsResult:
         timed = None
         timings: list[TimingSample] = []
+        for _ in range(args.warmup):
+            onnx_detector.detect_timed(image_path)
         for repeat_index in range(args.repeat):
             timed = onnx_detector.detect_timed(image_path)
             timings.append(
                 TimingSample(
+                    image_name=image_path.name,
                     backend="onnx",
                     repeat_index=repeat_index,
                     preprocess_ms=timed.preprocess_ms,
@@ -534,6 +643,11 @@ def build_real_runners(
             )
         if timed is None:
             raise RuntimeError("ONNX detector returned no timed result")
+        if args.require_cuda and "CUDAExecutionProvider" not in timed.providers:
+            raise RuntimeError(
+                "GPU benchmark aborted: PyTorch is using CUDA, but ONNX Runtime is using CPUExecutionProvider. "
+                "Run scripts/diagnose_onnxruntime_cuda.py before benchmarking."
+            )
         return TimedDetectionsResult(
             detections=timed.detections,
             timings=timings,
@@ -545,6 +659,14 @@ def build_real_runners(
         )
 
     return run_pt, run_onnx
+
+
+def pytorch_actual_device(model: Any) -> str:
+    try:
+        parameter = next(model.model.parameters())
+        return str(parameter.device)
+    except Exception:
+        return "unknown"
 
 
 def collect_environment(args: argparse.Namespace) -> dict[str, Any]:
@@ -565,6 +687,8 @@ def collect_environment(args: argparse.Namespace) -> dict[str, Any]:
         data["pytorch_version"] = torch.__version__
         data["cuda_available"] = bool(torch.cuda.is_available())
         data["gpu_name"] = torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
+        data["pytorch_cuda_version"] = torch.version.cuda
+        data["cudnn_version"] = torch.backends.cudnn.version()
         data["pytorch_device"] = args.device
     except Exception as exc:
         data["pytorch_error"] = f"{type(exc).__name__}: {exc}"
@@ -597,7 +721,10 @@ def write_reports(
     write_json(output_dir / "run_config.json", vars(args))
     write_json(output_dir / "environment.json", environment)
     write_image_results_csv(output_dir / "image_results.csv", image_results)
+    write_timing_csv(output_dir / "timing_raw.csv", image_results, timing_rows)
     write_timing_csv(output_dir / "timing.csv", image_results, timing_rows)
+    write_timing_statistics_csv(output_dir / "timing_statistics.csv", timing_rows)
+    write_markdown_report(output_dir / "benchmark_report.md", summary, args)
     (output_dir / "mismatch_images.txt").write_text(format_mismatch_text(image_results), encoding="utf-8")
     (output_dir / "error_images.txt").write_text(format_error_text(image_results), encoding="utf-8")
 
@@ -685,6 +812,78 @@ def write_timing_csv(path: Path, image_results: list[ImageComparison], timing_ro
                         "provider": sample.provider,
                     }
                 )
+
+
+def write_timing_statistics_csv(path: Path, timing_rows: list[TimingSample]) -> None:
+    fields = ["backend", "stage", "count", "mean_ms", "median_ms", "min_ms", "max_ms", "p95_ms", "std_ms", "fps"]
+    rows = []
+    for backend in ("pytorch", "onnx"):
+        summary = summarize_timing_rows(timing_rows, backend)
+        for stage, stats in summary.items():
+            rows.append({"backend": backend, "stage": stage, **stats})
+    with path.open("w", encoding=CSV_ENCODING, newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: _csv_value(row.get(field)) for field in fields})
+
+
+def write_markdown_report(path: Path, summary: dict[str, Any], args: argparse.Namespace) -> None:
+    lines = [
+        "# PyTorch CUDA vs ONNX Runtime CUDA Benchmark",
+        "",
+        "## 1. Execution Environment",
+        f"- Python: `{summary['environment'].get('python_version')}`",
+        f"- Platform: `{summary['environment'].get('platform')}`",
+        f"- GPU: `{summary['environment'].get('gpu_name')}`",
+        f"- PyTorch: `{summary['environment'].get('pytorch_version')}`",
+        f"- PyTorch CUDA/cuDNN: `{summary['environment'].get('pytorch_cuda_version')}` / `{summary['environment'].get('cudnn_version')}`",
+        f"- ONNX Runtime: `{summary['environment'].get('onnxruntime_version')}`",
+        "",
+        "## 2. Actual Devices",
+        f"- PyTorch actual device: `{summary['providers'].get('pytorch_actual_device')}`",
+        f"- ONNX actual providers: `{summary['providers'].get('onnx_actual_providers')}`",
+        "",
+        "## 3. Run Conditions",
+        f"- Images: `{args.images}`",
+        f"- Image count: `{summary['image_count']}`",
+        f"- imgsz/conf/iou/match_iou: `{args.imgsz}` / `{args.conf}` / `{args.iou}` / `{args.match_iou}`",
+        f"- warmup/repeat/batch: `{args.warmup}` / `{args.repeat}` / `1`",
+        "",
+        "## 4. Accuracy Equivalence",
+        f"- Valid: `{summary['accuracy_comparison_valid']}`",
+        f"- PyTorch/ONNX detections: `{summary['detection_summary']['pytorch_detection_count']}` / `{summary['detection_summary']['onnx_detection_count']}`",
+        f"- Matched/PT only/ONNX only: `{summary['detection_summary']['matched_detection_count']}` / `{summary['detection_summary']['pytorch_only_count']}` / `{summary['detection_summary']['onnx_only_count']}`",
+        f"- Confidence diff mean/max: `{_format_float(summary['accuracy_summary']['confidence_diff_mean'])}` / `{_format_float(summary['accuracy_summary']['confidence_diff_max'])}`",
+        f"- BBox IoU mean/min: `{_format_float(summary['accuracy_summary']['bbox_iou_mean'])}` / `{_format_float(summary['accuracy_summary']['bbox_iou_min'])}`",
+        "",
+        "## 5. PyTorch Stage Timing",
+        _format_stage_lines(summary["pytorch_timing"]),
+        "",
+        "## 6. ONNX Stage Timing",
+        _format_stage_lines(summary["onnx_timing"]),
+        "",
+        "## 7. Speedup And FPS",
+        f"- Total mean speedup: `{_format_float(summary['speedup']['total_mean'])}x`",
+        f"- Total median speedup: `{_format_float(summary['speedup']['total_median'])}x`",
+        f"- Total P95 speedup: `{_format_float(summary['speedup']['total_p95'])}x`",
+        f"- Inference mean speedup: `{_format_float(summary['speedup']['inference_mean'])}x`",
+        f"- PyTorch total FPS: `{_format_float(summary['pytorch_timing']['total_ms']['fps'])}`",
+        f"- ONNX total FPS: `{_format_float(summary['onnx_timing']['total_ms']['fps'])}`",
+        "",
+        "## 8. Measurement Validity",
+        f"- speed_comparison_valid: `{summary['speed_comparison_valid']}`",
+        f"- reason: `{summary['speed_comparison_reason']}`",
+        "",
+        "## 9. Notes",
+        "- Model load, ONNX session creation, DLL registration, PyTorch CUDA preload, file writes, and warm-up runs are excluded from timing statistics.",
+        "- PyTorch stage timing uses Ultralytics `result.speed`; total timing is externally measured with CUDA synchronization.",
+        "- ONNX Runtime timing measures preprocessing, `session.run`, postprocessing, and total around those three stages.",
+        "",
+        "## 10. Final Conclusion",
+        f"- Final status: `{summary['final_status']}`",
+    ]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_per_image_json(output_dir: Path, result: ImageComparison) -> None:
@@ -819,6 +1018,19 @@ def print_final_summary(summary: dict[str, Any], output_dir: Path) -> None:
     print(f"ONNX provider: {', '.join(providers) if providers else 'N/A'}")
     print(f"Final status: {summary['final_status']}")
     print(f"Output: {output_dir}")
+
+
+def _format_stage_lines(timing: dict[str, dict[str, float | None]]) -> str:
+    lines = []
+    for stage in ("preprocess_ms", "inference_ms", "postprocess_ms", "total_ms"):
+        stats = timing.get(stage, {})
+        lines.append(
+            f"- {stage}: mean `{_format_float(stats.get('mean_ms'))}` ms, "
+            f"median `{_format_float(stats.get('median_ms'))}` ms, "
+            f"P95 `{_format_float(stats.get('p95_ms'))}` ms, "
+            f"FPS `{_format_float(stats.get('fps'))}`"
+        )
+    return "\n".join(lines)
 
 
 def exit_code_for_status(status: str, fail_on_warning: bool) -> int:

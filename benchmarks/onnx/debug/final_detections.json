@@ -1,0 +1,214 @@
+{
+  "count": 19,
+  "detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.7675564289093018,
+      "bbox": [
+        2355.0,
+        1641.0,
+        2397.0,
+        1693.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.24716845154762268,
+      "bbox": [
+        1707.0,
+        713.0,
+        1776.0,
+        783.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.07864564657211304,
+      "bbox": [
+        2089.0,
+        1000.0,
+        2160.0,
+        1062.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.02349686622619629,
+      "bbox": [
+        2115.0,
+        1244.0,
+        2138.0,
+        1272.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.019980698823928833,
+      "bbox": [
+        91.0,
+        394.0,
+        127.0,
+        432.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.004781782627105713,
+      "bbox": [
+        1414.0,
+        1444.0,
+        1460.0,
+        1484.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.00472944974899292,
+      "bbox": [
+        1772.0,
+        1032.0,
+        1830.0,
+        1099.0
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.004037797451019287,
+      "bbox": [
+        1102.0,
+        509.0,
+        1173.0,
+        569.0
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.002994447946548462,
+      "bbox": [
+        1607.0,
+        1798.0,
+        1658.0,
+        1849.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.002990245819091797,
+      "bbox": [
+        1343.0,
+        1638.0,
+        1380.0,
+        1681.0
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.0017674267292022705,
+      "bbox": [
+        220.0,
+        1771.0,
+        285.0,
+        1831.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.0015588104724884033,
+      "bbox": [
+        1620.0,
+        961.0,
+        1652.0,
+        999.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.0013927221298217773,
+      "bbox": [
+        2419.0,
+        1854.0,
+        2459.0,
+        1894.0
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.001346677541732788,
+      "bbox": [
+        1448.0,
+        1202.0,
+        1515.0,
+        1258.0
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.0012468695640563965,
+      "bbox": [
+        2409.0,
+        2154.0,
+        2544.0,
+        2156.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.0011508166790008545,
+      "bbox": [
+        1345.0,
+        1638.0,
+        1385.0,
+        1692.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.001127392053604126,
+      "bbox": [
+        1697.0,
+        701.0,
+        1771.0,
+        782.0
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.0011160075664520264,
+      "bbox": [
+        1245.0,
+        1715.0,
+        1290.0,
+        1758.0
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.0010280311107635498,
+      "bbox": [
+        1456.0,
+        798.0,
+        1525.0,
+        853.0
+      ]
+    }
+  ]
+}
