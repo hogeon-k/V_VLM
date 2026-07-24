@@ -1,0 +1,86 @@
+{
+  "model": "models\\best.onnx",
+  "image": "datasets\\pcb\\images\\test\\09_short_05.jpg",
+  "provider": "CPUExecutionProvider",
+  "input_name": "images",
+  "output_name": "output0",
+  "input_shape": [
+    1,
+    3,
+    960,
+    960
+  ],
+  "output_shape": [
+    1,
+    7,
+    18900
+  ],
+  "config": {
+    "imgsz": 960,
+    "conf": 0.15,
+    "iou": 0.7
+  },
+  "timing_ms": {
+    "preprocess": 17.191100031137466,
+    "inference": 137.04820001125336,
+    "postprocess": 2.7793999910354614,
+    "total": 157.02269998192787
+  },
+  "detections": [
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.9203000068664551,
+      "bbox": [
+        1077.292236328125,
+        570.2174072265625,
+        1165.3934326171875,
+        650.9244995117188
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.8375864028930664,
+      "bbox": [
+        1478.8837890625,
+        473.110107421875,
+        1598.239990234375,
+        558.2266845703125
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.8307770490646362,
+      "bbox": [
+        1808.53564453125,
+        995.3700561523438,
+        1873.007568359375,
+        1056.349853515625
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.7964905500411987,
+      "bbox": [
+        780.6871337890625,
+        861.5106811523438,
+        894.9144897460938,
+        941.8948974609375
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.652239203453064,
+      "bbox": [
+        1204.4552001953125,
+        867.9210815429688,
+        1272.0186767578125,
+        947.83984375
+      ]
+    }
+  ]
+}

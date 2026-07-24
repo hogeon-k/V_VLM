@@ -1,0 +1,723 @@
+{
+  "image_name": "01_missing_hole_03.jpg",
+  "image_path": "datasets\\pcb\\images\\test\\01_missing_hole_03.jpg",
+  "status": "PASS",
+  "status_reason": "Detection counts, classes, confidence, and boxes are within PASS thresholds.",
+  "python_detection_count": 3,
+  "cpp_detection_count": 3,
+  "matched_count": 3,
+  "python_only_count": 0,
+  "cpp_only_count": 0,
+  "classes_match": true,
+  "confidence_diff_mean": 3.0175272625054816e-07,
+  "confidence_diff_max": 4.577255249271772e-07,
+  "bbox_iou_mean": 0.9999992781297321,
+  "bbox_iou_min": 0.9999978658020161,
+  "python_timing": {
+    "preprocess_ms": {
+      "count": 20,
+      "mean_ms": 22.03816000074148,
+      "median_ms": 20.851150006055832,
+      "p95_ms": 30.59342000037432,
+      "min_ms": 16.03559997677803,
+      "max_ms": 34.34059998393059,
+      "fps": 45.37583899773641
+    },
+    "inference_ms": {
+      "count": 20,
+      "mean_ms": 144.1325849980116,
+      "median_ms": 138.3572999984026,
+      "p95_ms": 185.09621001929048,
+      "min_ms": 105.64060002565384,
+      "max_ms": 237.57819998264313,
+      "fps": 6.938056373677026
+    },
+    "postprocess_ms": {
+      "count": 20,
+      "mean_ms": 1.610945002734661,
+      "median_ms": 1.0377000123262405,
+      "p95_ms": 4.460854987800125,
+      "min_ms": 0.8308999836444855,
+      "max_ms": 9.069400042295456,
+      "fps": 620.753655961221
+    },
+    "total_ms": {
+      "count": 20,
+      "mean_ms": 167.7867499962449,
+      "median_ms": 161.92654998600483,
+      "p95_ms": 215.42967496514325,
+      "min_ms": 127.14059999585152,
+      "max_ms": 263.1875999569893,
+      "fps": 5.9599461818193635
+    }
+  },
+  "cpp_timing": {
+    "preprocess_ms": {
+      "count": 20,
+      "mean_ms": 15.531934999999999,
+      "median_ms": 14.0649,
+      "p95_ms": 21.71244,
+      "min_ms": 11.9239,
+      "max_ms": 25.3935,
+      "fps": 64.38347829810002
+    },
+    "inference_ms": {
+      "count": 20,
+      "mean_ms": 141.96516,
+      "median_ms": 127.3783,
+      "p95_ms": 207.844795,
+      "min_ms": 96.2619,
+      "max_ms": 210.5864,
+      "fps": 7.043981776937384
+    },
+    "postprocess_ms": {
+      "count": 20,
+      "mean_ms": 0.1041,
+      "median_ms": 0.09670000000000001,
+      "p95_ms": 0.14004500000000003,
+      "min_ms": 0.0791,
+      "max_ms": 0.1637,
+      "fps": 9606.147934678194
+    },
+    "total_ms": {
+      "count": 20,
+      "mean_ms": 157.63117,
+      "median_ms": 140.91055,
+      "p95_ms": 227.94999,
+      "min_ms": 109.3609,
+      "max_ms": 233.247,
+      "fps": 6.343922969042227
+    }
+  },
+  "speedup": 1.064426217202124,
+  "cpp_provider": "CPUExecutionProvider",
+  "error_message": "",
+  "matches": [
+    {
+      "status": "MATCHED",
+      "python_index": 0,
+      "cpp_index": 0,
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "class_match": true,
+      "confidence_diff_abs": 4.577255249271772e-07,
+      "bbox_iou": 0.9999978658020161,
+      "python": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9114154577255249,
+        "bbox": [
+          2076.566162109375,
+          574.5000610351562,
+          2140.3896484375,
+          631.9149169921875
+        ]
+      },
+      "cpp": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.911415,
+        "bbox": [
+          2076.566162,
+          574.500061,
+          2140.389648,
+          631.915039
+        ]
+      }
+    },
+    {
+      "status": "MATCHED",
+      "python_index": 1,
+      "cpp_index": 1,
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "class_match": true,
+      "confidence_diff_abs": 4.3007659911165064e-07,
+      "bbox_iou": 0.9999999850863265,
+      "python": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8933824300765991,
+        "bbox": [
+          1337.1988525390625,
+          741.0717163085938,
+          1394.8160400390625,
+          799.3299560546875
+        ]
+      },
+      "cpp": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.893382,
+        "bbox": [
+          1337.198853,
+          741.071716,
+          1394.81604,
+          799.329956
+        ]
+      }
+    },
+    {
+      "status": "MATCHED",
+      "python_index": 2,
+      "cpp_index": 2,
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "class_match": true,
+      "confidence_diff_abs": 1.7456054712816638e-08,
+      "bbox_iou": 0.999999983500854,
+      "python": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8509960174560547,
+        "bbox": [
+          2643.692138671875,
+          482.1568298339844,
+          2701.564208984375,
+          535.2423706054688
+        ]
+      },
+      "cpp": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.850996,
+        "bbox": [
+          2643.692139,
+          482.15683,
+          2701.564209,
+          535.242371
+        ]
+      }
+    }
+  ],
+  "python_result": {
+    "model": "models\\best.onnx",
+    "image": "datasets\\pcb\\images\\test\\01_missing_hole_03.jpg",
+    "provider": "CPUExecutionProvider",
+    "input_name": "images",
+    "output_name": "output0",
+    "input_shape": [
+      1,
+      3,
+      960,
+      960
+    ],
+    "output_shape": [
+      1,
+      7,
+      18900
+    ],
+    "config": {
+      "imgsz": 960,
+      "conf": 0.15,
+      "iou": 0.7
+    },
+    "timing_ms": {
+      "preprocess": 34.34059998393059,
+      "inference": 128.05019998550415,
+      "postprocess": 1.0837000012397766,
+      "total": 163.4811999797821
+    },
+    "detections": [
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9114154577255249,
+        "bbox": [
+          2076.566162109375,
+          574.5000610351562,
+          2140.3896484375,
+          631.9149169921875
+        ]
+      },
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8933824300765991,
+        "bbox": [
+          1337.1988525390625,
+          741.0717163085938,
+          1394.8160400390625,
+          799.3299560546875
+        ]
+      },
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8509960174560547,
+        "bbox": [
+          2643.692138671875,
+          482.1568298339844,
+          2701.564208984375,
+          535.2423706054688
+        ]
+      }
+    ]
+  },
+  "cpp_result": {
+    "model": "models\\best.onnx",
+    "image": "datasets\\pcb\\images\\test\\01_missing_hole_03.jpg",
+    "provider": "CPUExecutionProvider",
+    "input_name": "images",
+    "output_name": "output0",
+    "input_shape": [
+      1,
+      3,
+      960,
+      960
+    ],
+    "output_shape": [
+      1,
+      7,
+      18900
+    ],
+    "config": {
+      "imgsz": 960,
+      "conf": 0.15,
+      "iou": 0.7
+    },
+    "timing_ms": {
+      "preprocess": 12.9906,
+      "inference": 96.2619,
+      "postprocess": 0.0791,
+      "total": 109.3609
+    },
+    "detections": [
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.911415,
+        "bbox": [
+          2076.566162,
+          574.500061,
+          2140.389648,
+          631.915039
+        ]
+      },
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.893382,
+        "bbox": [
+          1337.198853,
+          741.071716,
+          1394.81604,
+          799.329956
+        ]
+      },
+      {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.850996,
+        "bbox": [
+          2643.692139,
+          482.15683,
+          2701.564209,
+          535.242371
+        ]
+      }
+    ]
+  },
+  "timing_rows": [
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 0,
+      "preprocess_ms": 21.127400010824203,
+      "inference_ms": 133.51140001416206,
+      "postprocess_ms": 1.2833999693393707,
+      "total_ms": 155.92890000343323,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 1,
+      "preprocess_ms": 19.641799986362457,
+      "inference_ms": 116.51810002326965,
+      "postprocess_ms": 1.048000007867813,
+      "total_ms": 137.21500000357628,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 2,
+      "preprocess_ms": 24.984900027513504,
+      "inference_ms": 114.31479999423027,
+      "postprocess_ms": 1.023499995470047,
+      "total_ms": 140.32809999585152,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 3,
+      "preprocess_ms": 20.201200008392334,
+      "inference_ms": 105.64060002565384,
+      "postprocess_ms": 1.295300006866455,
+      "total_ms": 127.14059999585152,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 4,
+      "preprocess_ms": 20.57490000128746,
+      "inference_ms": 129.8295999765396,
+      "postprocess_ms": 0.9598000049591064,
+      "total_ms": 151.36939999461174,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 5,
+      "preprocess_ms": 20.50510001182556,
+      "inference_ms": 138.4632000029087,
+      "postprocess_ms": 0.9280000030994415,
+      "total_ms": 159.9006000161171,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 6,
+      "preprocess_ms": 23.08550000190735,
+      "inference_ms": 142.48140001296997,
+      "postprocess_ms": 1.0839999914169312,
+      "total_ms": 166.65590000152588,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 7,
+      "preprocess_ms": 22.357700020074844,
+      "inference_ms": 153.39089998602867,
+      "postprocess_ms": 1.182099997997284,
+      "total_ms": 176.93540000915527,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 8,
+      "preprocess_ms": 19.677299976348877,
+      "inference_ms": 141.03740000724792,
+      "postprocess_ms": 0.9187999963760376,
+      "total_ms": 161.6371999680996,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 9,
+      "preprocess_ms": 22.93129998445511,
+      "inference_ms": 138.25139999389648,
+      "postprocess_ms": 1.027400016784668,
+      "total_ms": 162.21590000391006,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 10,
+      "preprocess_ms": 16.03559997677803,
+      "inference_ms": 150.03130000829697,
+      "postprocess_ms": 0.9478000104427338,
+      "total_ms": 167.02000001072884,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 11,
+      "preprocess_ms": 20.053899973630905,
+      "inference_ms": 172.15469998121262,
+      "postprocess_ms": 0.8634000420570374,
+      "total_ms": 193.07580000162125,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 12,
+      "preprocess_ms": 17.429900020360947,
+      "inference_ms": 153.72639998793602,
+      "postprocess_ms": 4.218299984931946,
+      "total_ms": 175.3798999786377,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 13,
+      "preprocess_ms": 30.396200001239777,
+      "inference_ms": 181.44499999284744,
+      "postprocess_ms": 1.0707999765872955,
+      "total_ms": 212.91609996557236,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 14,
+      "preprocess_ms": 16.535299986600876,
+      "inference_ms": 237.57819998264313,
+      "postprocess_ms": 9.069400042295456,
+      "total_ms": 263.1875999569893,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 15,
+      "preprocess_ms": 23.606200009584427,
+      "inference_ms": 182.33400002121925,
+      "postprocess_ms": 0.8308999836444855,
+      "total_ms": 206.77449998259544,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 16,
+      "preprocess_ms": 23.15700000524521,
+      "inference_ms": 121.16650000214577,
+      "postprocess_ms": 1.5329000055789948,
+      "total_ms": 145.86090004444122,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 17,
+      "preprocess_ms": 25.809400022029877,
+      "inference_ms": 117.1584999859333,
+      "postprocess_ms": 0.853300005197525,
+      "total_ms": 143.82960000634193,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 18,
+      "preprocess_ms": 18.3120000064373,
+      "inference_ms": 125.56809997558594,
+      "postprocess_ms": 0.9981000125408173,
+      "total_ms": 144.88240000605583,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "python",
+      "repeat_index": 19,
+      "preprocess_ms": 34.34059998393059,
+      "inference_ms": 128.05019998550415,
+      "postprocess_ms": 1.0837000012397766,
+      "total_ms": 163.4811999797821,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 0,
+      "preprocess_ms": 17.1652,
+      "inference_ms": 182.3494,
+      "postprocess_ms": 0.1032,
+      "total_ms": 199.6431,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 1,
+      "preprocess_ms": 11.9239,
+      "inference_ms": 127.7366,
+      "postprocess_ms": 0.1156,
+      "total_ms": 139.7901,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 2,
+      "preprocess_ms": 13.3759,
+      "inference_ms": 116.9646,
+      "postprocess_ms": 0.0944,
+      "total_ms": 130.4567,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 3,
+      "preprocess_ms": 12.2039,
+      "inference_ms": 116.4546,
+      "postprocess_ms": 0.1057,
+      "total_ms": 128.7842,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 4,
+      "preprocess_ms": 13.1659,
+      "inference_ms": 139.432,
+      "postprocess_ms": 0.0887,
+      "total_ms": 152.7162,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 5,
+      "preprocess_ms": 14.9321,
+      "inference_ms": 116.406,
+      "postprocess_ms": 0.0896,
+      "total_ms": 131.4626,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 6,
+      "preprocess_ms": 13.6974,
+      "inference_ms": 101.6115,
+      "postprocess_ms": 0.1218,
+      "total_ms": 115.4435,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 7,
+      "preprocess_ms": 15.3332,
+      "inference_ms": 198.3057,
+      "postprocess_ms": 0.1637,
+      "total_ms": 213.8467,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 8,
+      "preprocess_ms": 21.482,
+      "inference_ms": 196.2307,
+      "postprocess_ms": 0.0927,
+      "total_ms": 217.847,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 9,
+      "preprocess_ms": 16.9627,
+      "inference_ms": 210.5864,
+      "postprocess_ms": 0.0973,
+      "total_ms": 227.6712,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 10,
+      "preprocess_ms": 21.5187,
+      "inference_ms": 151.5008,
+      "postprocess_ms": 0.0937,
+      "total_ms": 173.1492,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 11,
+      "preprocess_ms": 17.5804,
+      "inference_ms": 131.545,
+      "postprocess_ms": 0.095,
+      "total_ms": 149.2542,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 12,
+      "preprocess_ms": 14.8444,
+      "inference_ms": 127.02,
+      "postprocess_ms": 0.1388,
+      "total_ms": 142.031,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 13,
+      "preprocess_ms": 13.5991,
+      "inference_ms": 119.7334,
+      "postprocess_ms": 0.0937,
+      "total_ms": 133.4764,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 14,
+      "preprocess_ms": 12.7623,
+      "inference_ms": 114.1386,
+      "postprocess_ms": 0.0948,
+      "total_ms": 127.0201,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 15,
+      "preprocess_ms": 25.3935,
+      "inference_ms": 207.7005,
+      "postprocess_ms": 0.0961,
+      "total_ms": 233.247,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 16,
+      "preprocess_ms": 13.5777,
+      "inference_ms": 121.3387,
+      "postprocess_ms": 0.103,
+      "total_ms": 135.0471,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 17,
+      "preprocess_ms": 14.3818,
+      "inference_ms": 150.9039,
+      "postprocess_ms": 0.1047,
+      "total_ms": 165.414,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 18,
+      "preprocess_ms": 13.748,
+      "inference_ms": 113.0829,
+      "postprocess_ms": 0.1104,
+      "total_ms": 126.9622,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "01_missing_hole_03.jpg",
+      "backend": "cpp",
+      "repeat_index": 19,
+      "preprocess_ms": 12.9906,
+      "inference_ms": 96.2619,
+      "postprocess_ms": 0.0791,
+      "total_ms": 109.3609,
+      "provider": "CPUExecutionProvider"
+    }
+  ]
+}

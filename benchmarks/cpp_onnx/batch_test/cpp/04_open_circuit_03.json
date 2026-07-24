@@ -1,0 +1,64 @@
+{
+  "model": "models\\best.onnx",
+  "image": "datasets\\pcb\\images\\test\\04_open_circuit_03.jpg",
+  "provider": "CPUExecutionProvider",
+  "input_name": "images",
+  "output_name": "output0",
+  "input_shape": [
+    1,
+    3,
+    960,
+    960
+  ],
+  "output_shape": [
+    1,
+    7,
+    18900
+  ],
+  "config": {
+    "imgsz": 960,
+    "conf": 0.15,
+    "iou": 0.7
+  },
+  "timing_ms": {
+    "preprocess": 14.0107,
+    "inference": 99.4356,
+    "postprocess": 0.0932,
+    "total": 113.5727
+  },
+  "detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.735808,
+      "bbox": [
+        1205.419556,
+        1207.42334,
+        1253.95874,
+        1257.205811
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.734716,
+      "bbox": [
+        939.74115,
+        850.689514,
+        1007.46936,
+        902.060852
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.56108,
+      "bbox": [
+        1885.258667,
+        451.801147,
+        1949.312378,
+        499.235535
+      ]
+    }
+  ]
+}

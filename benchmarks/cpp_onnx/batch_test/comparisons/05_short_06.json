@@ -1,0 +1,669 @@
+{
+  "image_name": "05_short_06.jpg",
+  "image_path": "datasets\\pcb\\images\\test\\05_short_06.jpg",
+  "status": "PASS",
+  "status_reason": "Detection counts, classes, confidence, and boxes are within PASS thresholds.",
+  "python_detection_count": 2,
+  "cpp_detection_count": 2,
+  "matched_count": 2,
+  "python_only_count": 0,
+  "cpp_only_count": 0,
+  "classes_match": true,
+  "confidence_diff_mean": 2.2174453734313815e-07,
+  "confidence_diff_max": 2.649078368888169e-07,
+  "bbox_iou_mean": 0.9999994762292264,
+  "bbox_iou_min": 0.9999993493397207,
+  "python_timing": {
+    "preprocess_ms": {
+      "count": 20,
+      "mean_ms": 16.865060004591943,
+      "median_ms": 16.41465000808239,
+      "p95_ms": 20.959544996917252,
+      "min_ms": 13.39139997959137,
+      "max_ms": 25.849100023508072,
+      "fps": 59.294185714591265
+    },
+    "inference_ms": {
+      "count": 20,
+      "mean_ms": 132.3833350032568,
+      "median_ms": 132.8669999986887,
+      "p95_ms": 172.30939002335072,
+      "min_ms": 91.1279000043869,
+      "max_ms": 188.5959999859333,
+      "fps": 7.553820879156721
+    },
+    "postprocess_ms": {
+      "count": 20,
+      "mean_ms": 1.0329499989748,
+      "median_ms": 0.912650004029274,
+      "p95_ms": 1.9156099811196332,
+      "min_ms": 0.6519999802112579,
+      "max_ms": 2.5085999965667725,
+      "fps": 968.1010707125196
+    },
+    "total_ms": {
+      "count": 20,
+      "mean_ms": 150.28524000942707,
+      "median_ms": 149.89124999940395,
+      "p95_ms": 189.92201003134252,
+      "min_ms": 105.78229999542236,
+      "max_ms": 206.83600002527237,
+      "fps": 6.654013394377732
+    }
+  },
+  "cpp_timing": {
+    "preprocess_ms": {
+      "count": 20,
+      "mean_ms": 13.886125000000002,
+      "median_ms": 13.6236,
+      "p95_ms": 15.61495,
+      "min_ms": 12.5595,
+      "max_ms": 17.6774,
+      "fps": 72.0143308518395
+    },
+    "inference_ms": {
+      "count": 20,
+      "mean_ms": 126.46379999999999,
+      "median_ms": 122.33715000000001,
+      "p95_ms": 171.39555000000001,
+      "min_ms": 88.7366,
+      "max_ms": 171.5257,
+      "fps": 7.907401169346485
+    },
+    "postprocess_ms": {
+      "count": 20,
+      "mean_ms": 0.129635,
+      "median_ms": 0.10389999999999999,
+      "p95_ms": 0.15761500000000034,
+      "min_ms": 0.078,
+      "max_ms": 0.6101,
+      "fps": 7713.9661356886645
+    },
+    "total_ms": {
+      "count": 20,
+      "mean_ms": 140.50229,
+      "median_ms": 136.43505,
+      "p95_ms": 186.30426500000002,
+      "min_ms": 102.1198,
+      "max_ms": 187.1852,
+      "fps": 7.117321717674495
+    }
+  },
+  "speedup": 1.0696284025650193,
+  "cpp_provider": "CPUExecutionProvider",
+  "error_message": "",
+  "matches": [
+    {
+      "status": "MATCHED",
+      "python_index": 0,
+      "cpp_index": 0,
+      "class_id": 1,
+      "class_name": "short",
+      "class_match": true,
+      "confidence_diff_abs": 1.7858123779745938e-07,
+      "bbox_iou": 0.9999996031187319,
+      "python": {
+        "class_id": 1,
+        "class_name": "short",
+        "confidence": 0.8391941785812378,
+        "bbox": [
+          1975.3768310546875,
+          343.05474853515625,
+          2051.620361328125,
+          422.88226318359375
+        ]
+      },
+      "cpp": {
+        "class_id": 1,
+        "class_name": "short",
+        "confidence": 0.839194,
+        "bbox": [
+          1975.376831,
+          343.054749,
+          2051.620361,
+          422.882294
+        ]
+      }
+    },
+    {
+      "status": "MATCHED",
+      "python_index": 1,
+      "cpp_index": 1,
+      "class_id": 1,
+      "class_name": "short",
+      "class_match": true,
+      "confidence_diff_abs": 2.649078368888169e-07,
+      "bbox_iou": 0.9999993493397207,
+      "python": {
+        "class_id": 1,
+        "class_name": "short",
+        "confidence": 0.8014242649078369,
+        "bbox": [
+          588.1365356445312,
+          635.34716796875,
+          666.9561157226562,
+          730.6705322265625
+        ]
+      },
+      "cpp": {
+        "class_id": 1,
+        "class_name": "short",
+        "confidence": 0.801424,
+        "bbox": [
+          588.136536,
+          635.347168,
+          666.956116,
+          730.670471
+        ]
+      }
+    }
+  ],
+  "python_result": {
+    "model": "models\\best.onnx",
+    "image": "datasets\\pcb\\images\\test\\05_short_06.jpg",
+    "provider": "CPUExecutionProvider",
+    "input_name": "images",
+    "output_name": "output0",
+    "input_shape": [
+      1,
+      3,
+      960,
+      960
+    ],
+    "output_shape": [
+      1,
+      7,
+      18900
+    ],
+    "config": {
+      "imgsz": 960,
+      "conf": 0.15,
+      "iou": 0.7
+    },
+    "timing_ms": {
+      "preprocess": 18.712600022554398,
+      "inference": 127.63050001859665,
+      "postprocess": 1.0126999914646149,
+      "total": 147.3594000339508
+    },
+    "detections": [
+      {
+        "class_id": 1,
+        "class_name": "short",
+        "confidence": 0.8391941785812378,
+        "bbox": [
+          1975.3768310546875,
+          343.05474853515625,
+          2051.620361328125,
+          422.88226318359375
+        ]
+      },
+      {
+        "class_id": 1,
+        "class_name": "short",
+        "confidence": 0.8014242649078369,
+        "bbox": [
+          588.1365356445312,
+          635.34716796875,
+          666.9561157226562,
+          730.6705322265625
+        ]
+      }
+    ]
+  },
+  "cpp_result": {
+    "model": "models\\best.onnx",
+    "image": "datasets\\pcb\\images\\test\\05_short_06.jpg",
+    "provider": "CPUExecutionProvider",
+    "input_name": "images",
+    "output_name": "output0",
+    "input_shape": [
+      1,
+      3,
+      960,
+      960
+    ],
+    "output_shape": [
+      1,
+      7,
+      18900
+    ],
+    "config": {
+      "imgsz": 960,
+      "conf": 0.15,
+      "iou": 0.7
+    },
+    "timing_ms": {
+      "preprocess": 15.5064,
+      "inference": 171.5257,
+      "postprocess": 0.1308,
+      "total": 187.1852
+    },
+    "detections": [
+      {
+        "class_id": 1,
+        "class_name": "short",
+        "confidence": 0.839194,
+        "bbox": [
+          1975.376831,
+          343.054749,
+          2051.620361,
+          422.882294
+        ]
+      },
+      {
+        "class_id": 1,
+        "class_name": "short",
+        "confidence": 0.801424,
+        "bbox": [
+          588.136536,
+          635.347168,
+          666.956116,
+          730.670471
+        ]
+      }
+    ]
+  },
+  "timing_rows": [
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 0,
+      "preprocess_ms": 15.474000006914139,
+      "inference_ms": 108.53930002450943,
+      "postprocess_ms": 0.8172000050544739,
+      "total_ms": 124.83630001544952,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 1,
+      "preprocess_ms": 16.344200015068054,
+      "inference_ms": 105.73390001058578,
+      "postprocess_ms": 0.6519999802112579,
+      "total_ms": 122.7335000038147,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 2,
+      "preprocess_ms": 13.801699995994568,
+      "inference_ms": 91.1279000043869,
+      "postprocess_ms": 0.8494000136852264,
+      "total_ms": 105.78229999542236,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 3,
+      "preprocess_ms": 14.880199998617172,
+      "inference_ms": 106.52550002932549,
+      "postprocess_ms": 0.8160000145435333,
+      "total_ms": 122.22610002756119,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 4,
+      "preprocess_ms": 15.28710001707077,
+      "inference_ms": 103.80990001559258,
+      "postprocess_ms": 1.2633000016212463,
+      "total_ms": 120.36590000987053,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 5,
+      "preprocess_ms": 15.075600028038025,
+      "inference_ms": 111.01429998874664,
+      "postprocess_ms": 0.8824999928474426,
+      "total_ms": 126.97560000419617,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 6,
+      "preprocess_ms": 14.72639998793602,
+      "inference_ms": 109.3992999792099,
+      "postprocess_ms": 0.6553000211715698,
+      "total_ms": 124.78510001301765,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 7,
+      "preprocess_ms": 13.39139997959137,
+      "inference_ms": 114.18340000510216,
+      "postprocess_ms": 0.9467999935150146,
+      "total_ms": 128.52529999613762,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 8,
+      "preprocess_ms": 16.970400005578995,
+      "inference_ms": 136.9888000190258,
+      "postprocess_ms": 0.8069999814033508,
+      "total_ms": 154.76910001039505,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 9,
+      "preprocess_ms": 20.70219999551773,
+      "inference_ms": 141.3764000236988,
+      "postprocess_ms": 1.1022000014781952,
+      "total_ms": 163.18430000543594,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 10,
+      "preprocess_ms": 17.62389999628067,
+      "inference_ms": 142.67180001735687,
+      "postprocess_ms": 0.701200008392334,
+      "total_ms": 161.00060001015663,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 11,
+      "preprocess_ms": 15.924199968576431,
+      "inference_ms": 132.0503999888897,
+      "postprocess_ms": 2.5085999965667725,
+      "total_ms": 150.4868000149727,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 12,
+      "preprocess_ms": 18.54399999976158,
+      "inference_ms": 143.79249998927116,
+      "postprocess_ms": 1.8843999803066254,
+      "total_ms": 164.22420001029968,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 13,
+      "preprocess_ms": 25.849100023508072,
+      "inference_ms": 157.7403999865055,
+      "postprocess_ms": 1.0063999593257904,
+      "total_ms": 184.60009998083115,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 14,
+      "preprocess_ms": 17.39649999141693,
+      "inference_ms": 188.5959999859333,
+      "postprocess_ms": 0.8393000066280365,
+      "total_ms": 206.83600002527237,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 15,
+      "preprocess_ms": 18.745100021362305,
+      "inference_ms": 155.59679996967316,
+      "postprocess_ms": 0.9736999869346619,
+      "total_ms": 175.3192000091076,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 16,
+      "preprocess_ms": 16.63270002603531,
+      "inference_ms": 171.45220002532005,
+      "postprocess_ms": 0.9428000152111053,
+      "total_ms": 189.031800031662,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 17,
+      "preprocess_ms": 14.734800010919571,
+      "inference_ms": 133.6836000084877,
+      "postprocess_ms": 0.8735000193119049,
+      "total_ms": 149.29569998383522,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 18,
+      "preprocess_ms": 16.485100001096725,
+      "inference_ms": 165.75379997491837,
+      "postprocess_ms": 1.1247000098228455,
+      "total_ms": 183.36750000715256,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "python",
+      "repeat_index": 19,
+      "preprocess_ms": 18.712600022554398,
+      "inference_ms": 127.63050001859665,
+      "postprocess_ms": 1.0126999914646149,
+      "total_ms": 147.3594000339508,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 0,
+      "preprocess_ms": 14.2361,
+      "inference_ms": 171.3887,
+      "postprocess_ms": 0.6101,
+      "total_ms": 186.2579,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 1,
+      "preprocess_ms": 14.2074,
+      "inference_ms": 136.646,
+      "postprocess_ms": 0.101,
+      "total_ms": 150.9772,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 2,
+      "preprocess_ms": 15.3425,
+      "inference_ms": 145.0852,
+      "postprocess_ms": 0.1112,
+      "total_ms": 160.5692,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 3,
+      "preprocess_ms": 12.9336,
+      "inference_ms": 105.5102,
+      "postprocess_ms": 0.097,
+      "total_ms": 118.5622,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 4,
+      "preprocess_ms": 13.2628,
+      "inference_ms": 88.7366,
+      "postprocess_ms": 0.1076,
+      "total_ms": 102.1198,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 5,
+      "preprocess_ms": 13.2792,
+      "inference_ms": 113.9018,
+      "postprocess_ms": 0.112,
+      "total_ms": 127.344,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 6,
+      "preprocess_ms": 17.6774,
+      "inference_ms": 135.8349,
+      "postprocess_ms": 0.0901,
+      "total_ms": 153.6221,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 7,
+      "preprocess_ms": 14.9542,
+      "inference_ms": 138.65,
+      "postprocess_ms": 0.1205,
+      "total_ms": 153.7451,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 8,
+      "preprocess_ms": 12.8122,
+      "inference_ms": 95.2161,
+      "postprocess_ms": 0.0934,
+      "total_ms": 108.136,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 9,
+      "preprocess_ms": 12.6378,
+      "inference_ms": 97.4109,
+      "postprocess_ms": 0.0819,
+      "total_ms": 110.158,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 10,
+      "preprocess_ms": 12.5595,
+      "inference_ms": 104.0362,
+      "postprocess_ms": 0.078,
+      "total_ms": 116.6916,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 11,
+      "preprocess_ms": 14.0941,
+      "inference_ms": 164.6183,
+      "postprocess_ms": 0.0985,
+      "total_ms": 178.839,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 12,
+      "preprocess_ms": 13.6795,
+      "inference_ms": 151.8938,
+      "postprocess_ms": 0.1026,
+      "total_ms": 165.7068,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 13,
+      "preprocess_ms": 13.5677,
+      "inference_ms": 144.6834,
+      "postprocess_ms": 0.1225,
+      "total_ms": 158.3938,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 14,
+      "preprocess_ms": 12.7537,
+      "inference_ms": 107.3839,
+      "postprocess_ms": 0.0916,
+      "total_ms": 120.2475,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 15,
+      "preprocess_ms": 12.631,
+      "inference_ms": 105.3417,
+      "postprocess_ms": 0.1338,
+      "total_ms": 118.1215,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 16,
+      "preprocess_ms": 14.6385,
+      "inference_ms": 130.7725,
+      "postprocess_ms": 0.0949,
+      "total_ms": 145.5261,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 17,
+      "preprocess_ms": 13.7752,
+      "inference_ms": 111.0046,
+      "postprocess_ms": 0.1052,
+      "total_ms": 124.9036,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 18,
+      "preprocess_ms": 13.1737,
+      "inference_ms": 109.6355,
+      "postprocess_ms": 0.11,
+      "total_ms": 122.9392,
+      "provider": "CPUExecutionProvider"
+    },
+    {
+      "image_name": "05_short_06.jpg",
+      "backend": "cpp",
+      "repeat_index": 19,
+      "preprocess_ms": 15.5064,
+      "inference_ms": 171.5257,
+      "postprocess_ms": 0.1308,
+      "total_ms": 187.1852,
+      "provider": "CPUExecutionProvider"
+    }
+  ]
+}

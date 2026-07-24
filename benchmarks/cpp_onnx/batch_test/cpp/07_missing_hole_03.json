@@ -1,0 +1,86 @@
+{
+  "model": "models\\best.onnx",
+  "image": "datasets\\pcb\\images\\test\\07_missing_hole_03.jpg",
+  "provider": "CPUExecutionProvider",
+  "input_name": "images",
+  "output_name": "output0",
+  "input_shape": [
+    1,
+    3,
+    960,
+    960
+  ],
+  "output_shape": [
+    1,
+    7,
+    18900
+  ],
+  "config": {
+    "imgsz": 960,
+    "conf": 0.15,
+    "iou": 0.7
+  },
+  "timing_ms": {
+    "preprocess": 12.1806,
+    "inference": 96.4522,
+    "postprocess": 0.0725,
+    "total": 108.7303
+  },
+  "detections": [
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.922163,
+      "bbox": [
+        2107.455811,
+        1033.735229,
+        2180.916016,
+        1123.383545
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.913957,
+      "bbox": [
+        1856.767334,
+        286.006622,
+        1933.179932,
+        364.421387
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.884803,
+      "bbox": [
+        1691.504517,
+        520.53064,
+        1765.013672,
+        599.513245
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.853517,
+      "bbox": [
+        847.296692,
+        1022.734009,
+        931.237244,
+        1122.338867
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.672352,
+      "bbox": [
+        1089.110474,
+        754.188782,
+        1161.141602,
+        842.875793
+      ]
+    }
+  ]
+}
