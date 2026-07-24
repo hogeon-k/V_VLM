@@ -1,6 +1,20 @@
-# PCB C++ Inference Environment
+# PCB C++ ONNX Runtime Single Image Inference
 
-This folder is the G-1 preparation area for C++ inference work. It currently provides a CMake/OpenCV environment check executable and minimal interfaces for future ONNX Runtime and TensorRT implementations. It does not run real YOLO, ONNX, or TensorRT inference yet.
+This folder contains the C++17 single-image ONNX Runtime inference path for `models/best.onnx`.
+
+It mirrors the Python ONNX implementation in `service/onnx_detector.py`:
+
+- OpenCV BGR image load
+- Ultralytics-style fixed `960 x 960` letterbox with padding value `114`
+- BGR to RGB
+- HWC to CHW
+- `float32` normalization to `0..1`
+- ONNX Runtime inference
+- `[1, 7, 18900]` output decode as `[channel][candidate]`
+- class-score confidence selection without extra objectness or sigmoid
+- class-aware NMS
+- float bbox restoration to the original image coordinates
+- JSON, CSV, and annotated image output
 
 ## Folder Structure
 
@@ -45,16 +59,14 @@ The same order is recorded in `cpp_inference/config/classes.txt` and matches `da
 | Category | Actual path | Status |
 | --- | --- | --- |
 | PyTorch model | `models/best.pt` | Confirmed |
-| PyTorch model candidates | `yolo11n.pt`, `yolo26n.pt`, `runs/detect/pcb_ablation_scale05_translate05_img640/weights/best.pt` | Confirmed |
-| ONNX model | `cpp_inference/models/*.onnx` | Not generated |
-| TensorRT engine | `cpp_inference/models/*.engine`, `cpp_inference/models/*.plan` | Not generated |
+| ONNX model | `models/best.onnx` | Confirmed |
+| Metadata | `models/model_metadata.json` | Confirmed |
 | data.yaml | `datasets/pcb/data.yaml` | Confirmed |
-| Test images | `data/images/*.jpg` | Confirmed |
-| Python inference results | `data/result_images/*_yolo_*.jpg` | Confirmed |
-| C++ inference results | `cpp_inference/results/` | Created |
-| Benchmark results | Undecided | Not confirmed |
+| Test images | `datasets/pcb/images/test/*.jpg` | Confirmed |
+| C++ inference output | `benchmarks/cpp_onnx/single/` | Expected |
+| Python/C++ comparison output | `benchmarks/cpp_onnx/comparison/` | Expected |
 
-Do not copy large model files into this folder. Keep shared model assets in the existing project model locations or generate future ONNX/TensorRT files under `cpp_inference/models/`, which is ignored except for `.gitkeep`.
+Do not copy large model files into this folder. Keep shared model assets under the existing project `models/` directory.
 
 ## Comparison Conditions For Future Work
 
@@ -70,82 +82,96 @@ Use identical settings when comparing Python, ONNX Runtime, TensorRT, and C++ re
 | Class order | `open_circuit`, `short`, `missing_hole` |
 | Preprocessing | Letterbox resize, normalization, CHW conversion |
 
-## Development Environment Snapshot
+## Development Environment
 
-These values were checked from the current Windows PowerShell environment on 2026-07-23.
+The C++ app needs the C++ development packages, not only Python wheels:
 
-| Item | Version or status | Check method |
-| --- | --- | --- |
-| Operating system | Windows 10.0.26200.8875 | `wsl --version` output |
-| WSL distribution | Current environment cannot list a distro | `wsl -l -v` failed |
-| WSL version | WSL 2.6.2.0, default version output indicates 2 | `wsl --version`, `wsl --status` |
-| Python | 3.11.9 | `.\.venv\Scripts\python.exe --version` |
-| PyTorch | 2.5.1+cu121 | Python import check |
-| PyTorch CUDA | 12.1 | `torch.version.cuda` |
-| Ultralytics | 8.4.90 | Python import check |
-| ONNX | Not installed | Python import check |
-| ONNX Runtime | Not installed | Python import check |
-| ONNX Runtime providers | None, package not installed | Python import check |
-| C++ compiler | Not installed on Windows PATH | `cl`, `g++ --version` |
-| CMake | Not installed on Windows PATH | `cmake --version`, `where.exe cmake` |
-| Ninja | Not checked because CMake/compiler are unavailable on PATH | Not run |
-| OpenCV C++ | Not confirmed | CMake configure unavailable |
-| NVIDIA GPU | NVIDIA GeForce RTX 4060 | `nvidia-smi`, PyTorch |
-| NVIDIA driver | 591.86 | `nvidia-smi` |
-| CUDA Driver API displayed version | 13.1 | `nvidia-smi` |
-| CUDA Toolkit | Not installed on Windows PATH | `nvcc --version` |
-| TensorRT Python | Not installed | Python import check |
-| TensorRT C++ | Not confirmed; common-path search did not find libraries and broad header search timed out | PowerShell file search |
-| trtexec | Not installed on Windows PATH | `trtexec --version`, `where.exe trtexec` |
+- C++17 compiler, such as MSVC Build Tools
+- CMake
+- OpenCV C++ package
+- ONNX Runtime C/C++ package containing:
+  - `include/onnxruntime_cxx_api.h`
+  - `lib/onnxruntime.lib` on Windows, or `lib/libonnxruntime.so` on Linux
+  - `bin/onnxruntime.dll` on Windows, or runtime shared library equivalent
 
-Notes:
+The Python package under `.venv/Lib/site-packages/onnxruntime` provides the Python binding and runtime DLL, but it does not necessarily provide the C++ header and import library required for a native build.
 
-- The CUDA version shown by `nvidia-smi` is the maximum CUDA version supported by the installed driver, not proof that the CUDA Toolkit is installed.
-- `nvcc` is not required for PyTorch GPU inference, but CUDA Toolkit headers/libraries are typically needed for C++ TensorRT builds.
-- TensorRT Python package availability does not prove C++ headers and libraries are installed. Check `NvInfer.h`, `libnvinfer`, `nvinfer.lib`, and ONNX parser libraries separately.
-- Official CUDA/TensorRT compatibility should be verified against NVIDIA's TensorRT support matrix before locking versions.
+Current Windows PowerShell PATH check in this environment:
+
+- `cmake`: not found
+- `g++`: not found
+- `ninja`: not found
+- `onnxruntime.dll`: found in the Python wheel
+- `onnxruntime_cxx_api.h` and `onnxruntime.lib`: not found in the project
 
 ## Build
 
-Windows PowerShell, when CMake, a C++ compiler, and OpenCV C++ are installed and visible on PATH:
+Windows PowerShell, after CMake, MSVC, OpenCV C++, and ONNX Runtime C/C++ are available:
 
 ```powershell
-cmake -S cpp_inference -B cpp_inference/build
-cmake --build cpp_inference/build
-.\cpp_inference\build\pcb_inference_app.exe
-.\cpp_inference\build\pcb_inference_app.exe --image data\images\01_open_circuit_01.jpg
+cmake -S cpp_inference -B cpp_inference\build `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DOpenCV_DIR="C:\path\to\opencv\build" `
+  -DONNXRUNTIME_ROOT="C:\path\to\onnxruntime"
+
+cmake --build cpp_inference\build --config Release
 ```
 
-WSL2 Ubuntu, when an Ubuntu distribution and build tools are installed:
+Expected `ONNXRUNTIME_ROOT` layout:
 
-```bash
-cd /mnt/c/workspace/V_VLM
-cmake -S cpp_inference -B cpp_inference/build -G Ninja
-cmake --build cpp_inference/build
-./cpp_inference/build/pcb_inference_app
-./cpp_inference/build/pcb_inference_app --image data/images/01_open_circuit_01.jpg
+```text
+onnxruntime/
+|-- include/
+|   `-- onnxruntime_cxx_api.h
+|-- lib/
+|   `-- onnxruntime.lib
+`-- bin/
+    `-- onnxruntime.dll
 ```
 
-If Ninja is not installed:
+## Single Image Inference
 
-```bash
-cmake -S cpp_inference -B cpp_inference/build
-cmake --build cpp_inference/build
+```powershell
+.\cpp_inference\build\Release\pcb_onnx_infer.exe `
+  --model models\best.onnx `
+  --metadata models\model_metadata.json `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg `
+  --output benchmarks\cpp_onnx\single `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7
 ```
 
-Suggested WSL2 Ubuntu setup command, for the user to run only when installation is intended:
+Outputs:
 
-```bash
-sudo apt update
-sudo apt install -y build-essential cmake ninja-build pkg-config libopencv-dev
+```text
+benchmarks/cpp_onnx/single/
+|-- result.json
+|-- detections.csv
+`-- result.jpg
 ```
 
-## Future Implementation TODO
+## Python Reference And Comparison
 
-- Export YOLO `.pt` weights to ONNX.
-- Verify ONNX model input/output shapes.
-- Implement Python ONNX Runtime inference and compare with PyTorch.
-- Implement C++ ONNX Runtime inference.
-- Convert ONNX to TensorRT engine.
-- Implement C++ TensorRT inference.
-- Benchmark accuracy, preprocessing, inference, postprocessing, and end-to-end latency.
+Create the Python ONNX reference for the same image:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\write_python_onnx_reference.py `
+  --model models\best.onnx `
+  --metadata models\model_metadata.json `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg `
+  --output benchmarks\cpp_onnx\reference\python_onnx_result.json `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --provider CPUExecutionProvider
+```
+
+Compare Python and C++ result JSON files:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\compare_python_cpp_onnx.py `
+  --python-result benchmarks\cpp_onnx\reference\python_onnx_result.json `
+  --cpp-result benchmarks\cpp_onnx\single\result.json `
+  --output benchmarks\cpp_onnx\comparison
+```

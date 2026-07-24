@@ -1,0 +1,108 @@
+{
+  "status": "PASS",
+  "python_detection_count": 3,
+  "cpp_detection_count": 3,
+  "matched_count": 3,
+  "python_only_count": 0,
+  "cpp_only_count": 0,
+  "class_mismatch_count": 0,
+  "confidence_diff_max": 4.577255249271772e-07,
+  "bbox_iou_min": 0.9999978658020161,
+  "thresholds": {
+    "confidence_diff_max": 0.01,
+    "bbox_iou_min": 0.99,
+    "match_iou": 0.5
+  },
+  "matches": [
+    {
+      "status": "MATCHED",
+      "python_index": 0,
+      "cpp_index": 0,
+      "class_id": 2,
+      "confidence_diff_abs": 4.577255249271772e-07,
+      "bbox_iou": 0.9999978658020161,
+      "python": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.9114154577255249,
+        "bbox": [
+          2076.566162109375,
+          574.5000610351562,
+          2140.3896484375,
+          631.9149169921875
+        ]
+      },
+      "cpp": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.911415,
+        "bbox": [
+          2076.566162,
+          574.500061,
+          2140.389648,
+          631.915039
+        ]
+      }
+    },
+    {
+      "status": "MATCHED",
+      "python_index": 1,
+      "cpp_index": 1,
+      "class_id": 2,
+      "confidence_diff_abs": 4.3007659911165064e-07,
+      "bbox_iou": 0.9999999850863265,
+      "python": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8933824300765991,
+        "bbox": [
+          1337.1988525390625,
+          741.0717163085938,
+          1394.8160400390625,
+          799.3299560546875
+        ]
+      },
+      "cpp": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.893382,
+        "bbox": [
+          1337.198853,
+          741.071716,
+          1394.81604,
+          799.329956
+        ]
+      }
+    },
+    {
+      "status": "MATCHED",
+      "python_index": 2,
+      "cpp_index": 2,
+      "class_id": 2,
+      "confidence_diff_abs": 1.7456054712816638e-08,
+      "bbox_iou": 0.999999983500854,
+      "python": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.8509960174560547,
+        "bbox": [
+          2643.692138671875,
+          482.1568298339844,
+          2701.564208984375,
+          535.2423706054688
+        ]
+      },
+      "cpp": {
+        "class_id": 2,
+        "class_name": "missing_hole",
+        "confidence": 0.850996,
+        "bbox": [
+          2643.692139,
+          482.15683,
+          2701.564209,
+          535.242371
+        ]
+      }
+    }
+  ]
+}

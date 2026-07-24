@@ -279,6 +279,45 @@ ONNX 단독 평가 및 PyTorch 비교:
 
 ONNX Runtime은 `CUDAExecutionProvider`를 우선 사용하고 사용 불가하면 `CPUExecutionProvider`로 fallback합니다. 이 정보는 평가 결과의 `runtime.providers`에 기록됩니다.
 
+## C++ ONNX 단일 이미지 추론
+
+`cpp_inference/`에는 `models/best.onnx`를 C++ ONNX Runtime으로 실행하는 단일 이미지 추론 CLI가 있습니다. Python 기준 구현(`service/onnx_detector.py`)과 동일하게 letterbox, BGR to RGB, HWC to CHW, `float32` 정규화, `[1, 7, 18900]` decode, class-aware NMS, 원본 좌표 복원을 적용합니다.
+
+빌드에는 Python wheel이 아니라 ONNX Runtime C/C++ 배포 패키지가 필요합니다. `ONNXRUNTIME_ROOT`는 `include/onnxruntime_cxx_api.h`, `lib/onnxruntime.lib`, Windows 기준 `bin/onnxruntime.dll`을 포함한 경로여야 합니다.
+
+```powershell
+cmake -S cpp_inference -B cpp_inference\build `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DOpenCV_DIR="C:\path\to\opencv\build" `
+  -DONNXRUNTIME_ROOT="C:\path\to\onnxruntime"
+
+cmake --build cpp_inference\build --config Release
+```
+
+단일 이미지 실행 예:
+
+```powershell
+.\cpp_inference\build\Release\pcb_onnx_infer.exe `
+  --model models\best.onnx `
+  --metadata models\model_metadata.json `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg `
+  --output benchmarks\cpp_onnx\single `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7
+```
+
+Python ONNX 기준 결과와 C++ 결과 비교:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\write_python_onnx_reference.py `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg
+
+.\.venv\Scripts\python.exe scripts\compare_python_cpp_onnx.py
+```
+
+자세한 환경 준비와 산출물 설명은 `cpp_inference/README.md`를 참고하세요.
+
 ## 예측 오류 분석
 
 `compare_predictions.py`는 PCB 테스트 이미지와 YOLO TXT 정답 라벨을 직접 매칭해 TP/FP/FN을 계산합니다.

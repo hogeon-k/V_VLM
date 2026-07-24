@@ -1,0 +1,16 @@
+{
+  "model": "models\\best.onnx",
+  "image": "datasets\\pcb\\images\\test\\01_missing_hole_03.jpg",
+  "provider": "CPUExecutionProvider",
+  "input_name": "images",
+  "output_name": "output0",
+  "input_shape": [1, 3, 960, 960],
+  "output_shape": [1, 7, 18900],
+  "config": {"imgsz": 960, "conf": 0.150000, "iou": 0.700000},
+  "timing_ms": {"preprocess": 14.105200, "inference": 84.634600, "postprocess": 0.110200, "total": 98.879500},
+  "detections": [
+    {"class_id": 2, "class_name": "missing_hole", "confidence": 0.911415, "bbox": [2076.566162, 574.500061, 2140.389648, 631.915039]},
+    {"class_id": 2, "class_name": "missing_hole", "confidence": 0.893382, "bbox": [1337.198853, 741.071716, 1394.816040, 799.329956]},
+    {"class_id": 2, "class_name": "missing_hole", "confidence": 0.850996, "bbox": [2643.692139, 482.156830, 2701.564209, 535.242371]}
+  ]
+}
