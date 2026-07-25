@@ -93,6 +93,7 @@ The C++ app needs the C++ development packages, not only Python wheels:
   - `include/onnxruntime_cxx_api.h`
   - `lib/onnxruntime.lib` on Windows, or `lib/libonnxruntime.so` on Linux
   - `bin/onnxruntime.dll` on Windows, or runtime shared library equivalent
+  - `bin/onnxruntime_providers_cuda.dll` and `bin/onnxruntime_providers_shared.dll` for CUDA execution
 
 The Python package under `.venv/Lib/site-packages/onnxruntime` provides the Python binding and runtime DLL, but it does not necessarily provide the C++ header and import library required for a native build.
 
@@ -106,13 +107,15 @@ Current Windows PowerShell PATH check in this environment:
 
 ## Build
 
-Windows PowerShell, after CMake, MSVC, OpenCV C++, and ONNX Runtime C/C++ are available:
+Windows PowerShell, after CMake, MSVC, OpenCV C++, and ONNX Runtime GPU C/C++ are available:
 
 ```powershell
 cmake -S cpp_inference -B cpp_inference\build `
   -DCMAKE_BUILD_TYPE=Release `
   -DOpenCV_DIR="C:\path\to\opencv\build" `
-  -DONNXRUNTIME_ROOT="C:\path\to\onnxruntime"
+  -DOpenCV_ARCH=x64 `
+  -DOpenCV_RUNTIME=vc16 `
+  -DONNXRUNTIME_ROOT="C:\libs\onnxruntime-win-x64-gpu-1.20.1"
 
 cmake --build cpp_inference\build --config Release
 ```
@@ -126,10 +129,23 @@ onnxruntime/
 |-- lib/
 |   `-- onnxruntime.lib
 `-- bin/
-    `-- onnxruntime.dll
+    |-- onnxruntime.dll
+    |-- onnxruntime_providers_cuda.dll
+    `-- onnxruntime_providers_shared.dll
 ```
 
+The CMake build copies those three ONNX Runtime DLLs next to `pcb_onnx_infer.exe` after a successful build.
+
 ## Single Image Inference
+
+CUDA is the default provider. Use `--provider cpu` to keep the previous CPU-only behavior.
+The app creates one ONNX Runtime session per process, runs warmup iterations that are excluded from statistics, then records repeated `Session.Run()` timings and separate end-to-end timings.
+
+If CUDA/cuDNN DLLs are not already on PATH, add them before the CUDA run:
+
+```powershell
+$env:Path = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin;C:\Program Files\NVIDIA\CUDNN\v9.25\bin\x64;$env:Path"
+```
 
 ```powershell
 .\cpp_inference\build\Release\pcb_onnx_infer.exe `
@@ -139,7 +155,27 @@ onnxruntime/
   --output benchmarks\cpp_onnx\single `
   --imgsz 960 `
   --conf 0.15 `
-  --iou 0.7
+  --iou 0.7 `
+  --provider cuda `
+  --warmup 10 `
+  --repeat 50 `
+  --cudnn-conv-algo-search exhaustive
+```
+
+CPU-only run:
+
+```powershell
+.\cpp_inference\build\Release\pcb_onnx_infer.exe `
+  --model models\best.onnx `
+  --metadata models\model_metadata.json `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg `
+  --output benchmarks\cpp_onnx\single_cpu `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --provider cpu `
+  --warmup 10 `
+  --repeat 50
 ```
 
 Outputs:
@@ -148,8 +184,28 @@ Outputs:
 benchmarks/cpp_onnx/single/
 |-- result.json
 |-- detections.csv
-`-- result.jpg
+|-- result.jpg
+|-- benchmark.json
+`-- benchmark.csv
 ```
+
+Expected provider lines for a CUDA run:
+
+```text
+Available providers: [TensorrtExecutionProvider, CUDAExecutionProvider, CPUExecutionProvider]
+Requested provider: CUDAExecutionProvider
+CUDA registration: success (device_id=0)
+CUDA cudnn_conv_algo_search: EXHAUSTIVE
+CPU fallback: enabled by ONNX Runtime after CUDA provider
+Provider: CUDAExecutionProvider
+Session.Run stats (ms): first=..., min=..., mean=..., median=..., p95=..., max=..., stddev=...
+End-to-end total stats (ms): first=..., min=..., mean=..., median=..., p95=..., max=..., stddev=...
+Validation mismatches: session_run=0, end_to_end=0
+```
+
+If CUDA initialization fails, the program exits with a detailed `Error:` message instead of silently falling back to CPU mode.
+
+For fair CPU/CUDA comparison, compare the `session_run_ms.stats.mean`, `median`, and `p95` values in each `benchmark.json`. The first measured value is reported separately because it may still show residual one-time setup effects even after warmup. `end_to_end_ms` shows the practical full pipeline cost including preprocess and postprocess.
 
 ## Python Reference And Comparison
 
@@ -174,4 +230,39 @@ Compare Python and C++ result JSON files:
   --python-result benchmarks\cpp_onnx\reference\python_onnx_result.json `
   --cpp-result benchmarks\cpp_onnx\single\result.json `
   --output benchmarks\cpp_onnx\comparison
+```
+
+## CPU vs CUDA Batch Benchmark
+
+Run CPU and CUDA over every image in a folder with one CPU session and one CUDA session per process:
+
+```powershell
+$env:Path = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin;C:\Program Files\NVIDIA\CUDNN\v9.25\bin\x64;$env:Path"
+
+.\cpp_inference\build_gpu\Release\pcb_onnx_batch_benchmark.exe `
+  --model models\best.onnx `
+  --metadata models\model_metadata.json `
+  --images datasets\pcb\images\test `
+  --output benchmarks\cpp_onnx\cpu_cuda_batch `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --match-iou 0.5 `
+  --warmup 10 `
+  --repeat 30 `
+  --cudnn-conv-algo-search heuristic `
+  --provider-order alternate
+```
+
+Main outputs:
+
+```text
+summary.json
+image_results.csv
+timing_runs.csv
+environment.json
+cpu/predictions/
+cuda/predictions/
+comparisons/
+failure_cases/
 ```

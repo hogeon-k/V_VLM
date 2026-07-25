@@ -66,12 +66,27 @@ dist/
 
 # C++ inference build and generated artifacts
 cpp_inference/build/
+cpp_inference/build_gpu/
+cpp_inference/build_*/
+**/Release/
+**/Debug/
+*.dll
+*.pdb
+*.exe
 cpp_inference/build-*/
 cpp_inference/models/*.onnx
 cpp_inference/models/*.engine
 cpp_inference/models/*.plan
 cpp_inference/results/*
 !cpp_inference/results/.gitkeep
+
+# C++ ONNX benchmark run outputs
+benchmarks/cpp_onnx/bench_cpu/
+benchmarks/cpp_onnx/bench_cuda/
+benchmarks/cpp_onnx/cpu_cuda_batch/
+benchmarks/cpp_onnx/single_cpu/
+benchmarks/cpp_onnx/single_gpu/
+benchmarks/cpp_onnx/single_gpu_second/
 
 # Editor and OS temporary files
 .vscode/

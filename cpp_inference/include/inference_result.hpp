@@ -28,4 +28,10 @@ struct InferenceResult {
     std::vector<Detection> detections;
 };
 
+struct RawInferenceResult {
+    double inference_ms = 0.0;
+    std::vector<int64_t> output_shape;
+    std::vector<float> output;
+};
+
 }  // namespace pcb_vision
