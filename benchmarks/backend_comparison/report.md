@@ -1,44 +1,54 @@
-# C++ Inference Backend Final Comparison Report
+# Backend Comparison Report
 
-## 1. Purpose
-Compare ONNX Runtime CUDA, Native TensorRT FP32, and Native TensorRT FP16 using existing benchmark result files only.
+## Execution Environment
 
-## 2. Compared Backends
+- Python: `3.11.9`
+- Platform: `Windows-10-10.0.26200-SP0`
 
-| Backend | Precision | Images | Detections | Inference mean ms | End-to-end mean ms | Failed images | Validation mismatches |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| ONNX Runtime CUDA | FP32 | 21 | 79 | 8.00144 | 18.8403 | 0 | 0 |
-| Native TensorRT FP32 | FP32 | 21 | 80 | 3.14165 | 16.7106 | 0 | 0 |
-| Native TensorRT FP16 | FP16 | 21 | 80 | 2.05774 | 15.6929 | 0 | 0 |
+## Models And Engines
 
-## 3. Performance Speedups
+- PyTorch: `models\best.pt`
+- ONNX: `models\best.onnx`
+- TensorRT FP32: `benchmarks\tensorrt\best_fp32.engine`
+- TensorRT FP16: `benchmarks\tensorrt\best_fp16.engine`
 
-| Comparison | Inference speedup | Inference reduction | End-to-end speedup | End-to-end reduction |
-| --- | ---: | ---: | ---: | ---: |
-| ORT CUDA vs TensorRT FP32 | 2.54689x | 60.7364% | 1.12744x | 11.3038% |
-| ORT CUDA vs TensorRT FP16 | 3.88845x | 74.2828% | 1.20056x | 16.7055% |
-| TensorRT FP32 vs FP16 | 1.52675x | 34.5012% | 1.06485x | 6.09021% |
+## Common Conditions
 
-## 4. Detection Validation
+- Images: `datasets\pcb\images\test` (21)
+- imgsz/conf/iou/match_iou: `960` / `0.15` / `0.5` / `0.5`
+- Warmup/repeat: `5` / `20`
+- Device/provider: `0` / `CUDAExecutionProvider`
+- Warmup policy: Warm up each backend on the first selected image only.
 
-Confidence threshold boundary margin: threshold=0.15, margin=0.001.
+Backend stage timings are backend-reported values. End-to-end is the Python wall-clock duration. TensorRT startup is reported separately and excluded from steady-state statistics.
 
-| Comparison | Status | PASS | Warning | Boundary warning | FAIL | Structural failures | Max confidence diff | Max bbox diff | Min IoU |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ONNX Runtime CUDA vs Native TensorRT FP32 | NUMERICAL_WARNING | 13 | 8 | 1 | 0 | 0 | 0.001613 | 0.046386 | 0.998564 |
-| ONNX Runtime CUDA vs Native TensorRT FP16 | NUMERICAL_WARNING | 4 | 17 | 1 | 0 | 0 | 0.00454 | 0.115478 | 0.995353 |
-| Native TensorRT FP32 vs Native TensorRT FP16 | NUMERICAL_WARNING | 4 | 17 | 0 | 0 | 0 | 0.004622 | 0.099975 | 0.995534 |
+## Backend Summary
 
-## 5. Recommendation
+| Backend | Provider | Precision | Mismatch | Inference mean | End-to-end mean | p95 | Result |
+|---|---|---:|---:|---:|---:|---:|---|
+| pytorch | cuda:0 | FP32 | 0 | 8.980 ms | 43.569 ms | 52.095 ms | BASELINE |
+| onnx_cuda | CUDAExecutionProvider | FP32 | 0 | 8.668 ms | 46.838 ms | 56.108 ms | PASS |
+| tensorrt_fp32 | Native TensorRT | FP32 | 1 | 3.397 ms | 71.988 ms | 88.853 ms | FAIL |
+| tensorrt_fp16 | Native TensorRT | FP16 | 1 | 2.271 ms | 69.939 ms | 84.518 ms | FAIL |
 
-Recommended backend: Native TensorRT FP16
-Recommendation status: recommended_with_numerical_warnings
+## Accuracy Summary
 
-Native TensorRT FP16 had the lowest mean end-to-end latency, with no structural detection failures. Remaining differences are limited to confidence-threshold boundary detections or practical numerical confidence tolerance.
+| Reference | Target | Images | Mismatch images | FP | FN | Class mismatch | Result |
+|---|---|---:|---:|---:|---:|---:|---|
+| pytorch | onnx_cuda | 21 | 0 | 0 | 0 | 0 | PASS |
+| pytorch | tensorrt_fp32 | 21 | 1 | 1 | 0 | 0 | FAIL |
+| pytorch | tensorrt_fp16 | 21 | 1 | 1 | 0 | 0 | FAIL |
+| tensorrt_fp32 | tensorrt_fp16 | 21 | 0 | 0 | 0 | 0 | WARNING |
 
-Threshold-boundary unmatched detections are treated as `NUMERICAL_WARNING` only when every unmatched detection is within the configured confidence boundary. Class mismatches, bbox mismatches, and unmatched detections outside that boundary remain `FAIL`.
+## TensorRT Worker
 
-## 6. Limitations
+- tensorrt_fp32: startup `231.555 ms`, first request `67.645 ms`, PID reused `True`, fallbacks `0`.
+- tensorrt_fp16: startup `185.498 ms`, first request `63.567 ms`, PID reused `True`, fallbacks `0`.
 
-- This report uses previously generated benchmark files and does not rerun inference.
-- ONNX Runtime CUDA end-to-end p95 is computed from timing_runs.csv because summary.json does not store it directly.
+## Fallbacks And Errors
+
+- No backend initialization errors were recorded.
+
+## Final Conclusion
+
+Final status: **FAIL**

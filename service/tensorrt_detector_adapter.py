@@ -98,6 +98,7 @@ class TensorRtDetectorAdapter:
         use_persistent_worker: bool = True,
         fallback_to_oneshot: bool = True,
         worker_startup_timeout_seconds: float | None = None,
+        generate_annotated_image: bool = True,
     ) -> None:
         self.executable_path = _resolve_existing_file(executable_path, "TensorRT executable")
         if self.executable_path.suffix.lower() != ".exe":
@@ -121,6 +122,7 @@ class TensorRtDetectorAdapter:
             if worker_startup_timeout_seconds is not None
             else timeout_seconds
         )
+        self.generate_annotated_image = bool(generate_annotated_image)
         self.last_metadata: TensorRtRunMetadata | None = None
         self._persistent_worker: TensorRtPersistentWorker | None = None
 
@@ -167,10 +169,14 @@ class TensorRtDetectorAdapter:
                 source_path,
                 confidence=self.confidence_threshold,
                 iou=self.iou_threshold,
-                output_dir=output_dir,
+                output_dir=output_dir if self.generate_annotated_image else None,
             )
             detections = self._parse_detections(payload, source_path)
-            annotated_image_path = self._resolve_annotated_image(output_dir, output_path)
+            annotated_image_path = (
+                self._resolve_annotated_image(output_dir, output_path)
+                if self.generate_annotated_image
+                else None
+            )
             duration_seconds = time.perf_counter() - start
             timing_ms = self._parse_timing_ms(payload)
             ipc_roundtrip_ms = float(payload["ipc_roundtrip_ms"])

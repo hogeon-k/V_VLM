@@ -50,6 +50,45 @@ def test_adapter_uses_persistent_payload_without_result_json(monkeypatch, tmp_pa
     assert not output_dirs[0].exists()
 
 
+def test_adapter_can_skip_annotated_image_for_benchmarks(monkeypatch, tmp_path) -> None:
+    executable, engine, metadata, image = make_adapter_files(tmp_path)
+    received_output_dirs: list[Path | None] = []
+
+    class FakeWorker:
+        startup_ms = 10.0
+        pid = 1234
+
+        def infer(self, image_path, confidence, iou, output_dir):
+            received_output_dirs.append(output_dir)
+            return {
+                "ok": True,
+                "backend": "tensorrt",
+                "engine_label": "fp16",
+                "detections": [],
+                "timing_ms": {"total": 2.0},
+                "ipc_roundtrip_ms": 3.0,
+            }
+
+        def stderr_excerpt(self):
+            return ""
+
+        def stop(self):
+            return None
+
+    adapter = TensorRtDetectorAdapter(
+        executable,
+        engine,
+        metadata,
+        generate_annotated_image=False,
+    )
+    monkeypatch.setattr(adapter, "_get_persistent_worker", lambda: FakeWorker())
+
+    result = adapter.detect(image)
+
+    assert received_output_dirs == [None]
+    assert result.annotated_image_path is None
+
+
 def test_adapter_falls_back_to_oneshot_on_protocol_failure(monkeypatch, tmp_path) -> None:
     executable, engine, metadata, image = make_adapter_files(tmp_path)
     adapter = TensorRtDetectorAdapter(executable, engine, metadata)
