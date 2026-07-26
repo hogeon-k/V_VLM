@@ -10,6 +10,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from scripts.console_encoding import configure_windows_console_encoding
 from service.inspection_service import InspectionService
+from service.onnx_detector import OnnxDetector
+from service.tensorrt_detector_adapter import TensorRtDetectorAdapter
 from service.vlm_service import VlmService
 from service.yolo_service import YoloService
 from vlm.prompt_builder import PromptBuilder
@@ -40,7 +42,62 @@ def parse_args() -> argparse.Namespace:
         description="Run YOLO PCB inspection and optional Ollama VLM explanation."
     )
     parser.add_argument("--image", required=True, help="Input PCB image path.")
+    parser.add_argument(
+        "--backend",
+        choices=("pytorch", "onnx", "tensorrt"),
+        default="pytorch",
+        help="Detection backend used before optional VLM explanation.",
+    )
     parser.add_argument("--model", default="models/best.pt", help="YOLO model path.")
+    parser.add_argument("--onnx-model", default="models/best.onnx", help="ONNX model path for --backend onnx.")
+    parser.add_argument(
+        "--onnx-provider",
+        choices=("CUDAExecutionProvider", "CPUExecutionProvider"),
+        default="CUDAExecutionProvider",
+        help="ONNX Runtime provider for --backend onnx.",
+    )
+    parser.add_argument(
+        "--require-onnx-cuda",
+        action="store_true",
+        help="Fail instead of falling back when --backend onnx cannot use CUDA.",
+    )
+    parser.add_argument(
+        "--tensorrt-executable",
+        default="cpp_inference/build_gpu/Release/pcb_onnx_infer.exe",
+        help="C++ TensorRT inference executable for --backend tensorrt.",
+    )
+    parser.add_argument(
+        "--tensorrt-engine",
+        default="benchmarks/tensorrt/best_fp16.engine",
+        help="TensorRT engine path for --backend tensorrt.",
+    )
+    parser.add_argument(
+        "--tensorrt-engine-label",
+        default="fp16",
+        help="TensorRT engine label passed to the C++ CLI.",
+    )
+    parser.add_argument(
+        "--tensorrt-metadata",
+        default="models/model_metadata.json",
+        help="Model metadata path passed to the C++ TensorRT CLI.",
+    )
+    parser.add_argument(
+        "--device-id",
+        type=int,
+        default=None,
+        help="CUDA device id for --backend tensorrt. Defaults to --device when numeric, otherwise 0.",
+    )
+    parser.add_argument(
+        "--tensorrt-timeout",
+        type=float,
+        default=120.0,
+        help="TensorRT subprocess timeout in seconds.",
+    )
+    parser.add_argument(
+        "--keep-tensorrt-outputs",
+        action="store_true",
+        help="Keep the temporary TensorRT CLI output directory for debugging.",
+    )
     parser.add_argument("--imgsz", type=int, default=960, help="YOLO inference image size.")
     parser.add_argument("--conf", type=float, default=0.15, help="YOLO confidence threshold.")
     parser.add_argument("--iou", type=float, default=0.5, help="YOLO NMS IoU threshold.")
@@ -102,7 +159,40 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_yolo_service(args: argparse.Namespace) -> YoloService:
-    """Create a configured YOLO service for one CLI run."""
+    """Create the configured detection service for one CLI run."""
+    backend = getattr(args, "backend", "pytorch")
+    if backend == "tensorrt":
+        executable_path = _project_path(args.tensorrt_executable)
+        engine_path = _project_path(args.tensorrt_engine)
+        metadata_path = _project_path(args.tensorrt_metadata)
+        device_id = args.device_id
+        if device_id is None:
+            device_id = int(args.device) if str(args.device).isdigit() else 0
+        detector = TensorRtDetectorAdapter(
+            executable_path=executable_path,
+            engine_path=engine_path,
+            metadata_path=metadata_path,
+            device_id=device_id,
+            image_size=args.imgsz,
+            confidence_threshold=args.conf,
+            iou_threshold=args.iou,
+            engine_label=args.tensorrt_engine_label,
+            timeout_seconds=args.tensorrt_timeout,
+            keep_tensorrt_outputs=args.keep_tensorrt_outputs,
+        )
+        return YoloService(detector)
+
+    if backend == "onnx":
+        detector = OnnxDetector(
+            _project_path(args.onnx_model),
+            imgsz=args.imgsz,
+            conf=args.conf,
+            iou=args.iou,
+            requested_provider=args.onnx_provider,
+            require_cuda=args.require_onnx_cuda,
+        )
+        return YoloService(detector)
+
     model_path = Path(args.model)
     if not model_path.is_absolute():
         model_path = PROJECT_ROOT / model_path
@@ -117,6 +207,11 @@ def build_yolo_service(args: argparse.Namespace) -> YoloService:
     loader = YoloModelLoader(config)
     detector = YoloDetector(model_loader=loader, config=config)
     return YoloService(detector)
+
+
+def _project_path(value: str | Path) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def build_vlm_service(args: argparse.Namespace) -> VlmService:
@@ -181,7 +276,17 @@ def main() -> int:
     try:
         yolo_service = build_yolo_service(args)
         print(f"[INFO] Input image: {image_path}")
-        print(f"[INFO] YOLO model: {Path(args.model)}")
+        print(f"[INFO] Detection backend: {args.backend}")
+        if args.backend == "tensorrt":
+            print(f"[INFO] TensorRT executable: {_project_path(args.tensorrt_executable)}")
+            print(f"[INFO] TensorRT engine: {_project_path(args.tensorrt_engine)}")
+            print(f"[INFO] TensorRT engine label: {args.tensorrt_engine_label}")
+            print(f"[INFO] TensorRT metadata: {_project_path(args.tensorrt_metadata)}")
+        elif args.backend == "onnx":
+            print(f"[INFO] ONNX model: {_project_path(args.onnx_model)}")
+            print(f"[INFO] ONNX provider: {args.onnx_provider}")
+        else:
+            print(f"[INFO] YOLO model: {Path(args.model)}")
 
         if args.skip_vlm:
             yolo_result = yolo_service.detect(image_path)

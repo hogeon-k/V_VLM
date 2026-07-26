@@ -467,7 +467,7 @@ class OnnxDetector:
         if concrete and actual_hw != expected:
             raise ValueError(f"Expected ONNX input size {expected}, got {shape}")
 
-    def detect(self, image_path: str | Path) -> YoloResult:
+    def detect(self, image_path: str | Path, output_path: str | Path | None = None) -> YoloResult:
         return YoloResult(image_path=Path(image_path), detections=self.detect_timed(image_path).detections)
 
     def detect_timed(self, image_path: str | Path) -> TimedDetections:

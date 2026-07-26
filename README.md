@@ -318,6 +318,44 @@ Python ONNX 기준 결과와 C++ 결과 비교:
 
 자세한 환경 준비와 산출물 설명은 `cpp_inference/README.md`를 참고하세요.
 
+## TensorRT 서비스 연결
+
+Python 검사 서비스는 검증된 C++ Native TensorRT CLI를 subprocess adapter로 호출할 수 있습니다. 이 단계는 기능 연결용 최소 구현이며, 이미지마다 별도 프로세스를 시작하므로 TensorRT runtime 생성, engine deserialize, CUDA buffer/context 준비 비용이 매번 발생합니다. 고성능 운영 경로는 이후 persistent C++ worker 또는 Python binding으로 교체하는 것을 목표로 합니다.
+
+필수 파일:
+
+- `cpp_inference/build_gpu/Release/pcb_onnx_infer.exe`
+- `benchmarks/tensorrt/best_fp16.engine`
+- `models/model_metadata.json`
+
+단일 검사 CLI 예:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\test_yolo_vlm.py `
+  --backend tensorrt `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg `
+  --tensorrt-executable cpp_inference\build_gpu\Release\pcb_onnx_infer.exe `
+  --tensorrt-engine benchmarks\tensorrt\best_fp16.engine `
+  --tensorrt-engine-label fp16 `
+  --tensorrt-metadata models\model_metadata.json `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --device 0
+```
+
+Adapter는 C++ CLI의 `result.json`을 읽어 기존 `Detection`/`YoloResult` 구조로 변환합니다. 탐지가 0개이면 기존 정책대로 OK로 처리되고, 탐지가 있으면 기존 OK/NG, crop montage, VLM, SQLite 저장 흐름을 그대로 사용합니다. C++의 임시 산출물은 기본적으로 `tempfile.TemporaryDirectory()`에 쓰고 정리하며, VLM/DB에서 참조할 annotated image만 `data/result_images/`로 복사합니다. 디버깅 시 `--keep-tensorrt-outputs`로 임시 TensorRT 출력 폴더를 보존할 수 있습니다.
+
+TensorRT 실패 시 자동 fallback은 하지 않습니다. 실행 파일, engine, metadata, 입력 이미지 누락, timeout, non-zero exit, result JSON 누락/스키마 오류, bbox/class_id 오류는 명확한 예외로 반환해 실제 TensorRT 실패를 숨기지 않습니다.
+
+기본 backend는 기존 동작과 동일하게 `pytorch`입니다. CLI에서 선택 가능한 backend는 다음과 같습니다.
+
+```powershell
+--backend pytorch
+--backend onnx
+--backend tensorrt
+```
+
 ## 예측 오류 분석
 
 `compare_predictions.py`는 PCB 테스트 이미지와 YOLO TXT 정답 라벨을 직접 매칭해 TP/FP/FN을 계산합니다.
