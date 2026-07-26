@@ -4,6 +4,17 @@ PySide6 기반 PCB Vision Inspection 데스크톱 프로젝트입니다. PCB 이
 
 YOLO + Ollama VLM 터미널 검사 가이드는 [docs/yolo_vlm_terminal.md](C:/workspace/V_VLM/docs/yolo_vlm_terminal.md)를 참고하세요.
 
+## 달성 성과
+
+- PyTorch 모델을 ONNX로 변환하고 ONNX 모델 유효성, 입출력 shape, opset, SHA256 메타데이터 검증
+- Python ONNX Runtime과 C++ ONNX Runtime 추론 결과 비교
+- Native C++ TensorRT FP32/FP16 추론 backend 구현
+- TensorRT engine 재사용을 위한 persistent subprocess worker 구현
+- PyTorch CUDA, ONNX Runtime CUDA, TensorRT FP32, TensorRT FP16 4-backend 비교
+- TensorRT FP16 순수 추론 평균 2.27 ms 확인
+- 파일 기반 Python-C++ 통합 구조에서 host end-to-end 병목 확인
+- 2026-07-26 기준 전체 테스트 443 passed 기록
+
 ## 주요 기능
 
 - PCB 이미지 검사 화면
@@ -14,6 +25,31 @@ YOLO + Ollama VLM 터미널 검사 가이드는 [docs/yolo_vlm_terminal.md](C:/w
 - 검사 통계 화면
 - 시스템 상태 화면
 - 실행 로그 표시
+
+## 시스템 구조
+
+```text
+PySide6 GUI
+    |
+ViewModel / InspectionService
+    +-- YoloService / PyTorch Detector
+    +-- OnnxDetector / ONNX Runtime Detector
+    +-- TensorRtDetectorAdapter
+            |
+            | UTF-8 JSON Lines
+            v
+       C++ Persistent Worker
+            |
+       TensorRT Engine
+    |
+YOLO Detection Result
+    |
+NG Crop / Montage
+    |
+Ollama VLM
+    |
+SQLite Inspection History
+```
 
 ## 기술 스택
 
@@ -118,6 +154,8 @@ Ollama를 종료한 뒤 시스템 화면에서 상태 새로고침을 누르면 
 | `bbox_x1`, `bbox_y1`, `bbox_x2`, `bbox_y2` | Bounding Box 좌표 |
 | `vlm_description` | 불량 단위 VLM 분석 결과 |
 
+현재 기본 화면 흐름에서는 NG 검사 단위 VLM 결과를 `inspections.vlm_description`에 저장합니다. `defects.vlm_description`은 스키마와 저장소 코드에 존재하지만, 기본 VLM 생성 흐름에서는 불량별 개별 분석 결과가 아니라 검사 단위 설명을 사용합니다. 이 컬럼은 향후 불량별 분석 저장을 위한 확장 지점입니다.
+
 `defects.inspection_id`는 `inspections.id`를 참조하며 `ON DELETE CASCADE`가 적용됩니다. 따라서 검사 이력 1건을 삭제하면 연결된 불량 상세 데이터도 함께 삭제됩니다.
 
 이미지는 DB BLOB로 저장하지 않고 파일 경로만 저장합니다. 실제 이미지 파일은 `data/input_images/`, `data/result_images/` 같은 프로젝트 관리 폴더에 저장합니다.
@@ -152,12 +190,13 @@ Pascal VOC XML 파일을 `data/annotations/` 아래에 두거나 [tools/convert_
 
 ## YOLO 데이터셋 분할
 
-이미지는 `data/images/`, YOLO TXT 라벨은 `labels/`에 둡니다. 다른 경로를 사용하는 경우 [tools/split_yolo_dataset.py](C:/workspace/V_VLM/tools/split_yolo_dataset.py)의 `IMAGE_DIR`, `LABEL_DIR`, `OUTPUT_DIR` 값을 수정합니다.
+이미지는 `data/images/`, YOLO TXT 라벨은 `labels/`에 둡니다. 현재 저장소의 분할 스크립트는 [tools/stratified_split_yolo_dataset.py](C:/workspace/V_VLM/tools/stratified_split_yolo_dataset.py)이며, 클래스별 대표 라벨을 기준으로 train/val/test를 층화 분할합니다.
 
-기본 분할 비율은 train/val/test = 8:1:1입니다.
+현재 데이터셋은 train/val/test = 70:15:15 비율로 계층화 분할합니다.
+클래스별 객체 분포를 고려해 각 split에 특정 클래스가 누락되지 않도록 구성했습니다.
 
 ```powershell
-.\.venv\Scripts\python.exe tools\split_yolo_dataset.py
+.\.venv\Scripts\python.exe tools\stratified_split_yolo_dataset.py
 ```
 
 결과는 `datasets/pcb/` 아래에 생성됩니다.
@@ -218,7 +257,7 @@ Pascal VOC XML 파일을 `data/annotations/` 아래에 두거나 [tools/convert_
 
 ## ONNX 변환 검증 및 평가
 
-현재 ONNX 기준 모델은 `models/best.onnx`이며, PyTorch 원본 모델은 `models/best.pt`입니다. 변환 조건은 고정 입력 `1 x 3 x 960 x 960`, batch size `1`, dynamic shape 미사용, 기본 opset `12`를 기준으로 관리합니다. ONNX simplify 적용 여부는 변환 실행 조건에 따라 별도 기록해야 하며, 이 저장소의 검증 스크립트는 실제 ONNX 파일의 input/output shape, opset, producer, SHA256을 읽어 결과에 남깁니다.
+현재 ONNX 기준 모델은 `models/best.onnx`이며, PyTorch 원본 모델은 `models/best.pt`입니다. `benchmarks/onnx/onnx_validation.json` 기준 실제 ONNX 모델은 opset `17`, 고정 입력 `1 x 3 x 960 x 960`, 출력 `1 x 7 x 18900`, batch size `1`, dynamic shape 미사용입니다. ONNX simplify 적용 여부는 변환 실행 조건에 따라 별도 기록해야 하며, 이 저장소의 검증 스크립트는 실제 ONNX 파일의 input/output shape, opset, producer, SHA256을 읽어 결과에 남깁니다.
 
 ONNX 모델 유효성 검사와 메타데이터 생성:
 
@@ -250,6 +289,8 @@ ONNX 단독 평가 및 PyTorch 비교:
 ```
 
 평가에서 `--iou`는 NMS IoU이고, `--match-iou`는 GT와 prediction의 정답 매칭 IoU입니다. 매칭은 같은 클래스끼리만 confidence 내림차순의 one-to-one greedy 방식으로 수행합니다. mAP는 IoU `0.50:0.05:0.95` 구간에서 101-point interpolated precision envelope 방식으로 계산합니다. Ultralytics 내부 metric 객체를 그대로 쓰는 방식은 아니므로, 이 제한은 결과 JSON의 `matching.method`에도 기록됩니다.
+
+개별 모델 검증과 backend 비교는 실행 목적에 따라 NMS IoU 설정이 다를 수 있습니다. 예를 들어 ONNX 단독 평가와 prediction 비교 예시는 NMS IoU `0.7`을 사용하고, 4-backend 비교는 공통 조건으로 NMS IoU `0.5`를 사용합니다. backend 간 결과는 같은 명령 내의 같은 공통 조건에서만 비교해야 하며, NMS IoU와 GT/prediction match IoU는 서로 다른 개념입니다.
 
 기본 PASS/WARNING 기준:
 
@@ -404,9 +445,9 @@ TensorRT FP32와 FP16은 `05_short_06.jpg`에서 confidence가 임계값 `0.15`�
 | TensorRT FP32 | 3.40 ms | 71.99 ms |
 | TensorRT FP16 | 2.27 ms | 69.94 ms |
 
-TensorRT FP16의 순수 inference는 FP32보다 빨랐고, 두 TensorRT engine 모두 모델 계산 자체에서는 PyTorch와 ONNX Runtime보다 짧았습니다. 반면 현재 통합 구조의 host end-to-end에는 Python-C++ JSONL IPC, 파일 기반 이미지 로딩, 결과 직렬화, 전처리와 후처리가 포함되어 PyTorch와 ONNX Runtime보다 길었습니다. 따라서 TensorRT 적용 여부는 순수 GPU inference뿐 아니라 전체 파이프라인 지연시간을 기준으로 판단해야 합니다. Persistent worker는 engine을 한 번만 deserialize하고 backend별 같은 PID를 재사용했으며, 실제 비교에서 one-shot fallback은 0회였고 종료 후 orphan `pcb_onnx_infer.exe` 프로세스는 없었습니다.
+TensorRT FP16의 순수 inference는 PyTorch CUDA 대비 약 74.7%, ONNX Runtime CUDA 대비 약 73.8% 짧았고, 두 TensorRT engine 모두 모델 계산 자체에서는 PyTorch와 ONNX Runtime보다 빨랐습니다. 반면 현재 통합 구조의 host end-to-end에는 Python에서 C++ worker로 이미지 경로 전달, C++ 이미지 파일 로딩과 디코딩, Python-C++ JSONL IPC, JSON 직렬화와 역직렬화, letterbox 전처리, decode/NMS/좌표 복원 후처리, 결과 이미지 처리 비용이 포함되어 PyTorch와 ONNX Runtime보다 길었습니다. 따라서 TensorRT 적용 여부는 순수 GPU inference뿐 아니라 전체 파이프라인 지연시간을 기준으로 판단해야 합니다. JSONL IPC만을 단독 병목으로 단정하지 않고, 파일 기반 Python-C++ 분리 구조 전체 비용으로 해석합니다. Persistent worker는 engine을 한 번만 deserialize하고 backend별 같은 PID를 재사용했으며, 실제 비교에서 one-shot fallback은 0회였고 종료 후 orphan `pcb_onnx_infer.exe` 프로세스는 없었습니다.
 
-이 결과는 RTX 4060 8GB와 당시 Windows/CUDA 환경의 측정값입니다. 하드웨어, 드라이버, CUDA/TensorRT 버전, 이미지와 설정에 따라 달라질 수 있습니다. GUI는 비교 기능을 제공하지 않으며 운영 검사 흐름과 개발 benchmark를 분리하기 위해 독립 CLI로 실행합니다. 전체 테스트 결과는 `443 passed`였고, 상세 측정 근거는 `benchmarks/backend_comparison/report.md`에 보존합니다.
+이 결과는 RTX 4060 8GB와 당시 Windows/CUDA 환경의 측정값입니다. 하드웨어, 드라이버, CUDA/TensorRT 버전, 이미지와 설정에 따라 달라질 수 있습니다. GUI는 비교 기능을 제공하지 않으며 운영 검사 흐름과 개발 benchmark를 분리하기 위해 독립 CLI로 실행합니다. 전체 테스트 결과는 2026-07-26 기준 `443 passed`였고, 상세 측정 근거는 `benchmarks/backend_comparison/report.md`에 보존합니다.
 
 기본 backend는 기존 동작과 동일하게 `pytorch`입니다. CLI에서 선택 가능한 backend는 다음과 같습니다.
 
