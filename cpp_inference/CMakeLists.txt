@@ -12,6 +12,9 @@ find_package(OpenCV REQUIRED)
 message(STATUS "OpenCV version: ${OpenCV_VERSION}")
 message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
 
+find_package(CUDAToolkit REQUIRED)
+message(STATUS "CUDA Toolkit version: ${CUDAToolkit_VERSION}")
+
 set(ONNXRUNTIME_ROOT "C:/libs/onnxruntime-win-x64-gpu-1.20.1" CACHE PATH "Path to ONNX Runtime C/C++ package root")
 if(NOT ONNXRUNTIME_ROOT)
     message(FATAL_ERROR
@@ -54,9 +57,59 @@ endif()
 message(STATUS "ONNX Runtime include: ${ONNXRUNTIME_INCLUDE_DIR}")
 message(STATUS "ONNX Runtime library: ${ONNXRUNTIME_LIBRARY}")
 
+set(TENSORRT_ROOT "C:/libs/TensorRT-10.4.0.26" CACHE PATH "Path to TensorRT package root")
+if(NOT TENSORRT_ROOT)
+    message(FATAL_ERROR
+        "TensorRT root was not provided.\n"
+        "Pass the TensorRT SDK root with:\n"
+        "  -DTENSORRT_ROOT=<path>\n"
+        "Expected layout:\n"
+        "  <path>/include/NvInfer.h\n"
+        "  <path>/lib/nvinfer_10.lib"
+    )
+endif()
+
+set(TENSORRT_INCLUDE_DIR "${TENSORRT_ROOT}/include")
+find_library(TENSORRT_NVINFER_LIBRARY
+    NAMES nvinfer_10 nvinfer
+    PATHS "${TENSORRT_ROOT}/lib"
+    NO_DEFAULT_PATH
+)
+find_library(TENSORRT_PLUGIN_LIBRARY
+    NAMES nvinfer_plugin_10 nvinfer_plugin
+    PATHS "${TENSORRT_ROOT}/lib"
+    NO_DEFAULT_PATH
+)
+
+if(NOT EXISTS "${TENSORRT_INCLUDE_DIR}/NvInfer.h")
+    message(FATAL_ERROR
+        "TensorRT header was not found:\n"
+        "  ${TENSORRT_INCLUDE_DIR}/NvInfer.h\n"
+        "Pass the TensorRT SDK root with:\n"
+        "  -DTENSORRT_ROOT=<path>"
+    )
+endif()
+if(NOT TENSORRT_NVINFER_LIBRARY)
+    message(FATAL_ERROR
+        "TensorRT nvinfer import library was not found under:\n"
+        "  ${TENSORRT_ROOT}/lib\n"
+        "Expected Windows x64 file:\n"
+        "  nvinfer_10.lib"
+    )
+endif()
+
+message(STATUS "TensorRT include: ${TENSORRT_INCLUDE_DIR}")
+message(STATUS "TensorRT nvinfer library: ${TENSORRT_NVINFER_LIBRARY}")
+if(TENSORRT_PLUGIN_LIBRARY)
+    message(STATUS "TensorRT plugin library: ${TENSORRT_PLUGIN_LIBRARY}")
+else()
+    message(WARNING "TensorRT plugin library was not found; continuing because native engine deserialization does not require the ONNX parser.")
+endif()
+
 add_executable(pcb_onnx_infer
     src/main.cpp
     src/detector.cpp
+    src/tensorrt_detector.cpp
     src/image_preprocessor.cpp
     src/postprocessor.cpp
 )
@@ -73,6 +126,7 @@ target_include_directories(pcb_onnx_infer
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${ONNXRUNTIME_INCLUDE_DIR}
+        ${TENSORRT_INCLUDE_DIR}
 )
 
 target_include_directories(pcb_onnx_batch_benchmark
@@ -81,7 +135,10 @@ target_include_directories(pcb_onnx_batch_benchmark
         ${ONNXRUNTIME_INCLUDE_DIR}
 )
 
-target_link_libraries(pcb_onnx_infer PRIVATE ${OpenCV_LIBS} ${ONNXRUNTIME_LIBRARY})
+target_link_libraries(pcb_onnx_infer PRIVATE ${OpenCV_LIBS} ${ONNXRUNTIME_LIBRARY} ${TENSORRT_NVINFER_LIBRARY} CUDA::cudart)
+if(TENSORRT_PLUGIN_LIBRARY)
+    target_link_libraries(pcb_onnx_infer PRIVATE ${TENSORRT_PLUGIN_LIBRARY})
+endif()
 target_link_libraries(pcb_onnx_batch_benchmark PRIVATE ${OpenCV_LIBS} ${ONNXRUNTIME_LIBRARY})
 
 if(MSVC)
@@ -117,6 +174,25 @@ if(WIN32)
         endif()
     endforeach()
     message(STATUS "ONNX Runtime runtime DLLs: ${ONNXRUNTIME_FOUND_RUNTIME_DLLS}")
+
+    set(TENSORRT_RUNTIME_DLLS
+        "${TENSORRT_ROOT}/lib/nvinfer_10.dll"
+        "${TENSORRT_ROOT}/lib/nvinfer_plugin_10.dll"
+    )
+    set(TENSORRT_FOUND_RUNTIME_DLLS "")
+    foreach(trt_dll IN LISTS TENSORRT_RUNTIME_DLLS)
+        if(EXISTS "${trt_dll}")
+            list(APPEND TENSORRT_FOUND_RUNTIME_DLLS "${trt_dll}")
+            add_custom_command(TARGET pcb_onnx_infer POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${trt_dll}"
+                        "$<TARGET_FILE_DIR:pcb_onnx_infer>/"
+            )
+        else()
+            message(STATUS "TensorRT runtime DLL was not found or not needed: ${trt_dll}")
+        endif()
+    endforeach()
+    message(STATUS "TensorRT runtime DLLs: ${TENSORRT_FOUND_RUNTIME_DLLS}")
 
     if(OpenCV_ARCH AND OpenCV_RUNTIME)
         set(OpenCV_BIN_DIR "${OpenCV_DIR}/${OpenCV_ARCH}/${OpenCV_RUNTIME}/bin")

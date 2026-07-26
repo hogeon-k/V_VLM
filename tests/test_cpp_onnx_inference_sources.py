@@ -44,6 +44,45 @@ def test_cpp_cmake_requires_onnxruntime_root() -> None:
     assert "onnxruntime_providers_shared.dll" in cmake
 
 
+def test_cpp_cmake_wires_native_tensorrt_without_onnx_parser() -> None:
+    cmake = read_cpp("cpp_inference/CMakeLists.txt")
+
+    assert "TENSORRT_ROOT" in cmake
+    assert "NvInfer.h" in cmake
+    assert "nvinfer_10" in cmake
+    assert "nvinfer_plugin_10" in cmake
+    assert "nvonnxparser" not in cmake
+    assert "CUDA::cudart" in cmake
+    assert "src/tensorrt_detector.cpp" in cmake
+
+
+def test_cpp_native_tensorrt_uses_tensor_api_and_reused_pre_postprocessing() -> None:
+    header = read_cpp("cpp_inference/include/tensorrt_detector.hpp")
+    source = read_cpp("cpp_inference/src/tensorrt_detector.cpp")
+    main = read_cpp("cpp_inference/src/main.cpp")
+
+    assert "class TensorRtDetector final" in header
+    assert "nvinfer1::createInferRuntime" in source
+    assert "deserializeCudaEngine" in source
+    assert "createExecutionContext" in source
+    assert "getNbIOTensors" in source
+    assert "getIOTensorName" in source
+    assert "getTensorIOMode" in source
+    assert "getTensorShape" in source
+    assert "getTensorDataType" in source
+    assert "setTensorAddress" in source
+    assert "enqueueV3" in source
+    assert "getBindingIndex" not in source
+    assert "getNbBindings" not in source
+    assert "enqueueV2" not in source
+    assert "preprocess_image(image, impl_->image_size)" in source
+    assert "decode_yolo_output" in source
+    assert "--backend" in main
+    assert "--engine" in main
+    assert "--engine-label" in main
+    assert "Native TensorRT" in main
+
+
 def test_cpp_cuda_provider_uses_v2_options_and_reports_cudnn_search() -> None:
     header = read_cpp("cpp_inference/include/detector.hpp")
     source = read_cpp("cpp_inference/src/detector.cpp")

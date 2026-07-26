@@ -10,6 +10,7 @@ It mirrors the Python ONNX implementation in `service/onnx_detector.py`:
 - HWC to CHW
 - `float32` normalization to `0..1`
 - ONNX Runtime inference
+- Native TensorRT engine inference for a single image
 - `[1, 7, 18900]` output decode as `[channel][candidate]`
 - class-score confidence selection without extra objectness or sigmoid
 - class-aware NMS
@@ -64,6 +65,7 @@ The same order is recorded in `cpp_inference/config/classes.txt` and matches `da
 | data.yaml | `datasets/pcb/data.yaml` | Confirmed |
 | Test images | `datasets/pcb/images/test/*.jpg` | Confirmed |
 | C++ inference output | `benchmarks/cpp_onnx/single/` | Expected |
+| Native TensorRT engines | `benchmarks/tensorrt/best_fp32.engine`, `benchmarks/tensorrt/best_fp16.engine` | Expected |
 | Python/C++ comparison output | `benchmarks/cpp_onnx/comparison/` | Expected |
 
 Do not copy large model files into this folder. Keep shared model assets under the existing project `models/` directory.
@@ -94,6 +96,10 @@ The C++ app needs the C++ development packages, not only Python wheels:
   - `lib/onnxruntime.lib` on Windows, or `lib/libonnxruntime.so` on Linux
   - `bin/onnxruntime.dll` on Windows, or runtime shared library equivalent
   - `bin/onnxruntime_providers_cuda.dll` and `bin/onnxruntime_providers_shared.dll` for CUDA execution
+- TensorRT package containing:
+  - `include/NvInfer.h`
+  - `lib/nvinfer_10.lib`
+  - runtime DLLs such as `nvinfer_10.dll` under `lib/`
 
 The Python package under `.venv/Lib/site-packages/onnxruntime` provides the Python binding and runtime DLL, but it does not necessarily provide the C++ header and import library required for a native build.
 
@@ -115,7 +121,8 @@ cmake -S cpp_inference -B cpp_inference\build `
   -DOpenCV_DIR="C:\path\to\opencv\build" `
   -DOpenCV_ARCH=x64 `
   -DOpenCV_RUNTIME=vc16 `
-  -DONNXRUNTIME_ROOT="C:\libs\onnxruntime-win-x64-gpu-1.20.1"
+  -DONNXRUNTIME_ROOT="C:\libs\onnxruntime-win-x64-gpu-1.20.1" `
+  -DTENSORRT_ROOT="C:\libs\TensorRT-10.4.0.26"
 
 cmake --build cpp_inference\build --config Release
 ```
@@ -135,6 +142,7 @@ onnxruntime/
 ```
 
 The CMake build copies those three ONNX Runtime DLLs next to `pcb_onnx_infer.exe` after a successful build.
+It also links TensorRT with `nvinfer_10.lib` and `CUDA::cudart`, and copies available TensorRT runtime DLLs next to `pcb_onnx_infer.exe`.
 
 ## Single Image Inference
 
@@ -206,6 +214,46 @@ Validation mismatches: session_run=0, end_to_end=0
 If CUDA initialization fails, the program exits with a detailed `Error:` message instead of silently falling back to CPU mode.
 
 For fair CPU/CUDA comparison, compare the `session_run_ms.stats.mean`, `median`, and `p95` values in each `benchmark.json`. The first measured value is reported separately because it may still show residual one-time setup effects even after warmup. `end_to_end_ms` shows the practical full pipeline cost including preprocess and postprocess.
+
+## Native TensorRT Single Image Inference
+
+TensorRT uses the same C++ preprocessing, YOLO output decoding, class-aware NMS,
+and bbox restoration as the ONNX path. The native backend only replaces
+`Session.Run()` with TensorRT 10 engine execution through
+`setTensorAddress()` and `enqueueV3()`.
+
+```powershell
+$env:Path += ";C:\libs\TensorRT-10.4.0.26\lib"
+
+.\cpp_inference\build_gpu\Release\pcb_onnx_infer.exe `
+  --backend tensorrt `
+  --engine benchmarks\tensorrt\best_fp32.engine `
+  --engine-label fp32 `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg `
+  --conf 0.15 `
+  --iou 0.7 `
+  --warmup 10 `
+  --repeat 50
+```
+
+FP16 engine run:
+
+```powershell
+.\cpp_inference\build_gpu\Release\pcb_onnx_infer.exe `
+  --backend tensorrt `
+  --engine benchmarks\tensorrt\best_fp16.engine `
+  --engine-label fp16 `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg `
+  --conf 0.15 `
+  --iou 0.7 `
+  --warmup 10 `
+  --repeat 50
+```
+
+TensorRT output files use the same folder contract as ONNX single-image runs:
+`result.json`, `detections.csv`, `result.jpg`, `benchmark.json`, and
+`benchmark.csv`. The benchmark JSON records input/output tensor metadata,
+H2D mean, D2H mean, TensorRT total mean, and GPU execution mean/median/p95.
 
 ## Python Reference And Comparison
 

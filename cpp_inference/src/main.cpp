@@ -18,20 +18,25 @@
 
 #include "detector.hpp"
 #include "image_preprocessor.hpp"
+#include "tensorrt_detector.hpp"
 
 namespace fs = std::filesystem;
 
 namespace {
 
 struct Args {
+    std::string backend = "onnx";
     std::string model;
     std::string metadata;
+    std::string engine;
+    std::string engine_label;
     std::string image;
     std::string output;
     int imgsz = 960;
     float conf = 0.15F;
     float iou = 0.7F;
     std::string provider = "CUDAExecutionProvider";
+    int device_id = 0;
     int warmup = 10;
     int repeat = 50;
     std::string cudnn_conv_algo_search = "HEURISTIC";
@@ -53,15 +58,20 @@ struct IterationTiming {
     double inference_ms = 0.0;
     double postprocess_ms = 0.0;
     double total_ms = 0.0;
+    double h2d_ms = 0.0;
+    double gpu_execution_ms = 0.0;
+    double d2h_ms = 0.0;
+    double tensorrt_total_ms = 0.0;
     bool detections_match = true;
     std::string validation_error;
 };
 
 void print_usage(const char* program_name) {
     std::cout
-        << "Usage: " << program_name << " --model <best.onnx> --metadata <model_metadata.json> "
-        << "--image <image> --output <dir> [--imgsz 960] [--conf 0.15] [--iou 0.7] "
-        << "[--provider cuda|cpu] [--warmup 10] [--repeat 50] "
+        << "Usage: " << program_name << " --backend onnx|tensorrt "
+        << "[--model <best.onnx>] [--engine <best.engine>] --metadata <model_metadata.json> "
+        << "--image <image> [--output <dir>] [--imgsz 960] [--conf 0.15] [--iou 0.7] "
+        << "[--provider cuda|cpu|tensorrt] [--device-id 0] [--engine-label fp32|fp16] [--warmup 10] [--repeat 50] "
         << "[--cudnn-conv-algo-search heuristic|exhaustive|default]\n"
         << "  --cudnn-conv-algo-search: allowed values: heuristic, exhaustive, default; "
         << "default: heuristic\n";
@@ -84,8 +94,26 @@ Args parse_args(int argc, char* argv[]) {
         }
         if (option == "--model") {
             args.model = require_value(index, argc, argv, option);
+        } else if (option == "--backend") {
+            args.backend = require_value(index, argc, argv, option);
+            std::transform(args.backend.begin(), args.backend.end(), args.backend.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+            if (args.backend != "onnx" && args.backend != "tensorrt") {
+                throw std::invalid_argument("--backend must be onnx or tensorrt.");
+            }
         } else if (option == "--metadata") {
             args.metadata = require_value(index, argc, argv, option);
+        } else if (option == "--engine") {
+            args.engine = require_value(index, argc, argv, option);
+        } else if (option == "--engine-label") {
+            args.engine_label = require_value(index, argc, argv, option);
+            std::transform(args.engine_label.begin(), args.engine_label.end(), args.engine_label.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+            if (args.engine_label != "fp32" && args.engine_label != "fp16") {
+                throw std::invalid_argument("--engine-label must be fp32 or fp16.");
+            }
         } else if (option == "--image") {
             args.image = require_value(index, argc, argv, option);
         } else if (option == "--output") {
@@ -105,9 +133,13 @@ Args parse_args(int argc, char* argv[]) {
                 args.provider = "CUDAExecutionProvider";
             } else if (provider == "cpu" || provider == "cpuexecutionprovider") {
                 args.provider = "CPUExecutionProvider";
+            } else if (provider == "tensorrt") {
+                args.backend = "tensorrt";
             } else {
-                throw std::invalid_argument("--provider must be cuda or cpu.");
+                throw std::invalid_argument("--provider must be cuda, cpu, or tensorrt.");
             }
+        } else if (option == "--device-id") {
+            args.device_id = std::stoi(require_value(index, argc, argv, option));
         } else if (option == "--warmup") {
             args.warmup = std::stoi(require_value(index, argc, argv, option));
         } else if (option == "--repeat") {
@@ -121,8 +153,17 @@ Args parse_args(int argc, char* argv[]) {
             throw std::invalid_argument("Unknown argument: " + option);
         }
     }
-    if (args.model.empty() || args.image.empty() || args.output.empty()) {
-        throw std::invalid_argument("--model, --image, and --output are required.");
+    if (args.image.empty()) {
+        throw std::invalid_argument("--image is required.");
+    }
+    if (args.backend == "onnx" && args.model.empty()) {
+        throw std::invalid_argument("--model is required for --backend onnx.");
+    }
+    if (args.backend == "tensorrt" && args.engine.empty()) {
+        throw std::invalid_argument("--engine is required for --backend tensorrt.");
+    }
+    if (args.output.empty()) {
+        args.output = args.backend == "tensorrt" ? "benchmarks/tensorrt/single" : "benchmarks/cpp_onnx/single";
     }
     if (args.metadata.empty()) {
         args.metadata = "models/model_metadata.json";
@@ -298,20 +339,34 @@ void write_stats_json(std::ostream& out, const std::string& name, const TimingSt
         << "}";
 }
 
-void write_json(const fs::path& path, const Args& args, const pcb_vision::InferenceResult& result) {
+void write_json(
+    const fs::path& path,
+    const Args& args,
+    const pcb_vision::InferenceResult& result,
+    const pcb_vision::TensorRtTensorInfo* trt_input = nullptr,
+    const pcb_vision::TensorRtTensorInfo* trt_output = nullptr
+) {
     std::ofstream out(path);
     if (!out) {
         throw std::runtime_error("Failed to write JSON: " + path.string());
     }
     out << std::fixed << std::setprecision(6);
     out << "{\n";
+    out << "  \"backend\": \"" << json_escape(args.backend) << "\",\n";
     out << "  \"model\": \"" << json_escape(args.model) << "\",\n";
+    out << "  \"engine_path\": \"" << json_escape(args.engine) << "\",\n";
+    out << "  \"engine_label\": \"" << json_escape(args.engine_label) << "\",\n";
+    out << "  \"device_id\": " << args.device_id << ",\n";
     out << "  \"image\": \"" << json_escape(args.image) << "\",\n";
     out << "  \"provider\": \"" << json_escape(result.provider) << "\",\n";
     out << "  \"input_name\": \"" << json_escape(result.input_name) << "\",\n";
     out << "  \"output_name\": \"" << json_escape(result.output_name) << "\",\n";
     out << "  \"input_shape\": " << shape_to_json(result.input_shape) << ",\n";
     out << "  \"output_shape\": " << shape_to_json(result.output_shape) << ",\n";
+    if (trt_input != nullptr && trt_output != nullptr) {
+        out << "  \"input_dtype\": \"" << json_escape(trt_input->dtype) << "\",\n";
+        out << "  \"output_dtype\": \"" << json_escape(trt_output->dtype) << "\",\n";
+    }
     out << "  \"config\": {\"imgsz\": " << args.imgsz << ", \"conf\": " << args.conf
         << ", \"iou\": " << args.iou << ", \"warmup\": " << args.warmup
         << ", \"repeat\": " << args.repeat
@@ -391,6 +446,68 @@ void write_benchmark_json(
     out << "}\n";
 }
 
+void write_tensorrt_benchmark_json(
+    const fs::path& path,
+    const Args& args,
+    const pcb_vision::TensorRtDetector& detector,
+    const TimingStats& gpu_stats,
+    const TimingStats& h2d_stats,
+    const TimingStats& d2h_stats,
+    const TimingStats& trt_total_stats,
+    const TimingStats& preprocess_stats,
+    const TimingStats& postprocess_stats,
+    const TimingStats& e2e_total_stats,
+    const std::vector<IterationTiming>& run_iterations,
+    const std::vector<IterationTiming>& e2e_iterations
+) {
+    std::ofstream out(path);
+    if (!out) {
+        throw std::runtime_error("Failed to write benchmark JSON: " + path.string());
+    }
+    out << std::fixed << std::setprecision(6);
+    out << "{\n";
+    out << "  \"backend\": \"tensorrt\",\n";
+    out << "  \"engine_path\": \"" << json_escape(args.engine) << "\",\n";
+    out << "  \"engine_label\": \"" << json_escape(args.engine_label) << "\",\n";
+    out << "  \"image\": \"" << json_escape(args.image) << "\",\n";
+    out << "  \"device_id\": " << detector.device_id() << ",\n";
+    out << "  \"tensorrt_version\": \"" << detector.version_string() << "\",\n";
+    out << "  \"input_name\": \"" << json_escape(detector.input_info().name) << "\",\n";
+    out << "  \"input_shape\": " << shape_to_json(detector.input_info().shape) << ",\n";
+    out << "  \"input_dtype\": \"" << json_escape(detector.input_info().dtype) << "\",\n";
+    out << "  \"output_name\": \"" << json_escape(detector.output_info().name) << "\",\n";
+    out << "  \"output_shape\": " << shape_to_json(detector.output_info().shape) << ",\n";
+    out << "  \"output_dtype\": \"" << json_escape(detector.output_info().dtype) << "\",\n";
+    out << "  \"config\": {\"imgsz\": " << args.imgsz << ", \"conf\": " << args.conf
+        << ", \"iou\": " << args.iou << ", \"warmup\": " << args.warmup
+        << ", \"repeat\": " << args.repeat << "},\n";
+    out << "  \"timing\": {\n";
+    write_stats_json(out, "gpu_execution", gpu_stats, "    ");
+    out << ",\n";
+    write_stats_json(out, "h2d", h2d_stats, "    ");
+    out << ",\n";
+    write_stats_json(out, "d2h", d2h_stats, "    ");
+    out << ",\n";
+    write_stats_json(out, "tensorrt_total", trt_total_stats, "    ");
+    out << ",\n";
+    write_stats_json(out, "preprocess", preprocess_stats, "    ");
+    out << ",\n";
+    write_stats_json(out, "postprocess", postprocess_stats, "    ");
+    out << ",\n";
+    write_stats_json(out, "end_to_end_total", e2e_total_stats, "    ");
+    out << "\n  },\n";
+    out << "  \"validation\": {\"run_only_mismatches\": ";
+    out << std::count_if(run_iterations.begin(), run_iterations.end(), [](const IterationTiming& item) {
+        return !item.detections_match;
+    });
+    out << ", \"end_to_end_mismatches\": ";
+    out << std::count_if(e2e_iterations.begin(), e2e_iterations.end(), [](const IterationTiming& item) {
+        return !item.detections_match;
+    });
+    out << "}\n";
+    out << "}\n";
+}
+
 void write_benchmark_csv(
     const fs::path& path,
     const std::vector<IterationTiming>& run_iterations,
@@ -400,7 +517,7 @@ void write_benchmark_csv(
     if (!out) {
         throw std::runtime_error("Failed to write benchmark CSV: " + path.string());
     }
-    out << "phase,iteration,preprocess_ms,inference_ms,postprocess_ms,total_ms,detections_match,validation_error\n";
+    out << "phase,iteration,preprocess_ms,inference_ms,postprocess_ms,total_ms,h2d_ms,gpu_execution_ms,d2h_ms,tensorrt_total_ms,detections_match,validation_error\n";
     const auto write_rows = [&out](const std::string& phase, const std::vector<IterationTiming>& rows) {
         for (const IterationTiming& row : rows) {
             out << phase << ','
@@ -409,6 +526,10 @@ void write_benchmark_csv(
                 << row.inference_ms << ','
                 << row.postprocess_ms << ','
                 << row.total_ms << ','
+                << row.h2d_ms << ','
+                << row.gpu_execution_ms << ','
+                << row.d2h_ms << ','
+                << row.tensorrt_total_ms << ','
                 << (row.detections_match ? "true" : "false") << ','
                 << '"' << row.validation_error << '"' << '\n';
         }
@@ -474,8 +595,169 @@ int main(int argc, char* argv[]) {
         const cv::Mat image = pcb_vision::load_bgr_image(args.image);
         fs::create_directories(args.output);
 
+        if (args.backend == "tensorrt") {
+            pcb_vision::TensorRtDetector detector(args.engine, class_names, args.imgsz, args.device_id);
+            pcb_vision::PreprocessResult benchmark_input = pcb_vision::preprocess_image(image, args.imgsz);
+            for (int iteration = 0; iteration < args.warmup; ++iteration) {
+                (void)detector.infer_preprocessed(benchmark_input, image.size(), args.conf, args.iou);
+            }
+
+            std::vector<IterationTiming> run_iterations;
+            run_iterations.reserve(static_cast<std::size_t>(args.repeat));
+            std::vector<double> gpu_times;
+            std::vector<double> h2d_times;
+            std::vector<double> d2h_times;
+            std::vector<double> trt_total_times;
+            gpu_times.reserve(static_cast<std::size_t>(args.repeat));
+            h2d_times.reserve(static_cast<std::size_t>(args.repeat));
+            d2h_times.reserve(static_cast<std::size_t>(args.repeat));
+            trt_total_times.reserve(static_cast<std::size_t>(args.repeat));
+
+            pcb_vision::InferenceResult result;
+            bool has_baseline = false;
+            for (int iteration = 0; iteration < args.repeat; ++iteration) {
+                pcb_vision::InferenceResult current = detector.infer_preprocessed(benchmark_input, image.size(), args.conf, args.iou);
+                const pcb_vision::TensorRtRunTiming timing = detector.last_timing();
+                if (!has_baseline) {
+                    result = current;
+                    has_baseline = true;
+                }
+                const std::string validation_error = validate_detections(result.detections, current.detections);
+                run_iterations.push_back(IterationTiming{
+                    iteration,
+                    current.preprocess_ms,
+                    current.inference_ms,
+                    current.postprocess_ms,
+                    current.total_ms,
+                    timing.h2d_ms,
+                    timing.gpu_execution_ms,
+                    timing.d2h_ms,
+                    timing.total_ms,
+                    validation_error.empty(),
+                    validation_error
+                });
+                gpu_times.push_back(timing.gpu_execution_ms);
+                h2d_times.push_back(timing.h2d_ms);
+                d2h_times.push_back(timing.d2h_ms);
+                trt_total_times.push_back(timing.total_ms);
+            }
+
+            std::vector<IterationTiming> e2e_iterations;
+            e2e_iterations.reserve(static_cast<std::size_t>(args.repeat));
+            std::vector<double> preprocess_times;
+            std::vector<double> postprocess_times;
+            std::vector<double> total_times;
+            preprocess_times.reserve(static_cast<std::size_t>(args.repeat));
+            postprocess_times.reserve(static_cast<std::size_t>(args.repeat));
+            total_times.reserve(static_cast<std::size_t>(args.repeat));
+            for (int iteration = 0; iteration < args.repeat; ++iteration) {
+                pcb_vision::InferenceResult current = detector.infer(image, args.conf, args.iou);
+                const pcb_vision::TensorRtRunTiming timing = detector.last_timing();
+                const std::string validation_error = validate_detections(result.detections, current.detections);
+                e2e_iterations.push_back(IterationTiming{
+                    iteration,
+                    current.preprocess_ms,
+                    current.inference_ms,
+                    current.postprocess_ms,
+                    current.total_ms,
+                    timing.h2d_ms,
+                    timing.gpu_execution_ms,
+                    timing.d2h_ms,
+                    timing.total_ms,
+                    validation_error.empty(),
+                    validation_error
+                });
+                preprocess_times.push_back(current.preprocess_ms);
+                postprocess_times.push_back(current.postprocess_ms);
+                total_times.push_back(current.total_ms);
+            }
+
+            const fs::path output_dir(args.output);
+            write_json(output_dir / "result.json", args, result, &detector.input_info(), &detector.output_info());
+            write_csv(output_dir / "detections.csv", result.detections);
+            draw_result_image(output_dir / "result.jpg", image.clone(), result.detections);
+
+            const TimingStats gpu_stats = calculate_stats(gpu_times);
+            const TimingStats h2d_stats = calculate_stats(h2d_times);
+            const TimingStats d2h_stats = calculate_stats(d2h_times);
+            const TimingStats trt_total_stats = calculate_stats(trt_total_times);
+            const TimingStats preprocess_stats = calculate_stats(preprocess_times);
+            const TimingStats postprocess_stats = calculate_stats(postprocess_times);
+            const TimingStats total_stats = calculate_stats(total_times);
+            write_tensorrt_benchmark_json(
+                output_dir / "benchmark.json",
+                args,
+                detector,
+                gpu_stats,
+                h2d_stats,
+                d2h_stats,
+                trt_total_stats,
+                preprocess_stats,
+                postprocess_stats,
+                total_stats,
+                run_iterations,
+                e2e_iterations
+            );
+            write_benchmark_csv(output_dir / "benchmark.csv", run_iterations, e2e_iterations);
+
+            std::cout << "=== Native TensorRT Inference ===\n";
+            std::cout << "Backend: Native TensorRT\n";
+            std::cout << "TensorRT version: " << detector.version_string() << '\n';
+            std::cout << "Engine path: " << detector.engine_path() << '\n';
+            std::cout << "Engine precision label: " << (args.engine_label.empty() ? "unspecified" : args.engine_label) << '\n';
+            std::cout << "CUDA device id: " << detector.device_id() << '\n';
+            std::cout << "Image: " << args.image << '\n';
+            std::cout << "Warmup: " << args.warmup << " runs excluded from statistics\n";
+            std::cout << "Repeat: " << args.repeat << " measured runs\n";
+            std::cout << "Input tensor: " << detector.input_info().name
+                      << " shape=" << shape_to_json(detector.input_info().shape)
+                      << " dtype=" << detector.input_info().dtype << '\n';
+            std::cout << "Output tensor: " << detector.output_info().name
+                      << " shape=" << shape_to_json(detector.output_info().shape)
+                      << " dtype=" << detector.output_info().dtype << '\n';
+            std::cout << "Detections: " << result.detections.size() << "\n\n";
+            for (std::size_t i = 0; i < result.detections.size(); ++i) {
+                const auto& detection = result.detections[i];
+                std::cout << "[" << i + 1 << "]\n";
+                std::cout << "class_id: " << detection.class_id << '\n';
+                std::cout << "class_name: " << detection.class_name << '\n';
+                std::cout << "confidence: " << detection.confidence << '\n';
+                std::cout << "bbox: [" << detection.box.x << ", " << detection.box.y << ", "
+                          << detection.box.x + detection.box.width << ", " << detection.box.y + detection.box.height << "]\n\n";
+            }
+            std::cout << "TensorRT GPU execution stats (ms): first=" << gpu_stats.first
+                      << ", min=" << gpu_stats.min
+                      << ", mean=" << gpu_stats.mean
+                      << ", median=" << gpu_stats.median
+                      << ", p95=" << gpu_stats.p95
+                      << ", max=" << gpu_stats.max
+                      << ", stddev=" << gpu_stats.standard_deviation << '\n';
+            std::cout << "TensorRT mean breakdown (ms): h2d=" << h2d_stats.mean
+                      << ", gpu_execution=" << gpu_stats.mean
+                      << ", d2h=" << d2h_stats.mean
+                      << ", total=" << trt_total_stats.mean << '\n';
+            std::cout << "End-to-end total stats (ms): first=" << total_stats.first
+                      << ", min=" << total_stats.min
+                      << ", mean=" << total_stats.mean
+                      << ", median=" << total_stats.median
+                      << ", p95=" << total_stats.p95
+                      << ", max=" << total_stats.max
+                      << ", stddev=" << total_stats.standard_deviation << '\n';
+            std::cout << "Validation mismatches: session_run="
+                      << std::count_if(run_iterations.begin(), run_iterations.end(), [](const IterationTiming& item) {
+                             return !item.detections_match;
+                         })
+                      << ", end_to_end="
+                      << std::count_if(e2e_iterations.begin(), e2e_iterations.end(), [](const IterationTiming& item) {
+                             return !item.detections_match;
+                         })
+                      << '\n';
+            std::cout << "Output: " << output_dir.string() << '\n';
+            return 0;
+        }
+
         pcb_vision::CudaProviderConfig cuda_config;
-        cuda_config.device_id = 0;
+        cuda_config.device_id = args.device_id;
         cuda_config.cudnn_conv_algo_search = args.cudnn_conv_algo_search;
         pcb_vision::OnnxDetector detector(args.model, class_names, args.imgsz, args.provider, cuda_config);
 
@@ -503,6 +785,10 @@ int main(int argc, char* argv[]) {
                 current.inference_ms,
                 current.postprocess_ms,
                 current.total_ms,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
                 validation_error.empty(),
                 validation_error
             });
@@ -528,6 +814,10 @@ int main(int argc, char* argv[]) {
                 current.inference_ms,
                 current.postprocess_ms,
                 current.total_ms,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
                 validation_error.empty(),
                 validation_error
             });
