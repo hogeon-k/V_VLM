@@ -307,6 +307,54 @@ detections.json
 failure_cases/.gitkeep
 ```
 
+## Backend Comparison Report
+
+Compare existing ONNX Runtime CUDA, TensorRT FP32, and TensorRT FP16 benchmark
+outputs without rerunning inference:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\compare_cpp_inference_backends.py `
+  --onnx benchmarks\cpp_onnx\batch_cuda_final `
+  --tensorrt-fp32 benchmarks\tensorrt\batch_fp32 `
+  --tensorrt-fp16 benchmarks\tensorrt\batch_fp16 `
+  --output benchmarks\backend_comparison `
+  --match-iou 0.5 `
+  --confidence-threshold 0.15 `
+  --threshold-boundary-margin 0.001 `
+  --strict-confidence-tolerance 0.001 `
+  --practical-confidence-tolerance 0.002 `
+  --fp16-practical-confidence-tolerance 0.005 `
+  --bbox-tolerance 1.0
+```
+
+Outputs:
+
+```text
+summary.json
+backend_comparison.csv
+per_image_comparison.csv
+detection_comparison.csv
+report.md
+failure_cases/manifest.csv
+```
+
+`PASS` means every detection matched within strict confidence and bbox
+tolerances. `NUMERICAL_WARNING` means structure matched but confidence exceeded
+the strict tolerance while staying within the practical tolerance, or every
+unmatched detection is on the configured confidence threshold boundary:
+
+```text
+abs(confidence - confidence_threshold) <= threshold_boundary_margin
+```
+
+`FAIL` means a class mismatch, bbox mismatch, unmatched detection outside the
+confidence boundary, practical confidence tolerance violation, parsing
+condition, or other structural comparison failed. ONNX Runtime CUDA vs TensorRT
+FP32 uses `--practical-confidence-tolerance`; any comparison involving TensorRT
+FP16 uses `--fp16-practical-confidence-tolerance`. Threshold-boundary and
+numerical warnings do not block a recommendation by themselves, but structural
+`FAIL` rows do.
+
 ## Python Reference And Comparison
 
 Create the Python ONNX reference for the same image:

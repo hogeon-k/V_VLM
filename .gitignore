@@ -109,6 +109,13 @@ benchmarks/tensorrt/**/*.bmp
 benchmarks/tensorrt/**/failure_cases/*
 !benchmarks/tensorrt/**/failure_cases/.gitkeep
 
+# Backend comparison generated artifacts
+benchmarks/backend_comparison/*
+!benchmarks/backend_comparison/report.md
+!benchmarks/backend_comparison/failure_cases/
+benchmarks/backend_comparison/failure_cases/*
+!benchmarks/backend_comparison/failure_cases/.gitkeep
+
 # Editor and OS temporary files
 .vscode/
 .idea/
