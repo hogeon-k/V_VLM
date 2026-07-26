@@ -19,6 +19,7 @@
 #include "detector.hpp"
 #include "image_preprocessor.hpp"
 #include "tensorrt_detector.hpp"
+#include "unicode_utils.hpp"
 
 namespace fs = std::filesystem;
 
@@ -66,7 +67,7 @@ struct IterationTiming {
     std::string validation_error;
 };
 
-void print_usage(const char* program_name) {
+void print_usage(const std::string& program_name) {
     std::cout
         << "Usage: " << program_name << " --backend onnx|tensorrt "
         << "[--model <best.onnx>] [--engine <best.engine>] --metadata <model_metadata.json> "
@@ -77,25 +78,25 @@ void print_usage(const char* program_name) {
         << "default: heuristic\n";
 }
 
-std::string require_value(int& index, int argc, char* argv[], const std::string& option) {
-    if (index + 1 >= argc) {
+std::string require_value(int& index, const std::vector<std::string>& argv, const std::string& option) {
+    if (index + 1 >= static_cast<int>(argv.size())) {
         throw std::invalid_argument(option + " requires a value.");
     }
     return argv[++index];
 }
 
-Args parse_args(int argc, char* argv[]) {
+Args parse_args(const std::vector<std::string>& argv) {
     Args args;
-    for (int index = 1; index < argc; ++index) {
+    for (int index = 1; index < static_cast<int>(argv.size()); ++index) {
         const std::string option = argv[index];
         if (option == "--help" || option == "-h") {
             print_usage(argv[0]);
             std::exit(0);
         }
         if (option == "--model") {
-            args.model = require_value(index, argc, argv, option);
+            args.model = require_value(index, argv, option);
         } else if (option == "--backend") {
-            args.backend = require_value(index, argc, argv, option);
+            args.backend = require_value(index, argv, option);
             std::transform(args.backend.begin(), args.backend.end(), args.backend.begin(), [](unsigned char ch) {
                 return static_cast<char>(std::tolower(ch));
             });
@@ -103,11 +104,11 @@ Args parse_args(int argc, char* argv[]) {
                 throw std::invalid_argument("--backend must be onnx or tensorrt.");
             }
         } else if (option == "--metadata") {
-            args.metadata = require_value(index, argc, argv, option);
+            args.metadata = require_value(index, argv, option);
         } else if (option == "--engine") {
-            args.engine = require_value(index, argc, argv, option);
+            args.engine = require_value(index, argv, option);
         } else if (option == "--engine-label") {
-            args.engine_label = require_value(index, argc, argv, option);
+            args.engine_label = require_value(index, argv, option);
             std::transform(args.engine_label.begin(), args.engine_label.end(), args.engine_label.begin(), [](unsigned char ch) {
                 return static_cast<char>(std::tolower(ch));
             });
@@ -115,17 +116,17 @@ Args parse_args(int argc, char* argv[]) {
                 throw std::invalid_argument("--engine-label must be fp32 or fp16.");
             }
         } else if (option == "--image") {
-            args.image = require_value(index, argc, argv, option);
+            args.image = require_value(index, argv, option);
         } else if (option == "--output") {
-            args.output = require_value(index, argc, argv, option);
+            args.output = require_value(index, argv, option);
         } else if (option == "--imgsz") {
-            args.imgsz = std::stoi(require_value(index, argc, argv, option));
+            args.imgsz = std::stoi(require_value(index, argv, option));
         } else if (option == "--conf") {
-            args.conf = std::stof(require_value(index, argc, argv, option));
+            args.conf = std::stof(require_value(index, argv, option));
         } else if (option == "--iou") {
-            args.iou = std::stof(require_value(index, argc, argv, option));
+            args.iou = std::stof(require_value(index, argv, option));
         } else if (option == "--provider") {
-            std::string provider = require_value(index, argc, argv, option);
+            std::string provider = require_value(index, argv, option);
             std::transform(provider.begin(), provider.end(), provider.begin(), [](unsigned char ch) {
                 return static_cast<char>(std::tolower(ch));
             });
@@ -139,13 +140,13 @@ Args parse_args(int argc, char* argv[]) {
                 throw std::invalid_argument("--provider must be cuda, cpu, or tensorrt.");
             }
         } else if (option == "--device-id") {
-            args.device_id = std::stoi(require_value(index, argc, argv, option));
+            args.device_id = std::stoi(require_value(index, argv, option));
         } else if (option == "--warmup") {
-            args.warmup = std::stoi(require_value(index, argc, argv, option));
+            args.warmup = std::stoi(require_value(index, argv, option));
         } else if (option == "--repeat") {
-            args.repeat = std::stoi(require_value(index, argc, argv, option));
+            args.repeat = std::stoi(require_value(index, argv, option));
         } else if (option == "--cudnn-conv-algo-search") {
-            const std::string value = index + 1 < argc ? argv[++index] : "";
+            const std::string value = index + 1 < static_cast<int>(argv.size()) ? argv[++index] : "";
             args.cudnn_conv_algo_search = pcb_vision::normalize_cudnn_conv_algo_search(
                 value
             );
@@ -178,13 +179,7 @@ Args parse_args(int argc, char* argv[]) {
 }
 
 std::string read_text(const std::string& path) {
-    std::ifstream stream(path);
-    if (!stream) {
-        throw std::runtime_error("Failed to open file: " + path);
-    }
-    std::ostringstream buffer;
-    buffer << stream.rdbuf();
-    return buffer.str();
+    return pcb_vision::read_text_file_utf8(pcb_vision::path_from_utf8(path));
 }
 
 std::vector<std::string> fallback_class_names() {
@@ -192,7 +187,7 @@ std::vector<std::string> fallback_class_names() {
 }
 
 std::vector<std::string> load_class_names(const std::string& metadata_path) {
-    if (metadata_path.empty() || !fs::exists(metadata_path)) {
+    if (metadata_path.empty() || !fs::exists(pcb_vision::path_from_utf8(metadata_path))) {
         return fallback_class_names();
     }
     const std::string text = read_text(metadata_path);
@@ -346,9 +341,9 @@ void write_json(
     const pcb_vision::TensorRtTensorInfo* trt_input = nullptr,
     const pcb_vision::TensorRtTensorInfo* trt_output = nullptr
 ) {
-    std::ofstream out(path);
+    std::ofstream out(path, std::ios::binary);
     if (!out) {
-        throw std::runtime_error("Failed to write JSON: " + path.string());
+        throw std::runtime_error("Failed to write JSON: " + pcb_vision::path_to_utf8(path));
     }
     out << std::fixed << std::setprecision(6);
     out << "{\n";
@@ -402,9 +397,9 @@ void write_benchmark_json(
     const std::vector<IterationTiming>& run_iterations,
     const std::vector<IterationTiming>& e2e_iterations
 ) {
-    std::ofstream out(path);
+    std::ofstream out(path, std::ios::binary);
     if (!out) {
-        throw std::runtime_error("Failed to write benchmark JSON: " + path.string());
+        throw std::runtime_error("Failed to write benchmark JSON: " + pcb_vision::path_to_utf8(path));
     }
     out << std::fixed << std::setprecision(6);
     out << "{\n";
@@ -460,9 +455,9 @@ void write_tensorrt_benchmark_json(
     const std::vector<IterationTiming>& run_iterations,
     const std::vector<IterationTiming>& e2e_iterations
 ) {
-    std::ofstream out(path);
+    std::ofstream out(path, std::ios::binary);
     if (!out) {
-        throw std::runtime_error("Failed to write benchmark JSON: " + path.string());
+        throw std::runtime_error("Failed to write benchmark JSON: " + pcb_vision::path_to_utf8(path));
     }
     out << std::fixed << std::setprecision(6);
     out << "{\n";
@@ -515,7 +510,7 @@ void write_benchmark_csv(
 ) {
     std::ofstream out(path, std::ios::binary);
     if (!out) {
-        throw std::runtime_error("Failed to write benchmark CSV: " + path.string());
+        throw std::runtime_error("Failed to write benchmark CSV: " + pcb_vision::path_to_utf8(path));
     }
     out << "phase,iteration,preprocess_ms,inference_ms,postprocess_ms,total_ms,h2d_ms,gpu_execution_ms,d2h_ms,tensorrt_total_ms,detections_match,validation_error\n";
     const auto write_rows = [&out](const std::string& phase, const std::vector<IterationTiming>& rows) {
@@ -542,7 +537,7 @@ void write_benchmark_csv(
 void write_csv(const fs::path& path, const std::vector<pcb_vision::Detection>& detections) {
     std::ofstream out(path, std::ios::binary);
     if (!out) {
-        throw std::runtime_error("Failed to write CSV: " + path.string());
+        throw std::runtime_error("Failed to write CSV: " + pcb_vision::path_to_utf8(path));
     }
     const unsigned char bom[] = {0xEF, 0xBB, 0xBF};
     out.write(reinterpret_cast<const char*>(bom), 3);
@@ -580,8 +575,8 @@ void draw_result_image(const fs::path& path, cv::Mat image, const std::vector<pc
         label << detection.class_name << " " << std::fixed << std::setprecision(3) << detection.confidence;
         cv::putText(image, label.str(), cv::Point(rect.x, std::max(16, rect.y - 6)), cv::FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv::LINE_AA);
     }
-    if (!cv::imwrite(path.string(), image)) {
-        throw std::runtime_error("Failed to write result image: " + path.string());
+    if (!pcb_vision::write_image_unicode(path, image)) {
+        throw std::runtime_error("Failed to write result image: " + pcb_vision::path_to_utf8(path));
     }
 }
 
@@ -589,11 +584,14 @@ void draw_result_image(const fs::path& path, cv::Mat image, const std::vector<pc
 
 int main(int argc, char* argv[]) {
     try {
-        const Args args = parse_args(argc, argv);
+        pcb_vision::configure_utf8_console();
+        const std::vector<std::string> utf8_args = pcb_vision::command_line_to_utf8_args(argc, argv);
+        const Args args = parse_args(utf8_args);
         const std::vector<std::string> available_providers = pcb_vision::available_execution_providers();
         const std::vector<std::string> class_names = load_class_names(args.metadata);
-        const cv::Mat image = pcb_vision::load_bgr_image(args.image);
-        fs::create_directories(args.output);
+        const cv::Mat image = pcb_vision::load_bgr_image(pcb_vision::path_from_utf8(args.image));
+        const fs::path output_root = pcb_vision::path_from_utf8(args.output);
+        fs::create_directories(output_root);
 
         if (args.backend == "tensorrt") {
             pcb_vision::TensorRtDetector detector(args.engine, class_names, args.imgsz, args.device_id);
@@ -672,7 +670,7 @@ int main(int argc, char* argv[]) {
                 total_times.push_back(current.total_ms);
             }
 
-            const fs::path output_dir(args.output);
+            const fs::path output_dir = output_root;
             write_json(output_dir / "result.json", args, result, &detector.input_info(), &detector.output_info());
             write_csv(output_dir / "detections.csv", result.detections);
             draw_result_image(output_dir / "result.jpg", image.clone(), result.detections);
@@ -752,7 +750,7 @@ int main(int argc, char* argv[]) {
                              return !item.detections_match;
                          })
                       << '\n';
-            std::cout << "Output: " << output_dir.string() << '\n';
+            std::cout << "Output: " << pcb_vision::path_to_utf8(output_dir) << '\n';
             return 0;
         }
 
@@ -827,7 +825,7 @@ int main(int argc, char* argv[]) {
             total_times.push_back(current.total_ms);
         }
 
-        const fs::path output_dir(args.output);
+        const fs::path output_dir = output_root;
         write_json(output_dir / "result.json", args, result);
         write_csv(output_dir / "detections.csv", result.detections);
         draw_result_image(output_dir / "result.jpg", image.clone(), result.detections);
@@ -909,7 +907,7 @@ int main(int argc, char* argv[]) {
                          return !item.detections_match;
                      })
                   << '\n';
-        std::cout << "Output: " << output_dir.string() << '\n';
+        std::cout << "Output: " << pcb_vision::path_to_utf8(output_dir) << '\n';
         return 0;
     } catch (const std::exception& exc) {
         std::cerr << "Error: " << exc.what() << '\n';

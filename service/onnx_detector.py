@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import os
 import statistics
 import sys
@@ -12,8 +13,11 @@ from typing import Any
 import cv2
 import numpy as np
 
+from image_processing.image_loader import read_image_unicode
 from model.defect_info import Detection
 from model.yolo_result import YoloResult
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_CLASS_NAMES = {
@@ -473,9 +477,13 @@ class OnnxDetector:
     def detect_timed(self, image_path: str | Path) -> TimedDetections:
         session = self._load_session()
         source_path = Path(image_path)
-        image = cv2.imread(str(source_path))
-        if image is None:
-            raise FileNotFoundError(f"Input image not found or unreadable: {source_path}")
+        image = read_image_unicode(source_path)
+        logger.debug(
+            "ONNX image loaded: path=%s shape=%s dtype=%s",
+            source_path,
+            image.shape,
+            image.dtype,
+        )
 
         total_start = time.perf_counter()
         start = time.perf_counter()

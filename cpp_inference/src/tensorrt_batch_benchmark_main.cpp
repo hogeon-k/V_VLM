@@ -18,6 +18,7 @@
 #include "batch_benchmark.hpp"
 #include "image_preprocessor.hpp"
 #include "tensorrt_detector.hpp"
+#include "unicode_utils.hpp"
 
 namespace fs = std::filesystem;
 namespace bench = pcb_vision::benchmark;
@@ -84,14 +85,14 @@ double elapsed_ms(const std::chrono::steady_clock::time_point& start) {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
 
-std::string require_value(int& index, int argc, char* argv[], const std::string& option) {
-    if (index + 1 >= argc) {
+std::string require_value(int& index, const std::vector<std::string>& argv, const std::string& option) {
+    if (index + 1 >= static_cast<int>(argv.size())) {
         throw std::invalid_argument(option + " requires a value.");
     }
     return argv[++index];
 }
 
-void print_usage(const char* exe) {
+void print_usage(const std::string& exe) {
     std::cout
         << "Usage: " << exe << " --engine <best.engine> --engine-label fp32|fp16 "
         << "--images <dir> --output <dir> [--metadata models/model_metadata.json]\n"
@@ -101,17 +102,17 @@ void print_usage(const char* exe) {
         << "[--practical-confidence-tolerance 0.002] [--bbox-tolerance 1.0]\n";
 }
 
-Args parse_args(int argc, char* argv[]) {
+Args parse_args(const std::vector<std::string>& argv) {
     Args args;
-    for (int index = 1; index < argc; ++index) {
+    for (int index = 1; index < static_cast<int>(argv.size()); ++index) {
         const std::string option = argv[index];
         if (option == "--help" || option == "-h") {
             print_usage(argv[0]);
             std::exit(0);
         } else if (option == "--engine") {
-            args.engine = require_value(index, argc, argv, option);
+            args.engine = require_value(index, argv, option);
         } else if (option == "--engine-label") {
-            args.engine_label = require_value(index, argc, argv, option);
+            args.engine_label = require_value(index, argv, option);
             std::transform(args.engine_label.begin(), args.engine_label.end(), args.engine_label.begin(), [](unsigned char ch) {
                 return static_cast<char>(std::tolower(ch));
             });
@@ -119,40 +120,40 @@ Args parse_args(int argc, char* argv[]) {
                 throw std::invalid_argument("--engine-label must be fp32 or fp16.");
             }
         } else if (option == "--metadata") {
-            args.metadata = require_value(index, argc, argv, option);
+            args.metadata = require_value(index, argv, option);
         } else if (option == "--images") {
-            args.images = require_value(index, argc, argv, option);
+            args.images = require_value(index, argv, option);
         } else if (option == "--output") {
-            args.output = require_value(index, argc, argv, option);
+            args.output = require_value(index, argv, option);
         } else if (option == "--device-id") {
-            args.device_id = std::stoi(require_value(index, argc, argv, option));
+            args.device_id = std::stoi(require_value(index, argv, option));
         } else if (option == "--imgsz") {
-            args.imgsz = std::stoi(require_value(index, argc, argv, option));
+            args.imgsz = std::stoi(require_value(index, argv, option));
         } else if (option == "--conf") {
-            args.conf = std::stof(require_value(index, argc, argv, option));
+            args.conf = std::stof(require_value(index, argv, option));
         } else if (option == "--iou") {
-            args.iou = std::stof(require_value(index, argc, argv, option));
+            args.iou = std::stof(require_value(index, argv, option));
         } else if (option == "--match-iou") {
-            args.match_iou = std::stod(require_value(index, argc, argv, option));
+            args.match_iou = std::stod(require_value(index, argv, option));
         } else if (option == "--warmup") {
-            args.warmup = std::stoi(require_value(index, argc, argv, option));
+            args.warmup = std::stoi(require_value(index, argv, option));
         } else if (option == "--repeat") {
-            args.repeat = std::stoi(require_value(index, argc, argv, option));
+            args.repeat = std::stoi(require_value(index, argv, option));
         } else if (option == "--recursive") {
             args.recursive = true;
         } else if (option == "--extensions") {
-            args.extensions = require_value(index, argc, argv, option);
+            args.extensions = require_value(index, argv, option);
         } else if (option == "--max-images") {
-            args.max_images = std::stoi(require_value(index, argc, argv, option));
+            args.max_images = std::stoi(require_value(index, argv, option));
         } else if (option == "--seed") {
-            args.seed = static_cast<unsigned int>(std::stoul(require_value(index, argc, argv, option)));
+            args.seed = static_cast<unsigned int>(std::stoul(require_value(index, argv, option)));
             args.use_seed = true;
         } else if (option == "--strict-confidence-tolerance") {
-            args.strict_confidence_tolerance = std::stod(require_value(index, argc, argv, option));
+            args.strict_confidence_tolerance = std::stod(require_value(index, argv, option));
         } else if (option == "--practical-confidence-tolerance") {
-            args.practical_confidence_tolerance = std::stod(require_value(index, argc, argv, option));
+            args.practical_confidence_tolerance = std::stod(require_value(index, argv, option));
         } else if (option == "--bbox-tolerance") {
-            args.bbox_tolerance = std::stod(require_value(index, argc, argv, option));
+            args.bbox_tolerance = std::stod(require_value(index, argv, option));
         } else if (option == "--fail-on-mismatch") {
             args.fail_on_mismatch = true;
         } else {
@@ -188,13 +189,7 @@ std::string json_escape(const std::string& value) {
 }
 
 std::string read_text(const std::string& path) {
-    std::ifstream stream(path);
-    if (!stream) {
-        throw std::runtime_error("Failed to open file: " + path);
-    }
-    std::ostringstream buffer;
-    buffer << stream.rdbuf();
-    return buffer.str();
+    return pcb_vision::read_text_file_utf8(pcb_vision::path_from_utf8(path));
 }
 
 std::vector<std::string> fallback_class_names() {
@@ -202,7 +197,7 @@ std::vector<std::string> fallback_class_names() {
 }
 
 std::vector<std::string> load_class_names(const std::string& metadata_path) {
-    if (metadata_path.empty() || !fs::exists(metadata_path)) {
+    if (metadata_path.empty() || !fs::exists(pcb_vision::path_from_utf8(metadata_path))) {
         return fallback_class_names();
     }
     const std::string text = read_text(metadata_path);
@@ -359,9 +354,9 @@ void write_summary_json(
     const bench::TimingStats end_to_end = stats_from_reports(reports, "end_to_end");
     const double qps = end_to_end.mean <= 0.0 ? 0.0 : 1000.0 / end_to_end.mean;
 
-    std::ofstream out(path);
+    std::ofstream out(path, std::ios::binary);
     if (!out) {
-        throw std::runtime_error("Failed to write summary JSON: " + path.string());
+        throw std::runtime_error("Failed to write summary JSON: " + pcb_vision::path_to_utf8(path));
     }
     out << std::fixed << std::setprecision(6);
     out << "{\n";
@@ -400,9 +395,9 @@ void write_summary_json(
 }
 
 void write_per_image_csv(const fs::path& path, const Args& args, const std::vector<ImageReport>& reports) {
-    std::ofstream out(path);
+    std::ofstream out(path, std::ios::binary);
     if (!out) {
-        throw std::runtime_error("Failed to write per-image CSV: " + path.string());
+        throw std::runtime_error("Failed to write per-image CSV: " + pcb_vision::path_to_utf8(path));
     }
     out << "image_name,engine_label,detection_count,detection_index,class_id,class_name,confidence,"
         << "x1,y1,x2,y2,preprocess_ms,h2d_mean_ms,gpu_execution_mean_ms,d2h_mean_ms,"
@@ -410,7 +405,7 @@ void write_per_image_csv(const fs::path& path, const Args& args, const std::vect
     out << std::fixed << std::setprecision(6);
     for (const ImageReport& report : reports) {
         const auto write_common = [&](int detection_index, const pcb_vision::Detection* detection) {
-            out << report.image_path.filename().string() << ','
+            out << pcb_vision::path_to_utf8(report.image_path.filename()) << ','
                 << args.engine_label << ','
                 << report.detection_count << ','
                 << detection_index << ',';
@@ -447,9 +442,9 @@ void write_per_image_csv(const fs::path& path, const Args& args, const std::vect
 }
 
 void write_detections_json(const fs::path& path, const Args& args, const std::vector<ImageReport>& reports) {
-    std::ofstream out(path);
+    std::ofstream out(path, std::ios::binary);
     if (!out) {
-        throw std::runtime_error("Failed to write detections JSON: " + path.string());
+        throw std::runtime_error("Failed to write detections JSON: " + pcb_vision::path_to_utf8(path));
     }
     out << std::fixed << std::setprecision(6);
     out << "{\n";
@@ -458,7 +453,7 @@ void write_detections_json(const fs::path& path, const Args& args, const std::ve
     out << "  \"images\": [\n";
     for (std::size_t image_index = 0; image_index < reports.size(); ++image_index) {
         const ImageReport& report = reports[image_index];
-        out << "    {\"image\": \"" << json_escape(report.image_path.string()) << "\", "
+        out << "    {\"image\": \"" << json_escape(pcb_vision::path_to_utf8(report.image_path)) << "\", "
             << "\"status\": \"" << report.status << "\", \"detections\": [";
         for (std::size_t det_index = 0; det_index < report.detections.size(); ++det_index) {
             const auto& det = report.detections[det_index];
@@ -481,7 +476,7 @@ void create_failure_keep_file(const fs::path& output) {
     fs::create_directories(failure_dir);
     std::ofstream keep(failure_dir / ".gitkeep");
     if (!keep) {
-        throw std::runtime_error("Failed to write failure_cases/.gitkeep under: " + output.string());
+        throw std::runtime_error("Failed to write failure_cases/.gitkeep under: " + pcb_vision::path_to_utf8(output));
     }
 }
 
@@ -503,12 +498,14 @@ std::string final_status(const std::vector<ImageReport>& reports) {
 
 int main(int argc, char* argv[]) {
     try {
-        const Args args = parse_args(argc, argv);
-        const fs::path output_dir(args.output);
+        pcb_vision::configure_utf8_console();
+        const std::vector<std::string> utf8_args = pcb_vision::command_line_to_utf8_args(argc, argv);
+        const Args args = parse_args(utf8_args);
+        const fs::path output_dir = pcb_vision::path_from_utf8(args.output);
         fs::create_directories(output_dir);
         create_failure_keep_file(output_dir);
 
-        std::vector<fs::path> images = bench::collect_images(args.images, bench::parse_extensions(args.extensions), args.recursive);
+        std::vector<fs::path> images = bench::collect_images(pcb_vision::path_from_utf8(args.images), bench::parse_extensions(args.extensions), args.recursive);
         if (args.use_seed) {
             std::mt19937 rng(args.seed);
             std::shuffle(images.begin(), images.end(), rng);
@@ -530,7 +527,7 @@ int main(int argc, char* argv[]) {
             report.image_path = images[index];
             try {
                 const auto e2e_start = std::chrono::steady_clock::now();
-                const cv::Mat image = pcb_vision::load_bgr_image(images[index].string());
+                const cv::Mat image = pcb_vision::load_bgr_image(images[index]);
                 report.width = image.cols;
                 report.height = image.rows;
                 const auto preprocess_start = std::chrono::steady_clock::now();
@@ -568,7 +565,7 @@ int main(int argc, char* argv[]) {
             }
             reports.push_back(report);
             std::cout << "[" << index + 1 << "/" << images.size() << "] "
-                      << images[index].filename().string() << ' ' << report.status
+                      << pcb_vision::path_to_utf8(images[index].filename()) << ' ' << report.status
                       << " detections=" << report.detection_count
                       << " gpu_mean_ms=" << report.gpu_execution.mean
                       << " e2e_mean_ms=" << report.end_to_end.mean << '\n';
@@ -625,7 +622,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Validation mismatch count: " << validation_mismatch_count << '\n';
         std::cout << "Failed image count: " << failed_image_count << '\n';
         std::cout << "Final status: " << status << '\n';
-        std::cout << "Output: " << output_dir.string() << '\n';
+        std::cout << "Output: " << pcb_vision::path_to_utf8(output_dir) << '\n';
         return (args.fail_on_mismatch && status != "PASS") ? 2 : 0;
     } catch (const std::exception& exc) {
         std::cerr << "Error: " << exc.what() << '\n';

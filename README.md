@@ -356,6 +356,29 @@ TensorRT 실패 시 자동 fallback은 하지 않습니다. 실행 파일, engin
 --backend tensorrt
 ```
 
+GUI에서는 상단 메뉴의 `추론 설정` 화면에서 backend를 선택하고 저장합니다. 설정은 Qt `QSettings`에 저장되므로 개인 로컬 경로가 저장소 파일로 생성되지 않습니다.
+
+예시 설정:
+
+```text
+Backend: TensorRT
+Executable: cpp_inference/build_gpu/Release/pcb_onnx_infer.exe
+Engine: benchmarks/tensorrt/best_fp16.engine
+Precision: FP16
+Metadata: models/model_metadata.json
+Device ID: 0
+```
+
+TensorRT를 선택하면 실행 파일, engine, precision, metadata, CUDA device ID 입력이 활성화됩니다. PyTorch 또는 ONNX Runtime을 선택하면 TensorRT 전용 입력은 비활성화됩니다. 저장 시 TensorRT 설정은 다음 조건을 검사합니다.
+
+- 실행 파일 존재 및 `.exe` 확장자
+- engine 존재 및 `.engine` 또는 `.plan` 확장자
+- metadata 존재 및 `.json` 확장자
+- device ID 0 이상
+- precision `FP16` 또는 `FP32`
+
+저장한 설정은 다음 검사 시작 때 적용됩니다. 검사 화면에는 현재 적용될 backend가 `추론 Backend: ...` 형태로 표시됩니다. 기본값은 기존 호환성을 위해 `PyTorch`입니다.
+
 ## 예측 오류 분석
 
 `compare_predictions.py`는 PCB 테스트 이미지와 YOLO TXT 정답 라벨을 직접 매칭해 TP/FP/FN을 계산합니다.

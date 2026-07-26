@@ -47,7 +47,7 @@ def make_adapter(tmp_path: Path, **kwargs: object) -> TensorRtDetectorAdapter:
     )
 
 
-def fake_success_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+def fake_success_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
     output_dir = Path(command[command.index("--output") + 1])
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "result.json").write_text(
@@ -65,7 +65,35 @@ def fake_success_run(command: list[str], **kwargs: object) -> subprocess.Complet
         encoding="utf-8",
     )
     write_image(output_dir / "result.jpg")
-    return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+    return subprocess.CompletedProcess(command, 0, stdout=b"ok", stderr=b"")
+
+
+def test_decode_process_output_handles_utf8_stdout() -> None:
+    assert TensorRtDetectorAdapter._decode_process_output("TensorRT 추론 완료".encode("utf-8")) == "TensorRT 추론 완료"
+
+
+def test_decode_process_output_handles_cp949_stdout() -> None:
+    assert TensorRtDetectorAdapter._decode_process_output("TensorRT 추론 완료".encode("cp949")) == "TensorRT 추론 완료"
+
+
+def test_decode_process_output_handles_utf8_stderr() -> None:
+    assert TensorRtDetectorAdapter._decode_process_output("경고 메시지".encode("utf-8")) == "경고 메시지"
+
+
+def test_decode_process_output_handles_cp949_stderr() -> None:
+    assert TensorRtDetectorAdapter._decode_process_output("경고 메시지".encode("cp949")) == "경고 메시지"
+
+
+def test_decode_process_output_replaces_unreadable_bytes() -> None:
+    decoded = TensorRtDetectorAdapter._decode_process_output(b"\xff\xfe\xfa")
+
+    assert isinstance(decoded, str)
+    assert "\ufffd" in decoded
+
+
+@pytest.mark.parametrize("value", [b"", None])
+def test_decode_process_output_handles_empty_values(value: bytes | None) -> None:
+    assert TensorRtDetectorAdapter._decode_process_output(value) == ""
 
 
 def test_tensorrt_adapter_builds_expected_command(monkeypatch, tmp_path) -> None:
@@ -73,8 +101,10 @@ def test_tensorrt_adapter_builds_expected_command(monkeypatch, tmp_path) -> None
     detector = make_adapter(tmp_path)
     commands: list[list[str]] = []
 
-    def capture(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def capture(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         commands.append(command)
+        assert kwargs["text"] is False
+        assert "encoding" not in kwargs
         return fake_success_run(command, **kwargs)
 
     monkeypatch.setattr(adapter_module.subprocess, "run", capture)
@@ -117,15 +147,39 @@ def test_tensorrt_adapter_converts_json_to_yolo_result(monkeypatch, tmp_path) ->
     assert detector.last_metadata.timing_ms["inference"] == 2.0
 
 
+def test_tensorrt_adapter_records_cp949_success_output(monkeypatch, tmp_path) -> None:
+    _, _, _, image = make_adapter_files(tmp_path)
+    detector = make_adapter(tmp_path)
+
+    def run_cp949(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        output_dir = Path(command[command.index("--output") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "result.json").write_text('{"backend": "tensorrt", "detections": []}', encoding="utf-8")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="TensorRT 추론 완료".encode("cp949"),
+            stderr="경고 메시지".encode("cp949"),
+        )
+
+    monkeypatch.setattr(adapter_module.subprocess, "run", run_cp949)
+
+    detector.detect(image)
+
+    assert detector.last_metadata is not None
+    assert detector.last_metadata.stdout_excerpt == "TensorRT 추론 완료"
+    assert detector.last_metadata.stderr_excerpt == "경고 메시지"
+
+
 def test_tensorrt_adapter_handles_zero_detections(monkeypatch, tmp_path) -> None:
     _, _, _, image = make_adapter_files(tmp_path)
     detector = make_adapter(tmp_path)
 
-    def run_zero(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def run_zero(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         output_dir = Path(command[command.index("--output") + 1])
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "result.json").write_text('{"backend": "tensorrt", "detections": []}', encoding="utf-8")
-        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
     monkeypatch.setattr(adapter_module.subprocess, "run", run_zero)
 
@@ -146,8 +200,8 @@ def test_tensorrt_adapter_reports_nonzero_exit(monkeypatch, tmp_path) -> None:
     _, _, _, image = make_adapter_files(tmp_path)
     detector = make_adapter(tmp_path)
 
-    def fail(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(command, 2, stdout="out", stderr="dll load failed")
+    def fail(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(command, 2, stdout=b"out", stderr=b"dll load failed")
 
     monkeypatch.setattr(adapter_module.subprocess, "run", fail)
 
@@ -160,12 +214,34 @@ def test_tensorrt_adapter_reports_nonzero_exit(monkeypatch, tmp_path) -> None:
     assert str(detector.engine_path) in message
 
 
+def test_tensorrt_adapter_reports_nonzero_exit_with_cp949_output(monkeypatch, tmp_path) -> None:
+    _, _, _, image = make_adapter_files(tmp_path)
+    detector = make_adapter(tmp_path)
+
+    def fail(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(
+            command,
+            2,
+            stdout="TensorRT 추론 완료".encode("cp949"),
+            stderr="경고 메시지".encode("cp949"),
+        )
+
+    monkeypatch.setattr(adapter_module.subprocess, "run", fail)
+
+    with pytest.raises(TensorRtExecutionError) as exc_info:
+        detector.detect(image)
+
+    message = str(exc_info.value)
+    assert "TensorRT 추론 완료" in message
+    assert "경고 메시지" in message
+
+
 def test_tensorrt_adapter_reports_timeout(monkeypatch, tmp_path) -> None:
     _, _, _, image = make_adapter_files(tmp_path)
     detector = make_adapter(tmp_path, timeout_seconds=0.01)
 
-    def timeout(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise subprocess.TimeoutExpired(command, 0.01, output="partial", stderr="still running")
+    def timeout(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        raise subprocess.TimeoutExpired(command, 0.01, output=b"partial", stderr=b"still running")
 
     monkeypatch.setattr(adapter_module.subprocess, "run", timeout)
 
@@ -177,15 +253,31 @@ def test_tensorrt_adapter_reports_invalid_result_schema(monkeypatch, tmp_path) -
     _, _, _, image = make_adapter_files(tmp_path)
     detector = make_adapter(tmp_path)
 
-    def invalid(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def invalid(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         output_dir = Path(command[command.index("--output") + 1])
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "result.json").write_text('{"detections": [{"class_id": 99, "confidence": 0.1, "bbox": [1, 2, 3, 4]}]}', encoding="utf-8")
-        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
     monkeypatch.setattr(adapter_module.subprocess, "run", invalid)
 
     with pytest.raises(TensorRtResultParseError, match="class_id out of range"):
+        detector.detect(image)
+
+
+def test_tensorrt_adapter_reports_non_utf8_result_json_separately(monkeypatch, tmp_path) -> None:
+    _, _, _, image = make_adapter_files(tmp_path)
+    detector = make_adapter(tmp_path)
+
+    def invalid_encoding(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        output_dir = Path(command[command.index("--output") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "result.json").write_bytes(b"\xff\xfe\xfa")
+        return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(adapter_module.subprocess, "run", invalid_encoding)
+
+    with pytest.raises(TensorRtResultParseError, match="not valid UTF-8"):
         detector.detect(image)
 
 
@@ -194,7 +286,7 @@ def test_tensorrt_adapter_cleans_temporary_output_directory(monkeypatch, tmp_pat
     detector = make_adapter(tmp_path)
     output_dirs: list[Path] = []
 
-    def capture_output_dir(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def capture_output_dir(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         output_dirs.append(Path(command[command.index("--output") + 1]))
         return fake_success_run(command, **kwargs)
 
@@ -240,4 +332,3 @@ def test_cli_factory_selects_tensorrt(monkeypatch, tmp_path) -> None:
 
     assert isinstance(service.detector, TensorRtDetectorAdapter)
     assert service.detector.device_id == 2
-

@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
-#include <fstream>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -17,6 +16,7 @@
 #include <utility>
 
 #include "postprocessor.hpp"
+#include "unicode_utils.hpp"
 
 namespace pcb_vision {
 namespace {
@@ -120,19 +120,10 @@ EventPtr make_event() {
     return EventPtr(event);
 }
 
-std::vector<char> read_binary_file(const std::string& path) {
-    std::ifstream stream(path, std::ios::binary | std::ios::ate);
-    if (!stream) {
-        throw std::runtime_error("Failed to open TensorRT engine file: " + path);
-    }
-    const std::streamsize size = stream.tellg();
-    if (size <= 0) {
+std::vector<unsigned char> read_engine_file(const std::string& path) {
+    std::vector<unsigned char> data = read_binary_file(path_from_utf8(path));
+    if (data.empty()) {
         throw std::runtime_error("TensorRT engine file is empty: " + path);
-    }
-    stream.seekg(0, std::ios::beg);
-    std::vector<char> data(static_cast<std::size_t>(size));
-    if (!stream.read(data.data(), size)) {
-        throw std::runtime_error("Failed to read TensorRT engine file: " + path);
     }
     return data;
 }
@@ -244,7 +235,7 @@ TensorRtDetector::TensorRtDetector(
 
     check_cuda(cudaSetDevice(impl_->device_id), "cudaSetDevice(" + std::to_string(impl_->device_id) + ")");
 
-    const std::vector<char> engine_bytes = read_binary_file(impl_->engine_path);
+    const std::vector<unsigned char> engine_bytes = read_engine_file(impl_->engine_path);
     impl_->runtime.reset(nvinfer1::createInferRuntime(impl_->logger));
     if (!impl_->runtime) {
         throw std::runtime_error("Failed to create TensorRT runtime.");

@@ -92,8 +92,8 @@ class TensorRtDetectorAdapter:
         if self.executable_path.suffix.lower() != ".exe":
             raise TensorRtAdapterError(f"TensorRT executable must be a .exe file: {self.executable_path}")
         self.engine_path = _resolve_existing_file(engine_path, "TensorRT engine")
-        if self.engine_path.suffix.lower() != ".engine":
-            raise TensorRtAdapterError(f"TensorRT engine must be a .engine file: {self.engine_path}")
+        if self.engine_path.suffix.lower() not in {".engine", ".plan"}:
+            raise TensorRtAdapterError(f"TensorRT engine must be a .engine or .plan file: {self.engine_path}")
         self.metadata_path = _resolve_existing_file(metadata_path, "TensorRT metadata")
         self.device_id = int(device_id)
         self.image_size = int(image_size)
@@ -200,24 +200,30 @@ class TensorRtDetectorAdapter:
 
     def _run_command(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         try:
-            completed = subprocess.run(
+            completed_bytes = subprocess.run(
                 command,
                 shell=False,
                 capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
+                text=False,
                 timeout=self.timeout_seconds,
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
+            stdout = self._decode_process_output(exc.stdout)
+            stderr = self._decode_process_output(exc.stderr)
             raise TensorRtExecutionError(
                 "TensorRT subprocess timed out. "
                 f"timeout={self.timeout_seconds}; executable={self.executable_path}; engine={self.engine_path}; "
                 f"command={command}; "
-                f"stdout={_excerpt(exc.stdout or '')}; stderr={_excerpt(exc.stderr or '')}"
+                f"stdout={_excerpt(stdout)}; stderr={_excerpt(stderr)}"
             ) from exc
 
+        completed = subprocess.CompletedProcess(
+            args=completed_bytes.args,
+            returncode=completed_bytes.returncode,
+            stdout=self._decode_process_output(completed_bytes.stdout),
+            stderr=self._decode_process_output(completed_bytes.stderr),
+        )
         if completed.returncode != 0:
             raise TensorRtExecutionError(
                 "TensorRT subprocess failed. "
@@ -227,9 +233,24 @@ class TensorRtDetectorAdapter:
             )
         return completed
 
+    @staticmethod
+    def _decode_process_output(data: bytes | str | None) -> str:
+        if not data:
+            return ""
+        if isinstance(data, str):
+            return data
+        for encoding in ("utf-8", "cp949"):
+            try:
+                return data.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+        return data.decode("utf-8", errors="replace")
+
     def _load_result_json(self, result_json_path: Path) -> dict[str, Any]:
         try:
             payload = json.loads(result_json_path.read_text(encoding="utf-8-sig"))
+        except UnicodeDecodeError as exc:
+            raise TensorRtResultParseError(f"TensorRT result JSON is not valid UTF-8: {result_json_path}; {exc}") from exc
         except json.JSONDecodeError as exc:
             raise TensorRtResultParseError(f"TensorRT result JSON is invalid: {result_json_path}; {exc}") from exc
         if not isinstance(payload, dict):

@@ -48,6 +48,10 @@ runs/
 outputs/
 results/
 
+# Unicode path inference test outputs
+data/unicode_onnx_check/
+data/unicode_path_test/
+
 # C++ ONNX batch generated details
 benchmarks/cpp_onnx/batch_test/python/
 benchmarks/cpp_onnx/batch_test/cpp/

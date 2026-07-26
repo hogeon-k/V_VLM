@@ -1,24 +1,26 @@
 #include "image_preprocessor.hpp"
 
-#include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <limits>
 #include <stdexcept>
 #include <vector>
 
+#include "unicode_utils.hpp"
+
 namespace pcb_vision {
 
-bool can_load_image(const std::string& image_path) {
-    return !cv::imread(image_path, cv::IMREAD_COLOR).empty();
+bool can_load_image(const std::filesystem::path& image_path) {
+    return !read_image_unicode(image_path, cv::IMREAD_COLOR).empty();
 }
 
-cv::Mat load_bgr_image(const std::string& image_path) {
-    cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
+cv::Mat load_bgr_image(const std::filesystem::path& image_path) {
+    cv::Mat image = read_image_unicode(image_path, cv::IMREAD_COLOR);
     if (image.empty()) {
-        throw std::runtime_error("Failed to load image: " + image_path);
+        throw std::runtime_error("Failed to load image: " + path_to_utf8(image_path));
     }
     return image;
 }

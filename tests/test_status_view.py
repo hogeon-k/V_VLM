@@ -52,6 +52,8 @@ def test_status_view_renders_primary_status_cards_and_logs(monkeypatch) -> None:
     view = StatusView(FakeStatusViewModel())  # type: ignore[arg-type]
 
     assert view.yolo_card.state_label.text() == "Ready"
+    assert not hasattr(view, "backend_settings_panel")
+    assert not hasattr(view, "backend_card")
     assert view.vlm_card.state_label.text() != "Configured for local Ollama"
     assert view.database_card.detail_label.text() == "database/inspection_results.sqlite3"
     assert view.gpu_card.state_label.text() == "NVIDIA driver visible"

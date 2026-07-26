@@ -32,6 +32,8 @@ class InspectionView(QWidget):
 
         self.folder_label = QLabel("검사 폴더가 선택되지 않았습니다.")
         self.folder_label.setObjectName("MutedText")
+        self.backend_label = QLabel(self._backend_label_text())
+        self.backend_label.setObjectName("MutedText")
 
         self.choose_button = QPushButton("이미지 폴더 선택")
         self.start_button = QPushButton("자동 검사 시작")
@@ -86,6 +88,7 @@ class InspectionView(QWidget):
         controls.addWidget(self.start_button)
         controls.addWidget(self.pause_button)
         controls.addWidget(self.stop_button)
+        controls.addWidget(self.backend_label)
         controls.addWidget(self.folder_label, 1)
 
         image_grid = QGridLayout()
@@ -162,6 +165,7 @@ class InspectionView(QWidget):
         self._apply_idle_state()
 
     def _start_or_resume(self) -> None:
+        self.backend_label.setText(self._backend_label_text())
         if self._paused:
             self.viewmodel.resume()
             self._paused = False
@@ -200,6 +204,7 @@ class InspectionView(QWidget):
         self._apply_idle_state()
 
     def _on_started(self, total: int) -> None:
+        self.backend_label.setText(self._backend_label_text())
         self._total_count = total
         self._current_index = 0
         self.progress_bar.setRange(0, max(1, total))
@@ -253,6 +258,14 @@ class InspectionView(QWidget):
     def _show_error(self, message: str) -> None:
         self._set_status("오류")
         QMessageBox.warning(self, "검사", message)
+
+    def _backend_label_text(self) -> str:
+        backend_text = (
+            self.viewmodel.backend_display_text()
+            if hasattr(self.viewmodel, "backend_display_text")
+            else "PyTorch"
+        )
+        return f"추론 Backend: {backend_text}"
 
     def _apply_idle_state(self) -> None:
         self.start_button.setEnabled(True)
