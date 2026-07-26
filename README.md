@@ -320,7 +320,7 @@ Python ONNX 기준 결과와 C++ 결과 비교:
 
 ## TensorRT 서비스 연결
 
-Python 검사 서비스는 검증된 C++ Native TensorRT CLI를 subprocess adapter로 호출할 수 있습니다. 이 단계는 기능 연결용 최소 구현이며, 이미지마다 별도 프로세스를 시작하므로 TensorRT runtime 생성, engine deserialize, CUDA buffer/context 준비 비용이 매번 발생합니다. 고성능 운영 경로는 이후 persistent C++ worker 또는 Python binding으로 교체하는 것을 목표로 합니다.
+Python 검사 서비스는 검증된 C++ Native TensorRT CLI를 persistent subprocess worker로 호출합니다. GUI에서 TensorRT backend를 처음 사용할 때 engine을 한 번 deserialize하고, 이후 검사는 같은 프로세스의 stdin/stdout UTF-8 JSON Lines 프로토콜로 처리합니다. backend, engine, metadata, precision 또는 device ID가 바뀌거나 앱이 종료되면 기존 worker를 정상 종료합니다.
 
 필수 파일:
 
@@ -344,9 +344,11 @@ Python 검사 서비스는 검증된 C++ Native TensorRT CLI를 subprocess adapt
   --device 0
 ```
 
-Adapter는 C++ CLI의 `result.json`을 읽어 기존 `Detection`/`YoloResult` 구조로 변환합니다. 탐지가 0개이면 기존 정책대로 OK로 처리되고, 탐지가 있으면 기존 OK/NG, crop montage, VLM, SQLite 저장 흐름을 그대로 사용합니다. C++의 임시 산출물은 기본적으로 `tempfile.TemporaryDirectory()`에 쓰고 정리하며, VLM/DB에서 참조할 annotated image만 `data/result_images/`로 복사합니다. 디버깅 시 `--keep-tensorrt-outputs`로 임시 TensorRT 출력 폴더를 보존할 수 있습니다.
+Worker는 시작 시 `ready` handshake를 반환하고, 각 `infer` 요청에 기존 result JSON과 같은 detection/timing schema를 한 줄 JSON으로 반환합니다. stdout은 프로토콜 전용이며 C++ 로그는 stderr로 분리됩니다. 탐지가 0개이면 기존 정책대로 OK로 처리되고, 탐지가 있으면 기존 OK/NG, crop montage, VLM, SQLite 저장 흐름을 그대로 사용합니다. annotated image 임시 산출물은 기본적으로 정리하며 VLM/DB에서 참조할 결과 이미지만 `data/result_images/`로 복사합니다.
 
-TensorRT 실패 시 자동 fallback은 하지 않습니다. 실행 파일, engine, metadata, 입력 이미지 누락, timeout, non-zero exit, result JSON 누락/스키마 오류, bbox/class_id 오류는 명확한 예외로 반환해 실제 TensorRT 실패를 숨기지 않습니다.
+Worker startup, timeout, crash 또는 JSONL protocol 오류는 warning 로그를 남기고 기존 one-shot CLI로 fallback합니다. 이미지 decode 같은 요청 단위 오류는 worker를 종료하거나 one-shot으로 재실행하지 않고 해당 요청의 명시적 오류로 반환합니다. fallback은 `DetectorSettings.tensorrt_fallback_to_oneshot`으로 끌 수 있고, persistent mode 자체는 `tensorrt_use_persistent_worker`로 제어합니다.
+
+2026-07-26 로컬 FP16 검증에서 `01_missing_hole_03.jpg`를 기준으로 one-shot 20회 평균은 467.91 ms, persistent 첫 JSONL 요청은 100.62 ms, 이후 protocol/inference 20회 평균/중앙값/p95는 63.14/62.86/64.99 ms였습니다. worker startup은 188.78 ms였고 요청 통계에서 분리했습니다. GUI adapter와 같은 annotated image 생성/복사까지 포함한 steady-state 20회 평균/중앙값/p95는 139.27/138.33/144.31 ms였습니다. 두 방식 모두 `missing_hole` 3개를 검출했으며 class, confidence(0.001), bbox(1 px) 허용 오차 내 mismatch는 0이었습니다. 이 수치는 현재 개발 PC의 참고값이며 다른 GPU와 시스템에서는 달라질 수 있습니다.
 
 기본 backend는 기존 동작과 동일하게 `pytorch`입니다. CLI에서 선택 가능한 backend는 다음과 같습니다.
 

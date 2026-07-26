@@ -82,6 +82,7 @@ class InspectionViewModel(QObject):
         self.image_paths: list[Path] = []
         self._thread: QThread | None = None
         self._worker: InspectionWorker | None = None
+        self._active_detector_settings: DetectorSettings | None = None
 
     def inspect_image(self, image_path: Path) -> InspectionResult:
         self._apply_detector_settings()
@@ -148,6 +149,22 @@ class InspectionViewModel(QObject):
         self.detector_settings = load_detector_settings()
         if self._external_inspection_service:
             return
+        if self.detector_settings == self._active_detector_settings:
+            return
+        previous_service = self.inspection_service
         yolo_service = create_yolo_service_from_settings(self.detector_settings)
         self.inspection_service = InspectionService(yolo_service=yolo_service)
         self.auto_inspection_service = AutoInspectionService(self.inspection_service)
+        self._active_detector_settings = self.detector_settings
+        close = getattr(previous_service, "close", None)
+        if callable(close):
+            close()
+
+    def shutdown(self) -> None:
+        self.stop()
+        close = getattr(self.inspection_service, "close", None)
+        if callable(close):
+            close()
+        self._active_detector_settings = None
+
+    close = shutdown

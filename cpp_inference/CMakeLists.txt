@@ -110,6 +110,7 @@ add_executable(pcb_onnx_infer
     src/main.cpp
     src/detector.cpp
     src/tensorrt_detector.cpp
+    src/tensorrt_worker.cpp
     src/image_preprocessor.cpp
     src/unicode_utils.cpp
     src/postprocessor.cpp

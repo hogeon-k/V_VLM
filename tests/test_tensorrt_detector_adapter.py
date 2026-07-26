@@ -43,6 +43,7 @@ def make_adapter(tmp_path: Path, **kwargs: object) -> TensorRtDetectorAdapter:
         confidence_threshold=0.15,
         iou_threshold=0.7,
         engine_label="fp16",
+        use_persistent_worker=False,
         **kwargs,
     )
 

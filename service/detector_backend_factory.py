@@ -25,6 +25,11 @@ def create_yolo_service_from_settings(detector_settings: DetectorSettings) -> Yo
             engine_label=detector_settings.tensorrt_engine_label,
             timeout_seconds=detector_settings.tensorrt_timeout_seconds,
             keep_tensorrt_outputs=detector_settings.keep_tensorrt_outputs,
+            use_persistent_worker=detector_settings.tensorrt_use_persistent_worker,
+            fallback_to_oneshot=detector_settings.tensorrt_fallback_to_oneshot,
+            worker_startup_timeout_seconds=(
+                detector_settings.tensorrt_worker_startup_timeout_seconds
+            ),
         )
         return YoloService(detector)
 

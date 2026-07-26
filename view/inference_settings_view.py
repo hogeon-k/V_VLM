@@ -157,6 +157,11 @@ class InferenceSettingsView(QWidget):
             tensorrt_device_id=self.device_spin.value(),
             tensorrt_timeout_seconds=current.tensorrt_timeout_seconds,
             keep_tensorrt_outputs=current.keep_tensorrt_outputs,
+            tensorrt_use_persistent_worker=current.tensorrt_use_persistent_worker,
+            tensorrt_fallback_to_oneshot=current.tensorrt_fallback_to_oneshot,
+            tensorrt_worker_startup_timeout_seconds=(
+                current.tensorrt_worker_startup_timeout_seconds
+            ),
         )
 
     def _validate(self) -> bool:

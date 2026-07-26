@@ -13,3 +13,10 @@ class YoloService:
     def detect(self, image_path: str | Path, output_path: str | Path | None = None) -> YoloResult:
         """Delegate image detection to the configured YOLO detector."""
         return self.detector.detect(image_path, output_path=output_path)
+
+    def close(self) -> None:
+        close = getattr(self.detector, "close", None)
+        if callable(close):
+            close()
+
+    shutdown = close

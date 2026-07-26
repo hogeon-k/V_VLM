@@ -34,6 +34,9 @@ class DetectorSettings:
     tensorrt_device_id: int = 0
     tensorrt_timeout_seconds: float = 120.0
     keep_tensorrt_outputs: bool = False
+    tensorrt_use_persistent_worker: bool = True
+    tensorrt_fallback_to_oneshot: bool = True
+    tensorrt_worker_startup_timeout_seconds: float = 120.0
 
 
 def qsettings() -> QSettings:
@@ -61,6 +64,19 @@ def load_detector_settings(settings: QSettings | None = None) -> DetectorSetting
             _float_value(store.value("tensorrt_timeout_seconds", 120.0), default=120.0),
         ),
         keep_tensorrt_outputs=_bool_value(store.value("keep_tensorrt_outputs", False)),
+        tensorrt_use_persistent_worker=_bool_value(
+            store.value("tensorrt_use_persistent_worker", True)
+        ),
+        tensorrt_fallback_to_oneshot=_bool_value(
+            store.value("tensorrt_fallback_to_oneshot", True)
+        ),
+        tensorrt_worker_startup_timeout_seconds=max(
+            1.0,
+            _float_value(
+                store.value("tensorrt_worker_startup_timeout_seconds", 120.0),
+                default=120.0,
+            ),
+        ),
     )
 
 
@@ -74,6 +90,18 @@ def save_detector_settings(detector_settings: DetectorSettings, settings: QSetti
     store.setValue("tensorrt_device_id", detector_settings.tensorrt_device_id)
     store.setValue("tensorrt_timeout_seconds", detector_settings.tensorrt_timeout_seconds)
     store.setValue("keep_tensorrt_outputs", detector_settings.keep_tensorrt_outputs)
+    store.setValue(
+        "tensorrt_use_persistent_worker",
+        detector_settings.tensorrt_use_persistent_worker,
+    )
+    store.setValue(
+        "tensorrt_fallback_to_oneshot",
+        detector_settings.tensorrt_fallback_to_oneshot,
+    )
+    store.setValue(
+        "tensorrt_worker_startup_timeout_seconds",
+        detector_settings.tensorrt_worker_startup_timeout_seconds,
+    )
     store.sync()
 
 

@@ -54,6 +54,9 @@ def test_detector_settings_save_and_restore_tensorrt_values(tmp_path) -> None:
         tensorrt_metadata_path="models/meta.json",
         tensorrt_device_id=2,
         keep_tensorrt_outputs=True,
+        tensorrt_use_persistent_worker=False,
+        tensorrt_fallback_to_oneshot=False,
+        tensorrt_worker_startup_timeout_seconds=45.0,
     )
 
     save_detector_settings(original, store)
@@ -130,3 +133,6 @@ def test_backend_factory_passes_tensorrt_arguments(monkeypatch, tmp_path) -> Non
     assert captured["metadata_path"] == metadata
     assert captured["device_id"] == 3
     assert captured["engine_label"] == "fp16"
+    assert captured["use_persistent_worker"] is True
+    assert captured["fallback_to_oneshot"] is True
+    assert captured["worker_startup_timeout_seconds"] == 120.0

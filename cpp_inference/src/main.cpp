@@ -19,6 +19,7 @@
 #include "detector.hpp"
 #include "image_preprocessor.hpp"
 #include "tensorrt_detector.hpp"
+#include "tensorrt_worker.hpp"
 #include "unicode_utils.hpp"
 
 namespace fs = std::filesystem;
@@ -40,6 +41,7 @@ struct Args {
     int device_id = 0;
     int warmup = 10;
     int repeat = 50;
+    bool worker = false;
     std::string cudnn_conv_algo_search = "HEURISTIC";
 };
 
@@ -73,7 +75,7 @@ void print_usage(const std::string& program_name) {
         << "[--model <best.onnx>] [--engine <best.engine>] --metadata <model_metadata.json> "
         << "--image <image> [--output <dir>] [--imgsz 960] [--conf 0.15] [--iou 0.7] "
         << "[--provider cuda|cpu|tensorrt] [--device-id 0] [--engine-label fp32|fp16] [--warmup 10] [--repeat 50] "
-        << "[--cudnn-conv-algo-search heuristic|exhaustive|default]\n"
+        << "[--cudnn-conv-algo-search heuristic|exhaustive|default] [--worker]\n"
         << "  --cudnn-conv-algo-search: allowed values: heuristic, exhaustive, default; "
         << "default: heuristic\n";
 }
@@ -145,6 +147,8 @@ Args parse_args(const std::vector<std::string>& argv) {
             args.warmup = std::stoi(require_value(index, argv, option));
         } else if (option == "--repeat") {
             args.repeat = std::stoi(require_value(index, argv, option));
+        } else if (option == "--worker") {
+            args.worker = true;
         } else if (option == "--cudnn-conv-algo-search") {
             const std::string value = index + 1 < static_cast<int>(argv.size()) ? argv[++index] : "";
             args.cudnn_conv_algo_search = pcb_vision::normalize_cudnn_conv_algo_search(
@@ -154,8 +158,11 @@ Args parse_args(const std::vector<std::string>& argv) {
             throw std::invalid_argument("Unknown argument: " + option);
         }
     }
-    if (args.image.empty()) {
+    if (args.image.empty() && !args.worker) {
         throw std::invalid_argument("--image is required.");
+    }
+    if (args.worker && args.backend != "tensorrt") {
+        throw std::invalid_argument("--worker is supported only for --backend tensorrt.");
     }
     if (args.backend == "onnx" && args.model.empty()) {
         throw std::invalid_argument("--model is required for --backend onnx.");
@@ -587,8 +594,17 @@ int main(int argc, char* argv[]) {
         pcb_vision::configure_utf8_console();
         const std::vector<std::string> utf8_args = pcb_vision::command_line_to_utf8_args(argc, argv);
         const Args args = parse_args(utf8_args);
-        const std::vector<std::string> available_providers = pcb_vision::available_execution_providers();
         const std::vector<std::string> class_names = load_class_names(args.metadata);
+        if (args.worker) {
+            return pcb_vision::run_tensorrt_worker(
+                args.engine,
+                class_names,
+                args.engine_label,
+                args.imgsz,
+                args.device_id
+            );
+        }
+        const std::vector<std::string> available_providers = pcb_vision::available_execution_providers();
         const cv::Mat image = pcb_vision::load_bgr_image(pcb_vision::path_from_utf8(args.image));
         const fs::path output_root = pcb_vision::path_from_utf8(args.output);
         fs::create_directories(output_root);

@@ -99,6 +99,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: object) -> None:
         self.status_view.stop_vlm_status_check()
+        shutdown = getattr(self.inspection_view.viewmodel, "shutdown", None)
+        if callable(shutdown):
+            shutdown()
         super().closeEvent(event)
 
 

@@ -16,6 +16,11 @@ from config.settings import RESULT_IMAGE_DIR
 from model.defect_info import Detection
 from model.yolo_result import YoloResult
 from service.detection_location import calculate_detection_location
+from service.tensorrt_persistent_worker import (
+    TensorRtPersistentWorker,
+    TensorRtWorkerError,
+    TensorRtWorkerRemoteError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +58,9 @@ class TensorRtRunMetadata:
     timing_ms: dict[str, float]
     stdout_excerpt: str = ""
     stderr_excerpt: str = ""
+    execution_mode: str = "oneshot"
+    startup_ms: float | None = None
+    ipc_roundtrip_ms: float | None = None
 
 
 def _resolve_existing_file(path: str | Path, label: str) -> Path:
@@ -87,6 +95,9 @@ class TensorRtDetectorAdapter:
         timeout_seconds: float = 120.0,
         keep_tensorrt_outputs: bool = False,
         class_names: dict[int, str] | None = None,
+        use_persistent_worker: bool = True,
+        fallback_to_oneshot: bool = True,
+        worker_startup_timeout_seconds: float | None = None,
     ) -> None:
         self.executable_path = _resolve_existing_file(executable_path, "TensorRT executable")
         if self.executable_path.suffix.lower() != ".exe":
@@ -103,13 +114,106 @@ class TensorRtDetectorAdapter:
         self.timeout_seconds = float(timeout_seconds)
         self.keep_tensorrt_outputs = keep_tensorrt_outputs
         self.class_names = class_names or DEFAULT_TENSORRT_CLASS_NAMES
+        self.use_persistent_worker = bool(use_persistent_worker)
+        self.fallback_to_oneshot = bool(fallback_to_oneshot)
+        self.worker_startup_timeout_seconds = float(
+            worker_startup_timeout_seconds
+            if worker_startup_timeout_seconds is not None
+            else timeout_seconds
+        )
         self.last_metadata: TensorRtRunMetadata | None = None
+        self._persistent_worker: TensorRtPersistentWorker | None = None
 
     def detect(self, image_path: str | Path, output_path: str | Path | None = None) -> YoloResult:
         return self.infer(image_path, output_path=output_path)
 
     def infer(self, image_path: str | Path, output_path: str | Path | None = None) -> YoloResult:
         source_path = _resolve_existing_file(image_path, "Input image")
+        if self.use_persistent_worker:
+            try:
+                return self._infer_persistent(source_path, output_path)
+            except TensorRtWorkerRemoteError as exc:
+                raise TensorRtExecutionError(
+                    f"TensorRT worker rejected inference: {exc}"
+                ) from exc
+            except TensorRtWorkerError as exc:
+                if not self.fallback_to_oneshot:
+                    raise TensorRtExecutionError(
+                        f"TensorRT persistent worker failed: {exc}"
+                    ) from exc
+                logger.warning(
+                    "TensorRT persistent worker failed; falling back to one-shot. "
+                    "The timed-out request may have completed before termination. error=%s",
+                    exc,
+                )
+        return self._infer_oneshot(source_path, output_path)
+
+    def _infer_persistent(
+        self,
+        source_path: Path,
+        output_path: str | Path | None,
+    ) -> YoloResult:
+        start = time.perf_counter()
+        if self.keep_tensorrt_outputs:
+            output_dir = Path(tempfile.mkdtemp(prefix="vvlm_tensorrt_"))
+            cleanup_context = None
+        else:
+            cleanup_context = tempfile.TemporaryDirectory(prefix="vvlm_tensorrt_")
+            output_dir = Path(cleanup_context.name)
+
+        try:
+            worker = self._get_persistent_worker()
+            payload = worker.infer(
+                source_path,
+                confidence=self.confidence_threshold,
+                iou=self.iou_threshold,
+                output_dir=output_dir,
+            )
+            detections = self._parse_detections(payload, source_path)
+            annotated_image_path = self._resolve_annotated_image(output_dir, output_path)
+            duration_seconds = time.perf_counter() - start
+            timing_ms = self._parse_timing_ms(payload)
+            ipc_roundtrip_ms = float(payload["ipc_roundtrip_ms"])
+            timing_ms["ipc_roundtrip"] = ipc_roundtrip_ms
+            self.last_metadata = TensorRtRunMetadata(
+                backend=str(payload.get("backend") or "tensorrt"),
+                engine_label=str(payload.get("engine_label") or self.engine_label),
+                engine_path=self.engine_path,
+                image_path=source_path,
+                output_dir=output_dir,
+                result_json_path=output_dir / "result.json",
+                detection_count=len(detections),
+                duration_seconds=duration_seconds,
+                returncode=0,
+                timing_ms=timing_ms,
+                stderr_excerpt=worker.stderr_excerpt(),
+                execution_mode="persistent",
+                startup_ms=worker.startup_ms,
+                ipc_roundtrip_ms=ipc_roundtrip_ms,
+            )
+            logger.info(
+                "TensorRT persistent detection completed pid=%s engine_label=%s "
+                "image=%s detections=%s duration=%.3fs",
+                worker.pid,
+                self.engine_label,
+                source_path,
+                len(detections),
+                duration_seconds,
+            )
+            return YoloResult(
+                image_path=source_path,
+                detections=detections,
+                annotated_image_path=annotated_image_path,
+            )
+        finally:
+            if cleanup_context is not None:
+                cleanup_context.cleanup()
+
+    def _infer_oneshot(
+        self,
+        source_path: Path,
+        output_path: str | Path | None,
+    ) -> YoloResult:
         start = time.perf_counter()
         if self.keep_tensorrt_outputs:
             output_dir = Path(tempfile.mkdtemp(prefix="vvlm_tensorrt_"))
@@ -168,6 +272,28 @@ class TensorRtDetectorAdapter:
         finally:
             if cleanup_context is not None:
                 cleanup_context.cleanup()
+
+    def _get_persistent_worker(self) -> TensorRtPersistentWorker:
+        if self._persistent_worker is None:
+            self._persistent_worker = TensorRtPersistentWorker(
+                executable_path=self.executable_path,
+                engine_path=self.engine_path,
+                metadata_path=self.metadata_path,
+                engine_label=self.engine_label,
+                device_id=self.device_id,
+                image_size=self.image_size,
+                startup_timeout_seconds=self.worker_startup_timeout_seconds,
+                inference_timeout_seconds=self.timeout_seconds,
+            )
+        return self._persistent_worker
+
+    def close(self) -> None:
+        worker = self._persistent_worker
+        self._persistent_worker = None
+        if worker is not None:
+            worker.stop()
+
+    shutdown = close
 
     def _build_command(self, image_path: Path, output_dir: Path) -> list[str]:
         return [
