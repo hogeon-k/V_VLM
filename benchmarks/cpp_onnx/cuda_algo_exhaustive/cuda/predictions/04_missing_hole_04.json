@@ -1,0 +1,8 @@
+{
+  "provider": "CUDAExecutionProvider",
+  "detections": [
+    {"class_id": 2, "class_name": "missing_hole", "confidence": 0.896730, "bbox": [2556.632080, 952.890564, 2625.245117, 1016.116882]},
+    {"class_id": 2, "class_name": "missing_hole", "confidence": 0.854796, "bbox": [2558.013184, 1371.113770, 2647.163086, 1453.202393]},
+    {"class_id": 2, "class_name": "missing_hole", "confidence": 0.660057, "bbox": [2113.117920, 1470.734253, 2171.330811, 1529.803345]}
+  ]
+}

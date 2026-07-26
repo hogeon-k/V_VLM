@@ -118,6 +118,9 @@ OnnxDetector::OnnxDetector(
     impl_->provider = requested_provider;
     impl_->cuda_requested = (requested_provider == "CUDAExecutionProvider");
     impl_->cuda_config = std::move(cuda_config);
+    impl_->cuda_config.cudnn_conv_algo_search = normalize_cudnn_conv_algo_search(
+        impl_->cuda_config.cudnn_conv_algo_search
+    );
     impl_->available_providers = Ort::GetAvailableProviders();
     impl_->session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     if (impl_->cuda_requested) {

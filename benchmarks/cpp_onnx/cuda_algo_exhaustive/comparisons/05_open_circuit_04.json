@@ -1,0 +1,17 @@
+{
+  "image": "datasets\\pcb\\images\\test\\05_open_circuit_04.jpg",
+  "status": "NUMERICAL_WARNING",
+  "failure_reason": "numerical_difference",
+  "cpu_detection_count": 5,
+  "cuda_detection_count": 5,
+  "matched_count": 5,
+  "cpu_only_count": 0,
+  "cuda_only_count": 0,
+  "class_mismatch_count": 0,
+  "avg_confidence_diff": 0.000287,
+  "max_confidence_diff": 0.001008,
+  "avg_bbox_diff": 0.010657,
+  "max_bbox_diff": 0.029785,
+  "avg_matched_iou": 0.999615,
+  "min_matched_iou": 0.999266
+}

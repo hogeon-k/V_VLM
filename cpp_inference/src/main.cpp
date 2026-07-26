@@ -34,7 +34,7 @@ struct Args {
     std::string provider = "CUDAExecutionProvider";
     int warmup = 10;
     int repeat = 50;
-    std::string cudnn_conv_algo_search = "EXHAUSTIVE";
+    std::string cudnn_conv_algo_search = "HEURISTIC";
 };
 
 struct TimingStats {
@@ -62,7 +62,9 @@ void print_usage(const char* program_name) {
         << "Usage: " << program_name << " --model <best.onnx> --metadata <model_metadata.json> "
         << "--image <image> --output <dir> [--imgsz 960] [--conf 0.15] [--iou 0.7] "
         << "[--provider cuda|cpu] [--warmup 10] [--repeat 50] "
-        << "[--cudnn-conv-algo-search exhaustive|heuristic|default]\n";
+        << "[--cudnn-conv-algo-search heuristic|exhaustive|default]\n"
+        << "  --cudnn-conv-algo-search: allowed values: heuristic, exhaustive, default; "
+        << "default: heuristic\n";
 }
 
 std::string require_value(int& index, int argc, char* argv[], const std::string& option) {
@@ -111,14 +113,10 @@ Args parse_args(int argc, char* argv[]) {
         } else if (option == "--repeat") {
             args.repeat = std::stoi(require_value(index, argc, argv, option));
         } else if (option == "--cudnn-conv-algo-search") {
-            std::string algo = require_value(index, argc, argv, option);
-            std::transform(algo.begin(), algo.end(), algo.begin(), [](unsigned char ch) {
-                return static_cast<char>(std::toupper(ch));
-            });
-            if (algo != "EXHAUSTIVE" && algo != "HEURISTIC" && algo != "DEFAULT") {
-                throw std::invalid_argument("--cudnn-conv-algo-search must be exhaustive, heuristic, or default.");
-            }
-            args.cudnn_conv_algo_search = algo;
+            const std::string value = index + 1 < argc ? argv[++index] : "";
+            args.cudnn_conv_algo_search = pcb_vision::normalize_cudnn_conv_algo_search(
+                value
+            );
         } else {
             throw std::invalid_argument("Unknown argument: " + option);
         }
@@ -568,10 +566,14 @@ int main(int argc, char* argv[]) {
         std::cout << "Image: " << args.image << '\n';
         std::cout << "Available providers: [" << join_strings(available_providers) << "]\n";
         std::cout << "Requested provider: " << args.provider << '\n';
-        std::cout << "CUDA registration: "
-                  << (detector.cuda_requested() ? (detector.cuda_registered() ? "success (device_id=0)" : "failed") : "not requested")
-                  << '\n';
-        std::cout << "CUDA cudnn_conv_algo_search: " << detector.cuda_config().cudnn_conv_algo_search << '\n';
+        if (detector.cuda_requested()) {
+            std::cout << "CUDA registration: "
+                      << (detector.cuda_registered() ? "success" : "failed")
+                      << '\n';
+            std::cout << "CUDA device id: " << detector.cuda_config().device_id << '\n';
+            std::cout << "cuDNN convolution algorithm search: "
+                      << detector.cuda_config().cudnn_conv_algo_search << '\n';
+        }
         std::cout << "CPU fallback: "
                   << (detector.cpu_fallback_enabled() ? "enabled by ONNX Runtime after CUDA provider" : "disabled/not used in CPU-only mode")
                   << '\n';

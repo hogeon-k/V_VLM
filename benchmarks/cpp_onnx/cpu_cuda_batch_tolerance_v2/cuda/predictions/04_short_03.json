@@ -1,0 +1,8 @@
+{
+  "provider": "CUDAExecutionProvider",
+  "detections": [
+    {"class_id": 1, "class_name": "short", "confidence": 0.909450, "bbox": [1000.226685, 2069.328369, 1108.583740, 2175.432129]},
+    {"class_id": 1, "class_name": "short", "confidence": 0.769842, "bbox": [1420.298218, 1168.187256, 1510.240234, 1253.905151]},
+    {"class_id": 1, "class_name": "short", "confidence": 0.446213, "bbox": [2244.458008, 1580.567261, 2363.136963, 1693.975830]}
+  ]
+}

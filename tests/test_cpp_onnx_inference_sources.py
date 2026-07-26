@@ -45,15 +45,27 @@ def test_cpp_cmake_requires_onnxruntime_root() -> None:
 
 
 def test_cpp_cuda_provider_uses_v2_options_and_reports_cudnn_search() -> None:
+    header = read_cpp("cpp_inference/include/detector.hpp")
     source = read_cpp("cpp_inference/src/detector.cpp")
     main = read_cpp("cpp_inference/src/main.cpp")
+    batch_main = read_cpp("cpp_inference/src/batch_benchmark_main.cpp")
 
     assert "CreateCUDAProviderOptions" in source
     assert "UpdateCUDAProviderOptions" in source
     assert "AppendExecutionProvider_CUDA_V2" in source
     assert "\"device_id\", \"cudnn_conv_algo_search\"" in source
+    assert 'std::string cudnn_conv_algo_search = "HEURISTIC";' in header
+    assert 'std::string cudnn_conv_algo_search = "HEURISTIC";' in main
+    assert 'std::string cudnn_conv_algo_search = "HEURISTIC";' in batch_main
+    assert "normalize_cudnn_conv_algo_search" in header
+    assert "normalize_cudnn_conv_algo_search" in main
+    assert "normalize_cudnn_conv_algo_search" in batch_main
     assert "cudnn_conv_algo_search" in main
     assert "--cudnn-conv-algo-search" in main
+    assert "default: heuristic" in main
+    assert "default: heuristic" in batch_main
+    assert "cuDNN convolution algorithm search: " in main
+    assert "cuDNN convolution algorithm search: " in batch_main
 
 
 def test_cpp_benchmark_warmup_repeat_and_session_run_stats_are_present() -> None:
@@ -89,8 +101,13 @@ def test_cpp_cpu_cuda_batch_benchmark_executable_and_outputs_are_present() -> No
     assert "pcb_onnx_batch_benchmark" in cmake
     assert "--images" in source
     assert "--provider-order" in source
-    assert "--confidence-tolerance" in source
+    assert "--strict-confidence-tolerance" in source
+    assert "--practical-confidence-tolerance" in source
     assert "--bbox-tolerance" in source
+    assert "NUMERICAL_WARNING" in source
+    assert "structural_detection_mismatch_images" in source
+    assert "strict_confidence_tolerance" in source
+    assert "practical_confidence_tolerance" in source
     assert "summary.json" in source
     assert "image_results.csv" in source
     assert "timing_runs.csv" in source
@@ -98,6 +115,7 @@ def test_cpp_cpu_cuda_batch_benchmark_executable_and_outputs_are_present() -> No
     assert "failure_cases" in source
     assert "compare_detections" in utilities
     assert "collect_images" in utilities
+    assert "comparison.max_confidence_diff > practical_confidence_tolerance" in utilities
 
 
 def test_python_cpp_matcher_passes_equal_detections() -> None:

@@ -221,31 +221,27 @@ std::string judge_status(
     int cpu_count,
     int cuda_count,
     const MatchResult& comparison,
-    double confidence_tolerance,
+    double strict_confidence_tolerance,
+    double practical_confidence_tolerance,
     double bbox_tolerance
 ) {
-    if (cpu_count == cuda_count
-        && comparison.cpu_only_count == 0
-        && comparison.cuda_only_count == 0
-        && comparison.class_mismatch_count == 0
-        && comparison.max_confidence_diff <= confidence_tolerance
-        && comparison.max_bbox_diff <= bbox_tolerance) {
+    if (has_structural_mismatch(cpu_count, cuda_count, comparison)
+        || comparison.max_confidence_diff > practical_confidence_tolerance
+        || comparison.max_bbox_diff > bbox_tolerance) {
+        return "FAIL";
+    }
+    if (comparison.max_confidence_diff <= strict_confidence_tolerance) {
         return "PASS";
     }
-    if (cpu_count == cuda_count
-        && comparison.cpu_only_count == 0
-        && comparison.cuda_only_count == 0
-        && comparison.class_mismatch_count == 0) {
-        return "WARNING";
-    }
-    return "FAIL";
+    return "NUMERICAL_WARNING";
 }
 
 std::string failure_reason(
     int cpu_count,
     int cuda_count,
     const MatchResult& comparison,
-    double confidence_tolerance,
+    double strict_confidence_tolerance,
+    double practical_confidence_tolerance,
     double bbox_tolerance
 ) {
     std::ostringstream reason;
@@ -261,8 +257,10 @@ std::string failure_reason(
     if (comparison.class_mismatch_count > 0) {
         reason << "class_mismatch ";
     }
-    if (comparison.max_confidence_diff > confidence_tolerance) {
+    if (comparison.max_confidence_diff > practical_confidence_tolerance) {
         reason << "confidence_mismatch ";
+    } else if (comparison.max_confidence_diff > strict_confidence_tolerance) {
+        reason << "numerical_difference ";
     }
     if (comparison.max_bbox_diff > bbox_tolerance) {
         reason << "bbox_mismatch ";
@@ -275,6 +273,34 @@ std::string failure_reason(
         text.pop_back();
     }
     return text;
+}
+
+bool has_structural_mismatch(
+    int cpu_count,
+    int cuda_count,
+    const MatchResult& comparison
+) {
+    return cpu_count != cuda_count
+        || comparison.cpu_only_count > 0
+        || comparison.cuda_only_count > 0
+        || comparison.class_mismatch_count > 0;
+}
+
+void validate_confidence_tolerances(
+    double strict_confidence_tolerance,
+    double practical_confidence_tolerance
+) {
+    if (!std::isfinite(strict_confidence_tolerance) || strict_confidence_tolerance < 0.0) {
+        throw std::invalid_argument("--strict-confidence-tolerance must be a finite value >= 0.");
+    }
+    if (!std::isfinite(practical_confidence_tolerance) || practical_confidence_tolerance < 0.0) {
+        throw std::invalid_argument("--practical-confidence-tolerance must be a finite value >= 0.");
+    }
+    if (strict_confidence_tolerance > practical_confidence_tolerance) {
+        throw std::invalid_argument(
+            "--strict-confidence-tolerance must be <= --practical-confidence-tolerance."
+        );
+    }
 }
 
 std::string sanitize_filename(const std::filesystem::path& image_path) {

@@ -2,7 +2,10 @@
 
 #include <opencv2/core.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -13,8 +16,22 @@ namespace pcb_vision {
 
 struct CudaProviderConfig {
     int device_id = 0;
-    std::string cudnn_conv_algo_search = "EXHAUSTIVE";
+    std::string cudnn_conv_algo_search = "HEURISTIC";
 };
+
+inline std::string normalize_cudnn_conv_algo_search(std::string value) {
+    const std::string original = value;
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::toupper(ch));
+    });
+    if (value != "HEURISTIC" && value != "EXHAUSTIVE" && value != "DEFAULT") {
+        throw std::invalid_argument(
+            "Invalid cudnn_conv_algo_search value: " + original
+            + "\nAllowed values: heuristic, exhaustive, default"
+        );
+    }
+    return value;
+}
 
 class OnnxDetector final {
 public:

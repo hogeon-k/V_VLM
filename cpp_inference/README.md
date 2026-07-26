@@ -158,8 +158,7 @@ $env:Path = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin;C:\Pro
   --iou 0.7 `
   --provider cuda `
   --warmup 10 `
-  --repeat 50 `
-  --cudnn-conv-algo-search exhaustive
+  --repeat 50
 ```
 
 CPU-only run:
@@ -194,8 +193,9 @@ Expected provider lines for a CUDA run:
 ```text
 Available providers: [TensorrtExecutionProvider, CUDAExecutionProvider, CPUExecutionProvider]
 Requested provider: CUDAExecutionProvider
-CUDA registration: success (device_id=0)
-CUDA cudnn_conv_algo_search: EXHAUSTIVE
+CUDA registration: success
+CUDA device id: 0
+cuDNN convolution algorithm search: HEURISTIC
 CPU fallback: enabled by ONNX Runtime after CUDA provider
 Provider: CUDAExecutionProvider
 Session.Run stats (ms): first=..., min=..., mean=..., median=..., p95=..., max=..., stddev=...
@@ -266,3 +266,30 @@ cuda/predictions/
 comparisons/
 failure_cases/
 ```
+
+## CUDA Algorithm Search Baseline
+
+`HEURISTIC` is the default cuDNN convolution algorithm search mode for both
+single-image inference and the CPU/CUDA batch benchmark. Omitting
+`--cudnn-conv-algo-search` therefore applies `HEURISTIC`.
+
+The CLI accepts `heuristic`, `exhaustive`, and `default` case-insensitively and
+records the normalized uppercase value in JSON output.
+
+The modes were compared on an RTX 4060 with ONNX Runtime GPU 1.20.1, CUDA 12.6,
+and cuDNN 9.25:
+
+| Mode | CUDA Mean | Median | P95 | Structural Mismatch | Decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| HEURISTIC | 8.26085 ms | 8.12172 ms | 9.3214 ms | 0 | Final baseline |
+| EXHAUSTIVE | 8.43391 ms | 8.21594 ms | 9.73795 ms | 0 | Correct, slightly slower |
+| DEFAULT | Not selected | - | - | - | cuDNN fallback mode observed |
+
+HEURISTIC and EXHAUSTIVE produced the same detection counts, classes, bounding
+boxes, confidence comparison status, and repeat stability. HEURISTIC had the
+lower mean and p95 latency, so it is the final CUDA baseline.
+
+With `DEFAULT`, cuDNN fallback mode was observed for several convolution
+operations inside the CUDA Execution Provider, indicating a potential
+performance degradation. This does not mean CUDA provider initialization
+failed or that execution switched to the CPU provider.

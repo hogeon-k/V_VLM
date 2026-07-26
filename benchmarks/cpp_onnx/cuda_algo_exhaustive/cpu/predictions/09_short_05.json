@@ -1,0 +1,10 @@
+{
+  "provider": "CPUExecutionProvider",
+  "detections": [
+    {"class_id": 1, "class_name": "short", "confidence": 0.920300, "bbox": [1077.292236, 570.217407, 1165.393555, 650.924500]},
+    {"class_id": 1, "class_name": "short", "confidence": 0.837586, "bbox": [1478.883789, 473.110107, 1598.239990, 558.226685]},
+    {"class_id": 1, "class_name": "short", "confidence": 0.830777, "bbox": [1808.535645, 995.370056, 1873.007568, 1056.349731]},
+    {"class_id": 1, "class_name": "short", "confidence": 0.796491, "bbox": [780.687134, 861.510681, 894.914490, 941.894775]},
+    {"class_id": 1, "class_name": "short", "confidence": 0.652239, "bbox": [1204.455200, 867.921082, 1272.018677, 947.839783]}
+  ]
+}

@@ -58,7 +58,8 @@ std::string judge_status(
     int cpu_count,
     int cuda_count,
     const MatchResult& comparison,
-    double confidence_tolerance,
+    double strict_confidence_tolerance,
+    double practical_confidence_tolerance,
     double bbox_tolerance
 );
 
@@ -66,8 +67,20 @@ std::string failure_reason(
     int cpu_count,
     int cuda_count,
     const MatchResult& comparison,
-    double confidence_tolerance,
+    double strict_confidence_tolerance,
+    double practical_confidence_tolerance,
     double bbox_tolerance
+);
+
+bool has_structural_mismatch(
+    int cpu_count,
+    int cuda_count,
+    const MatchResult& comparison
+);
+
+void validate_confidence_tolerances(
+    double strict_confidence_tolerance,
+    double practical_confidence_tolerance
 );
 
 std::string sanitize_filename(const std::filesystem::path& image_path);

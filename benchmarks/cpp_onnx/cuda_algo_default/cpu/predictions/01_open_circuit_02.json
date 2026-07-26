@@ -1,0 +1,10 @@
+{
+  "provider": "CPUExecutionProvider",
+  "detections": [
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.868075, "bbox": [768.358765, 1124.019043, 816.196716, 1171.158325]},
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.861010, "bbox": [1498.764771, 1340.041748, 1541.150024, 1381.264771]},
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.513320, "bbox": [1654.784058, 1191.379517, 1689.487549, 1227.228149]},
+    {"class_id": 1, "class_name": "short", "confidence": 0.222391, "bbox": [770.640259, 1123.440552, 817.133789, 1176.617310]},
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.185340, "bbox": [1493.753540, 1333.880981, 1546.811890, 1381.595581]}
+  ]
+}

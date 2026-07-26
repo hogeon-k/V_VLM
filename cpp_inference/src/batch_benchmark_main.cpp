@@ -43,7 +43,8 @@ struct Args {
     unsigned int seed = 0;
     bool use_seed = false;
     int device_id = 0;
-    double confidence_tolerance = 0.001;
+    double strict_confidence_tolerance = 0.001;
+    double practical_confidence_tolerance = 0.002;
     double bbox_tolerance = 1.0;
     bool fail_on_mismatch = false;
     std::string cudnn_conv_algo_search = "HEURISTIC";
@@ -106,19 +107,17 @@ std::string require_value(int& index, int argc, char* argv[], const std::string&
     return argv[++index];
 }
 
-std::string upper(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::toupper(ch));
-    });
-    return value;
-}
-
 void print_usage(const char* exe) {
     std::cout
         << "Usage: " << exe << " --model <best.onnx> --images <dir> --output <dir> "
         << "[--metadata models/model_metadata.json] [--imgsz 960] [--conf 0.15] [--iou 0.7]\n"
         << "       [--match-iou 0.5] [--warmup 10] [--repeat 30] "
-        << "[--cudnn-conv-algo-search exhaustive|heuristic|default]\n";
+        << "[--strict-confidence-tolerance 0.001] [--practical-confidence-tolerance 0.002] "
+        << "[--bbox-tolerance 1.0]\n"
+        << "       "
+        << "[--cudnn-conv-algo-search heuristic|exhaustive|default]\n"
+        << "  --cudnn-conv-algo-search: allowed values: heuristic, exhaustive, default; "
+        << "default: heuristic\n";
 }
 
 Args parse_args(int argc, char* argv[]) {
@@ -160,18 +159,22 @@ Args parse_args(int argc, char* argv[]) {
         } else if (option == "--device-id") {
             args.device_id = std::stoi(require_value(index, argc, argv, option));
         } else if (option == "--confidence-tolerance") {
-            args.confidence_tolerance = std::stod(require_value(index, argc, argv, option));
+            const double legacy_tolerance = std::stod(require_value(index, argc, argv, option));
+            args.strict_confidence_tolerance = legacy_tolerance;
+            args.practical_confidence_tolerance = legacy_tolerance;
+        } else if (option == "--strict-confidence-tolerance") {
+            args.strict_confidence_tolerance = std::stod(require_value(index, argc, argv, option));
+        } else if (option == "--practical-confidence-tolerance") {
+            args.practical_confidence_tolerance = std::stod(require_value(index, argc, argv, option));
         } else if (option == "--bbox-tolerance") {
             args.bbox_tolerance = std::stod(require_value(index, argc, argv, option));
         } else if (option == "--fail-on-mismatch") {
             args.fail_on_mismatch = true;
         } else if (option == "--cudnn-conv-algo-search") {
-            args.cudnn_conv_algo_search = upper(require_value(index, argc, argv, option));
-            if (args.cudnn_conv_algo_search != "EXHAUSTIVE"
-                && args.cudnn_conv_algo_search != "HEURISTIC"
-                && args.cudnn_conv_algo_search != "DEFAULT") {
-                throw std::invalid_argument("--cudnn-conv-algo-search must be exhaustive, heuristic, or default.");
-            }
+            const std::string value = index + 1 < argc ? argv[++index] : "";
+            args.cudnn_conv_algo_search = pcb_vision::normalize_cudnn_conv_algo_search(
+                value
+            );
         } else if (option == "--provider-order") {
             args.provider_order = require_value(index, argc, argv, option);
             if (args.provider_order != "cpu-first" && args.provider_order != "cuda-first" && args.provider_order != "alternate") {
@@ -187,6 +190,10 @@ Args parse_args(int argc, char* argv[]) {
     if (args.repeat <= 0 || args.warmup < 0 || args.imgsz <= 0) {
         throw std::invalid_argument("--repeat must be > 0, --warmup must be >= 0, and --imgsz must be > 0.");
     }
+    bench::validate_confidence_tolerances(
+        args.strict_confidence_tolerance,
+        args.practical_confidence_tolerance
+    );
     return args;
 }
 
@@ -280,7 +287,12 @@ RunTimings run_repeated(
         if (!has_baseline) {
             timings.baseline = result;
             has_baseline = true;
-        } else if (!detections_equal(timings.baseline.detections, result.detections, args.confidence_tolerance, args.bbox_tolerance)) {
+        } else if (!detections_equal(
+            timings.baseline.detections,
+            result.detections,
+            args.strict_confidence_tolerance,
+            args.bbox_tolerance
+        )) {
             ++timings.internal_mismatches;
         }
         timings.session_run_ms.push_back(result.inference_ms);
@@ -350,13 +362,49 @@ void write_timing_csv(const fs::path& path, const std::vector<ImageReport>& repo
     }
 }
 
-void write_image_results_csv(const fs::path& path, const std::vector<ImageReport>& reports) {
+void write_image_results_csv(
+    const fs::path& path,
+    const Args& args,
+    const std::vector<ImageReport>& reports
+) {
+    const int pass_count = static_cast<int>(std::count_if(
+        reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "PASS"; }
+    ));
+    const int numerical_warning_count = static_cast<int>(std::count_if(
+        reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "NUMERICAL_WARNING"; }
+    ));
+    const int fail_count = static_cast<int>(std::count_if(
+        reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "FAIL"; }
+    ));
+    const int structural_mismatch_count = static_cast<int>(std::count_if(
+        reports.begin(), reports.end(), [](const ImageReport& item) {
+            return bench::has_structural_mismatch(
+                item.cpu_detection_count,
+                item.cuda_detection_count,
+                item.comparison
+            );
+        }
+    ));
+    const auto max_confidence = std::max_element(
+        reports.begin(), reports.end(), [](const ImageReport& left, const ImageReport& right) {
+            return left.comparison.max_confidence_diff < right.comparison.max_confidence_diff;
+        }
+    );
+    const auto max_bbox = std::max_element(
+        reports.begin(), reports.end(), [](const ImageReport& left, const ImageReport& right) {
+            return left.comparison.max_bbox_diff < right.comparison.max_bbox_diff;
+        }
+    );
     std::ofstream out(path);
     out << "image,width,height,cpu_detection_count,cuda_detection_count,matched_count,cpu_only_count,cuda_only_count,"
         << "class_mismatch_count,avg_confidence_diff,max_confidence_diff,avg_bbox_diff,max_bbox_diff,avg_matched_iou,"
         << "min_matched_iou,cpu_session_mean_ms,cpu_session_median_ms,cpu_session_p95_ms,cuda_session_mean_ms,"
         << "cuda_session_median_ms,cuda_session_p95_ms,session_speedup,cpu_total_mean_ms,cuda_total_mean_ms,"
-        << "total_speedup,cpu_internal_mismatches,cuda_internal_mismatches,status,failure_reason\n";
+        << "total_speedup,cpu_internal_mismatches,cuda_internal_mismatches,structural_detection_mismatch,"
+        << "strict_confidence_tolerance,practical_confidence_tolerance,bbox_tolerance,match_iou_threshold,"
+        << "summary_pass_count,summary_numerical_warning_count,summary_fail_count,"
+        << "summary_structural_detection_mismatch_count,summary_max_confidence_diff,"
+        << "summary_max_bbox_diff,status,failure_reason\n";
     out << std::fixed << std::setprecision(6);
     for (const ImageReport& report : reports) {
         out << report.image_path.filename().string() << ','
@@ -373,6 +421,19 @@ void write_image_results_csv(const fs::path& path, const std::vector<ImageReport
             << report.cpu_total.mean << ',' << report.cuda_total.mean << ','
             << bench::speedup(report.cpu_total.mean, report.cuda_total.mean) << ','
             << report.cpu_internal_mismatches << ',' << report.cuda_internal_mismatches << ','
+            << (bench::has_structural_mismatch(
+                    report.cpu_detection_count,
+                    report.cuda_detection_count,
+                    report.comparison
+                ) ? 1 : 0) << ','
+            << args.strict_confidence_tolerance << ','
+            << args.practical_confidence_tolerance << ','
+            << args.bbox_tolerance << ','
+            << args.match_iou << ','
+            << pass_count << ',' << numerical_warning_count << ',' << fail_count << ','
+            << structural_mismatch_count << ','
+            << (max_confidence == reports.end() ? 0.0 : max_confidence->comparison.max_confidence_diff) << ','
+            << (max_bbox == reports.end() ? 0.0 : max_bbox->comparison.max_bbox_diff) << ','
             << report.status << ",\"" << report.failure_reason << "\"\n";
     }
 }
@@ -418,8 +479,19 @@ void write_summary_json(
     const std::vector<ImageReport>& reports
 ) {
     const int pass_count = static_cast<int>(std::count_if(reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "PASS"; }));
-    const int warning_count = static_cast<int>(std::count_if(reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "WARNING"; }));
+    const int numerical_warning_count = static_cast<int>(std::count_if(
+        reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "NUMERICAL_WARNING"; }
+    ));
     const int failed_count = static_cast<int>(std::count_if(reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "FAIL"; }));
+    const int structural_mismatch_count = static_cast<int>(std::count_if(
+        reports.begin(), reports.end(), [](const ImageReport& item) {
+            return bench::has_structural_mismatch(
+                item.cpu_detection_count,
+                item.cuda_detection_count,
+                item.comparison
+            );
+        }
+    ));
     const int matched = std::accumulate(reports.begin(), reports.end(), 0, [](int sum, const ImageReport& item) { return sum + item.comparison.matched_count; });
     const int cpu_only = std::accumulate(reports.begin(), reports.end(), 0, [](int sum, const ImageReport& item) { return sum + item.comparison.cpu_only_count; });
     const int cuda_only = std::accumulate(reports.begin(), reports.end(), 0, [](int sum, const ImageReport& item) { return sum + item.comparison.cuda_only_count; });
@@ -439,7 +511,9 @@ void write_summary_json(
     const bench::TimingStats cuda_session = merged_stats(reports, true, false);
     const bench::TimingStats cpu_total = merged_stats(reports, false, true);
     const bench::TimingStats cuda_total = merged_stats(reports, true, true);
-    const std::string final_status = failed_count > 0 ? "FAIL" : (warning_count > 0 ? "WARNING" : "PASS");
+    const std::string final_status = failed_count > 0
+        ? "FAIL"
+        : (numerical_warning_count > 0 ? "NUMERICAL_WARNING" : "PASS");
 
     std::ofstream out(path);
     out << std::fixed << std::setprecision(6);
@@ -448,6 +522,9 @@ void write_summary_json(
         << "\", \"images\": \"" << json_escape(args.images) << "\", \"image_count\": " << reports.size()
         << ", \"imgsz\": " << args.imgsz << ", \"conf\": " << args.conf << ", \"iou\": " << args.iou
         << ", \"match_iou\": " << args.match_iou << ", \"warmup\": " << args.warmup << ", \"repeat\": " << args.repeat
+        << ", \"strict_confidence_tolerance\": " << args.strict_confidence_tolerance
+        << ", \"practical_confidence_tolerance\": " << args.practical_confidence_tolerance
+        << ", \"bbox_tolerance\": " << args.bbox_tolerance
         << ", \"cuda_device_id\": " << args.device_id << ", \"cudnn_conv_algo_search\": \"" << args.cudnn_conv_algo_search
         << "\", \"provider_order\": \"" << args.provider_order << "\"},\n";
     out << "  \"providers\": {\"available\": [";
@@ -455,10 +532,13 @@ void write_summary_json(
         out << (i > 0 ? ", " : "") << "\"" << available_providers[i] << "\"";
     }
     out << "], \"cpu\": {\"name\": \"CPUExecutionProvider\"}, \"cuda\": {\"name\": \"CUDAExecutionProvider\"}},\n";
-    out << "  \"accuracy_comparison\": {\"passed_images\": " << pass_count << ", \"warning_images\": " << warning_count
+    out << "  \"accuracy_comparison\": {\"passed_images\": " << pass_count
+        << ", \"numerical_warning_images\": " << numerical_warning_count
+        << ", \"warning_images\": " << numerical_warning_count
         << ", \"failed_images\": " << failed_count << ", \"matched_detections\": " << matched
         << ", \"cpu_only_detections\": " << cpu_only << ", \"cuda_only_detections\": " << cuda_only
         << ", \"class_mismatches\": " << class_mismatches
+        << ", \"structural_detection_mismatch_images\": " << structural_mismatch_count
         << ", \"max_confidence_difference\": " << (max_conf == reports.end() ? 0.0 : max_conf->comparison.max_confidence_diff)
         << ", \"max_bbox_difference\": " << (max_bbox == reports.end() ? 0.0 : max_bbox->comparison.max_bbox_diff)
         << ", \"minimum_matched_iou\": " << (min_iou == reports.end() ? 1.0 : min_iou->comparison.min_matched_iou) << "},\n";
@@ -473,7 +553,7 @@ void write_summary_json(
         << ", \"end_to_end_speedup_median\": " << bench::speedup(cpu_total.median, cuda_total.median) << "}},\n";
     out << "  \"validation\": {\"cpu_internal_mismatches\": " << cpu_internal
         << ", \"cuda_internal_mismatches\": " << cuda_internal
-        << ", \"cpu_cuda_mismatches\": " << (warning_count + failed_count) << "},\n";
+        << ", \"cpu_cuda_mismatches\": " << (numerical_warning_count + failed_count) << "},\n";
     out << "  \"final_status\": \"" << final_status << "\"\n";
     out << "}\n";
 }
@@ -488,6 +568,8 @@ void copy_failure(const fs::path& image, const fs::path& output, const std::stri
         category = "class_mismatch";
     } else if (reason.find("confidence_mismatch") != std::string::npos) {
         category = "confidence_mismatch";
+    } else if (reason.find("numerical_difference") != std::string::npos) {
+        category = "numerical_difference";
     }
     fs::create_directories(output / "failure_cases" / category);
     fs::copy_file(image, output / "failure_cases" / category / image.filename(), fs::copy_options::overwrite_existing);
@@ -572,14 +654,16 @@ int main(int argc, char* argv[]) {
                 report.cpu_detection_count,
                 report.cuda_detection_count,
                 report.comparison,
-                args.confidence_tolerance,
+                args.strict_confidence_tolerance,
+                args.practical_confidence_tolerance,
                 args.bbox_tolerance
             );
             report.failure_reason = bench::failure_reason(
                 report.cpu_detection_count,
                 report.cuda_detection_count,
                 report.comparison,
-                args.confidence_tolerance,
+                args.strict_confidence_tolerance,
+                args.practical_confidence_tolerance,
                 args.bbox_tolerance
             );
 
@@ -596,25 +680,63 @@ int main(int argc, char* argv[]) {
                       << " ms / CUDA " << report.cuda_session.mean << " ms\n";
         }
 
-        write_image_results_csv(fs::path(args.output) / "image_results.csv", reports);
+        write_image_results_csv(fs::path(args.output) / "image_results.csv", args, reports);
         write_timing_csv(fs::path(args.output) / "timing_runs.csv", reports);
         write_environment_json(fs::path(args.output) / "environment.json", args);
         write_summary_json(fs::path(args.output) / "summary.json", args, available_providers, reports);
 
         const int pass_count = static_cast<int>(std::count_if(reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "PASS"; }));
-        const int warning_count = static_cast<int>(std::count_if(reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "WARNING"; }));
+        const int numerical_warning_count = static_cast<int>(std::count_if(
+            reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "NUMERICAL_WARNING"; }
+        ));
         const int fail_count = static_cast<int>(std::count_if(reports.begin(), reports.end(), [](const ImageReport& item) { return item.status == "FAIL"; }));
+        const int structural_mismatch_count = static_cast<int>(std::count_if(
+            reports.begin(), reports.end(), [](const ImageReport& item) {
+                return bench::has_structural_mismatch(
+                    item.cpu_detection_count,
+                    item.cuda_detection_count,
+                    item.comparison
+                );
+            }
+        ));
         const int cpu_internal = std::accumulate(reports.begin(), reports.end(), 0, [](int sum, const ImageReport& item) { return sum + item.cpu_internal_mismatches; });
         const int cuda_internal = std::accumulate(reports.begin(), reports.end(), 0, [](int sum, const ImageReport& item) { return sum + item.cuda_internal_mismatches; });
         const bench::TimingStats cpu_session = merged_stats(reports, false, false);
         const bench::TimingStats cuda_session = merged_stats(reports, true, false);
         const bench::TimingStats cpu_total = merged_stats(reports, false, true);
         const bench::TimingStats cuda_total = merged_stats(reports, true, true);
-        const std::string final_status = fail_count > 0 ? "FAIL" : (warning_count > 0 ? "WARNING" : "PASS");
+        const auto max_confidence = std::max_element(
+            reports.begin(), reports.end(), [](const ImageReport& left, const ImageReport& right) {
+                return left.comparison.max_confidence_diff < right.comparison.max_confidence_diff;
+            }
+        );
+        const auto max_bbox = std::max_element(
+            reports.begin(), reports.end(), [](const ImageReport& left, const ImageReport& right) {
+                return left.comparison.max_bbox_diff < right.comparison.max_bbox_diff;
+            }
+        );
+        const std::string final_status = fail_count > 0
+            ? "FAIL"
+            : (numerical_warning_count > 0 ? "NUMERICAL_WARNING" : "PASS");
 
         std::cout << "=== C++ ONNX CPU vs CUDA Batch Benchmark ===\n";
         std::cout << "Images: " << reports.size() << '\n';
-        std::cout << "Passed/Warning/Failed: " << pass_count << " / " << warning_count << " / " << fail_count << "\n\n";
+        std::cout << "PASS: " << pass_count
+                  << "\nNUMERICAL_WARNING: " << numerical_warning_count
+                  << "\nFAIL: " << fail_count
+                  << "\nStructural detection mismatches: " << structural_mismatch_count << '\n';
+        std::cout << "Strict confidence tolerance: " << args.strict_confidence_tolerance
+                  << "\nPractical confidence tolerance: " << args.practical_confidence_tolerance
+                  << "\nBBox tolerance: " << args.bbox_tolerance
+                  << "\nMatch IoU threshold: " << args.match_iou
+                  << "\nCUDA device id: " << cuda_detector.cuda_config().device_id
+                  << "\ncuDNN convolution algorithm search: "
+                  << cuda_detector.cuda_config().cudnn_conv_algo_search
+                  << "\nMax confidence diff: "
+                  << (max_confidence == reports.end() ? 0.0 : max_confidence->comparison.max_confidence_diff)
+                  << "\nMax bbox diff: "
+                  << (max_bbox == reports.end() ? 0.0 : max_bbox->comparison.max_bbox_diff)
+                  << "\n\n";
         std::cout << "CPU Session.Run:\nMean: " << cpu_session.mean << "\nMedian: " << cpu_session.median << "\nP95: " << cpu_session.p95 << "\n\n";
         std::cout << "CUDA Session.Run:\nMean: " << cuda_session.mean << "\nMedian: " << cuda_session.median << "\nP95: " << cuda_session.p95 << "\n\n";
         std::cout << "Speedup:\nSession.Run mean: " << bench::speedup(cpu_session.mean, cuda_session.mean)
@@ -622,7 +744,7 @@ int main(int argc, char* argv[]) {
                   << "x\nEnd-to-end mean: " << bench::speedup(cpu_total.mean, cuda_total.mean) << "x\n\n";
         std::cout << "Validation mismatches:\nCPU internal: " << cpu_internal
                   << "\nCUDA internal: " << cuda_internal
-                  << "\nCPU vs CUDA: " << (warning_count + fail_count) << "\n\n";
+                  << "\nCPU vs CUDA: " << (numerical_warning_count + fail_count) << "\n\n";
         std::cout << "Final status: " << final_status << '\n';
         std::cout << "Output: " << args.output << '\n';
         return (args.fail_on_mismatch && final_status != "PASS") ? 2 : 0;

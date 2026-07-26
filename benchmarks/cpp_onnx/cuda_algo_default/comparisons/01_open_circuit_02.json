@@ -1,0 +1,17 @@
+{
+  "image": "datasets\\pcb\\images\\test\\01_open_circuit_02.jpg",
+  "status": "PASS",
+  "failure_reason": "within tolerances",
+  "cpu_detection_count": 5,
+  "cuda_detection_count": 5,
+  "matched_count": 5,
+  "cpu_only_count": 0,
+  "cuda_only_count": 0,
+  "class_mismatch_count": 0,
+  "avg_confidence_diff": 0.000002,
+  "max_confidence_diff": 0.000005,
+  "avg_bbox_diff": 0.000098,
+  "max_bbox_diff": 0.000244,
+  "avg_matched_iou": 0.999997,
+  "min_matched_iou": 0.999988
+}
