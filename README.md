@@ -350,9 +350,16 @@ Worker startup, timeout, crash 또는 JSONL protocol 오류는 warning 로그를
 
 2026-07-26 로컬 FP16 검증에서 `01_missing_hole_03.jpg`를 기준으로 one-shot 20회 평균은 467.91 ms, persistent 첫 JSONL 요청은 100.62 ms, 이후 protocol/inference 20회 평균/중앙값/p95는 63.14/62.86/64.99 ms였습니다. worker startup은 188.78 ms였고 요청 통계에서 분리했습니다. GUI adapter와 같은 annotated image 생성/복사까지 포함한 steady-state 20회 평균/중앙값/p95는 139.27/138.33/144.31 ms였습니다. 두 방식 모두 `missing_hole` 3개를 검출했으며 class, confidence(0.001), bbox(1 px) 허용 오차 내 mismatch는 0이었습니다. 이 수치는 현재 개발 PC의 참고값이며 다른 GPU와 시스템에서는 달라질 수 있습니다.
 
-## 4개 backend 독립 비교 CLI
+## 4-Backend 정확도 및 성능 비교
 
 운영 GUI에는 benchmark 기능을 넣지 않고 `scripts/compare_all_backends.py`에서 PyTorch CUDA, Python ONNX Runtime CUDA, TensorRT FP32 persistent worker, TensorRT FP16 persistent worker를 순차 비교합니다. 이 분리는 운영 검사 화면의 수명주기와 GPU benchmark의 반복 실행 및 대용량 산출물 생성을 분리하기 위한 것입니다.
+
+비교 대상:
+
+- PyTorch CUDA
+- ONNX Runtime CUDA
+- TensorRT FP32 persistent worker
+- TensorRT FP16 persistent worker
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\compare_all_backends.py `
@@ -373,20 +380,33 @@ Worker startup, timeout, crash 또는 JSONL protocol 오류는 warning 로그를
   --provider CUDAExecutionProvider
 ```
 
-모든 backend에 같은 이미지, `imgsz`, confidence, NMS IoU를 적용하고 PyTorch 결과를 기준으로 class-aware IoU matching을 수행합니다. warmup은 각 backend의 첫 선택 이미지에서만 수행하고 통계에서 제외합니다. TensorRT startup은 steady-state와 분리하며 FP32와 FP16 worker는 VRAM 사용을 줄이기 위해 동시에 실행하지 않습니다.
+모든 backend에 같은 이미지와 설정을 적용하고 PyTorch 결과를 기준으로 class-aware IoU matching을 수행합니다. 2026-07-26 RTX 4060 8GB Windows/CUDA 환경에서 사용한 공통 조건은 테스트 이미지 21장, `imgsz=960`, `conf=0.15`, NMS `iou=0.5`, `match_iou=0.5`, warmup 5회, 측정 20회입니다. backend는 순차 실행하며 warmup은 각 backend의 첫 선택 이미지에서만 수행하고 통계에서 제외합니다. TensorRT startup은 steady-state와 분리했습니다.
 
 생성 파일은 `summary.json`, `summary.csv`, `per_image_results.csv`, `detection_comparisons.csv`, `timing_samples.csv`, `report.md`이며 mismatch가 있으면 `mismatch_cases/`에 backend별 detection JSON을 기록합니다. 생성 CSV/JSON과 mismatch 산출물은 git에서 제외하고 최종 `report.md`와 `.gitkeep`만 추적합니다.
 
-2026-07-26 RTX 4060 8GB, 테스트 이미지 21장, warmup 5, repeat 20 측정 결과:
+정확도 비교:
 
-| Backend | Provider | Detections | Inference mean | End-to-end mean | Median | p95 | Result |
-|---|---|---:|---:|---:|---:|---:|---|
-| PyTorch | CUDA (`cuda:0`) | 78 | 8.980 ms | 43.569 ms | 41.076 ms | 52.095 ms | BASELINE |
-| ONNX Runtime | CUDAExecutionProvider | 78 | 8.668 ms | 46.838 ms | 44.503 ms | 56.108 ms | PASS |
-| TensorRT | FP32 | 79 | 3.397 ms | 71.988 ms | 67.781 ms | 88.853 ms | FAIL |
-| TensorRT | FP16 | 79 | 2.271 ms | 69.939 ms | 65.551 ms | 84.518 ms | FAIL |
+| Comparison | Reference detections | Target detections | FP | FN | Class mismatch | Result |
+|---|---:|---:|---:|---:|---:|---|
+| PyTorch vs ONNX Runtime CUDA | 78 | 78 | 0 | 0 | 0 | PASS |
+| PyTorch vs TensorRT FP32 | 78 | 79 | 1 | 0 | 0 | FAIL |
+| PyTorch vs TensorRT FP16 | 78 | 79 | 1 | 0 | 0 | FAIL |
+| TensorRT FP32 vs FP16 | 79 | 79 | 0 | 0 | 0 | WARNING |
 
-PyTorch와 ONNX는 FP/FN/class mismatch가 0이었습니다. TensorRT FP32와 FP16은 `05_short_06.jpg`에서 confidence 약 0.1505의 `short` detection을 각각 하나 더 반환해 PyTorch 기준 FP 1로 판정됐습니다. FP32와 FP16끼리는 detection mismatch가 0이지만 strict bbox IoU 0.99 기준을 일부 초과해 WARNING입니다. 두 TensorRT worker 모두 전체 반복에서 단일 PID를 재사용했고 one-shot fallback과 잔존 worker process는 0이었습니다.
+TensorRT FP32와 FP16은 `05_short_06.jpg`에서 confidence가 임계값 `0.15`를 아주 조금 초과한 `short` detection을 각각 하나 더 생성했습니다. FP32 confidence는 `0.150476`, FP16 confidence는 `0.150527`입니다. 이는 backend별 부동소수점 계산과 전처리 경계 차이가 threshold 부근에서 드러난 사례이며, 현재 판정 정책대로 FP 1건으로 유지해 FAIL로 기록했습니다. FP32와 FP16끼리는 detection 구성이 같지만 strict bbox IoU `0.99` 기준을 일부 벗어나 WARNING입니다.
+
+성능 비교:
+
+| Backend | Pure inference mean | Host end-to-end mean |
+|---|---:|---:|
+| PyTorch CUDA | 8.98 ms | 43.57 ms |
+| ONNX Runtime CUDA | 8.67 ms | 46.84 ms |
+| TensorRT FP32 | 3.40 ms | 71.99 ms |
+| TensorRT FP16 | 2.27 ms | 69.94 ms |
+
+TensorRT FP16의 순수 inference는 FP32보다 빨랐고, 두 TensorRT engine 모두 모델 계산 자체에서는 PyTorch와 ONNX Runtime보다 짧았습니다. 반면 현재 통합 구조의 host end-to-end에는 Python-C++ JSONL IPC, 파일 기반 이미지 로딩, 결과 직렬화, 전처리와 후처리가 포함되어 PyTorch와 ONNX Runtime보다 길었습니다. 따라서 TensorRT 적용 여부는 순수 GPU inference뿐 아니라 전체 파이프라인 지연시간을 기준으로 판단해야 합니다. Persistent worker는 engine을 한 번만 deserialize하고 backend별 같은 PID를 재사용했으며, 실제 비교에서 one-shot fallback은 0회였고 종료 후 orphan `pcb_onnx_infer.exe` 프로세스는 없었습니다.
+
+이 결과는 RTX 4060 8GB와 당시 Windows/CUDA 환경의 측정값입니다. 하드웨어, 드라이버, CUDA/TensorRT 버전, 이미지와 설정에 따라 달라질 수 있습니다. GUI는 비교 기능을 제공하지 않으며 운영 검사 흐름과 개발 benchmark를 분리하기 위해 독립 CLI로 실행합니다. 전체 테스트 결과는 `443 passed`였고, 상세 측정 근거는 `benchmarks/backend_comparison/report.md`에 보존합니다.
 
 기본 backend는 기존 동작과 동일하게 `pytorch`입니다. CLI에서 선택 가능한 backend는 다음과 같습니다.
 
