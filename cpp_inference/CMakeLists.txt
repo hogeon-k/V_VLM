@@ -110,7 +110,9 @@ add_executable(pcb_onnx_infer
     src/main.cpp
     src/detector.cpp
     src/tensorrt_detector.cpp
+    src/tensorrt_worker.cpp
     src/image_preprocessor.cpp
+    src/unicode_utils.cpp
     src/postprocessor.cpp
 )
 
@@ -119,6 +121,7 @@ add_executable(pcb_onnx_batch_benchmark
     src/batch_benchmark.cpp
     src/detector.cpp
     src/image_preprocessor.cpp
+    src/unicode_utils.cpp
     src/postprocessor.cpp
 )
 
@@ -127,6 +130,7 @@ add_executable(pcb_tensorrt_batch_benchmark
     src/batch_benchmark.cpp
     src/tensorrt_detector.cpp
     src/image_preprocessor.cpp
+    src/unicode_utils.cpp
     src/postprocessor.cpp
 )
 
@@ -170,6 +174,10 @@ else()
 endif()
 
 if(WIN32)
+    target_link_libraries(pcb_onnx_infer PRIVATE shell32)
+    target_link_libraries(pcb_onnx_batch_benchmark PRIVATE shell32)
+    target_link_libraries(pcb_tensorrt_batch_benchmark PRIVATE shell32)
+
     set(ONNXRUNTIME_RUNTIME_DLLS
         "${ONNXRUNTIME_ROOT}/bin/onnxruntime.dll"
         "${ONNXRUNTIME_ROOT}/bin/onnxruntime_providers_cuda.dll"
@@ -262,12 +270,14 @@ add_executable(pcb_cpp_unit_tests
     tests/test_preprocessing.cpp
     tests/test_postprocessing.cpp
     src/image_preprocessor.cpp
+    src/unicode_utils.cpp
     src/postprocessor.cpp
 )
 
 add_executable(pcb_batch_benchmark_tests
     tests/test_batch_benchmark.cpp
     src/batch_benchmark.cpp
+    src/unicode_utils.cpp
 )
 
 target_include_directories(pcb_cpp_unit_tests
@@ -282,6 +292,10 @@ target_include_directories(pcb_batch_benchmark_tests
 
 target_link_libraries(pcb_cpp_unit_tests PRIVATE ${OpenCV_LIBS})
 target_link_libraries(pcb_batch_benchmark_tests PRIVATE ${OpenCV_LIBS})
+if(WIN32)
+    target_link_libraries(pcb_cpp_unit_tests PRIVATE shell32)
+    target_link_libraries(pcb_batch_benchmark_tests PRIVATE shell32)
+endif()
 
 if(MSVC)
     target_compile_options(pcb_cpp_unit_tests PRIVATE /W4 /permissive-)

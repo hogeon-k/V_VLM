@@ -13,6 +13,7 @@
 
 #include "image_preprocessor.hpp"
 #include "postprocessor.hpp"
+#include "unicode_utils.hpp"
 
 namespace pcb_vision {
 namespace {
@@ -24,7 +25,7 @@ double elapsed_ms(const std::chrono::steady_clock::time_point& start) {
 
 #ifdef _WIN32
 std::wstring to_ort_path(const std::string& path) {
-    return std::wstring(path.begin(), path.end());
+    return utf8_to_wide(path);
 }
 #endif
 

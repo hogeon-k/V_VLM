@@ -148,6 +148,13 @@ class InspectionService:
         """UI-facing inspection path: return immediately after YOLO is saved."""
         return self.inspect_yolo_only(image_path)
 
+    def close(self) -> None:
+        close = getattr(self.yolo_service, "close", None)
+        if callable(close):
+            close()
+
+    shutdown = close
+
 
 def _configure_error_logging() -> None:
     ERROR_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)

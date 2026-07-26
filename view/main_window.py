@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from view.history_view import HistoryView
+from view.inference_settings_view import InferenceSettingsView
 from view.inspection_view import InspectionView
 from view.statistics_view import StatisticsView
 from view.status_view import StatusView
@@ -28,19 +29,23 @@ class MainWindow(QMainWindow):
         self.history_view = HistoryView()
         self.statistics_view = StatisticsView()
         self.status_view = StatusView()
+        self.inference_settings_view = InferenceSettingsView()
         self.stack.addWidget(self.inspection_view)
         self.stack.addWidget(self.history_view)
         self.stack.addWidget(self.statistics_view)
         self.stack.addWidget(self.status_view)
+        self.stack.addWidget(self.inference_settings_view)
 
         self.inspection_tab = _tab_button("메인 검사 화면")
         self.history_tab = _tab_button("검사 이력 화면")
         self.statistics_tab = _tab_button("통계 화면")
         self.status_tab = _tab_button("시스템 화면")
+        self.inference_settings_tab = _tab_button("추론 설정")
         self.inspection_tab.clicked.connect(lambda: self._show_page(0))
         self.history_tab.clicked.connect(lambda: self._show_page(1))
         self.statistics_tab.clicked.connect(lambda: self._show_page(2))
         self.status_tab.clicked.connect(lambda: self._show_page(3))
+        self.inference_settings_tab.clicked.connect(lambda: self._show_page(4))
 
         title = QLabel("PCB 자동 검사")
         title.setObjectName("AppTitle")
@@ -58,6 +63,7 @@ class MainWindow(QMainWindow):
         tabs.addWidget(self.history_tab)
         tabs.addWidget(self.statistics_tab)
         tabs.addWidget(self.status_tab)
+        tabs.addWidget(self.inference_settings_tab)
 
         header = QHBoxLayout()
         header.setContentsMargins(24, 14, 24, 8)
@@ -78,11 +84,14 @@ class MainWindow(QMainWindow):
 
     def _show_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
+        if index == 4 and hasattr(self.inference_settings_view, "refresh"):
+            self.inference_settings_view.refresh()
         for tab_index, button in (
             (0, self.inspection_tab),
             (1, self.history_tab),
             (2, self.statistics_tab),
             (3, self.status_tab),
+            (4, self.inference_settings_tab),
         ):
             button.setProperty("selected", tab_index == index)
             button.style().unpolish(button)
@@ -90,6 +99,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: object) -> None:
         self.status_view.stop_vlm_status_check()
+        shutdown = getattr(self.inspection_view.viewmodel, "shutdown", None)
+        if callable(shutdown):
+            shutdown()
         super().closeEvent(event)
 
 

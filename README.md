@@ -318,6 +318,127 @@ Python ONNX 기준 결과와 C++ 결과 비교:
 
 자세한 환경 준비와 산출물 설명은 `cpp_inference/README.md`를 참고하세요.
 
+## TensorRT 서비스 연결
+
+Python 검사 서비스는 검증된 C++ Native TensorRT CLI를 persistent subprocess worker로 호출합니다. GUI에서 TensorRT backend를 처음 사용할 때 engine을 한 번 deserialize하고, 이후 검사는 같은 프로세스의 stdin/stdout UTF-8 JSON Lines 프로토콜로 처리합니다. backend, engine, metadata, precision 또는 device ID가 바뀌거나 앱이 종료되면 기존 worker를 정상 종료합니다.
+
+필수 파일:
+
+- `cpp_inference/build_gpu/Release/pcb_onnx_infer.exe`
+- `benchmarks/tensorrt/best_fp16.engine`
+- `models/model_metadata.json`
+
+단일 검사 CLI 예:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\test_yolo_vlm.py `
+  --backend tensorrt `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg `
+  --tensorrt-executable cpp_inference\build_gpu\Release\pcb_onnx_infer.exe `
+  --tensorrt-engine benchmarks\tensorrt\best_fp16.engine `
+  --tensorrt-engine-label fp16 `
+  --tensorrt-metadata models\model_metadata.json `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --device 0
+```
+
+Worker는 시작 시 `ready` handshake를 반환하고, 각 `infer` 요청에 기존 result JSON과 같은 detection/timing schema를 한 줄 JSON으로 반환합니다. stdout은 프로토콜 전용이며 C++ 로그는 stderr로 분리됩니다. 탐지가 0개이면 기존 정책대로 OK로 처리되고, 탐지가 있으면 기존 OK/NG, crop montage, VLM, SQLite 저장 흐름을 그대로 사용합니다. annotated image 임시 산출물은 기본적으로 정리하며 VLM/DB에서 참조할 결과 이미지만 `data/result_images/`로 복사합니다.
+
+Worker startup, timeout, crash 또는 JSONL protocol 오류는 warning 로그를 남기고 기존 one-shot CLI로 fallback합니다. 이미지 decode 같은 요청 단위 오류는 worker를 종료하거나 one-shot으로 재실행하지 않고 해당 요청의 명시적 오류로 반환합니다. fallback은 `DetectorSettings.tensorrt_fallback_to_oneshot`으로 끌 수 있고, persistent mode 자체는 `tensorrt_use_persistent_worker`로 제어합니다.
+
+2026-07-26 로컬 FP16 검증에서 `01_missing_hole_03.jpg`를 기준으로 one-shot 20회 평균은 467.91 ms, persistent 첫 JSONL 요청은 100.62 ms, 이후 protocol/inference 20회 평균/중앙값/p95는 63.14/62.86/64.99 ms였습니다. worker startup은 188.78 ms였고 요청 통계에서 분리했습니다. GUI adapter와 같은 annotated image 생성/복사까지 포함한 steady-state 20회 평균/중앙값/p95는 139.27/138.33/144.31 ms였습니다. 두 방식 모두 `missing_hole` 3개를 검출했으며 class, confidence(0.001), bbox(1 px) 허용 오차 내 mismatch는 0이었습니다. 이 수치는 현재 개발 PC의 참고값이며 다른 GPU와 시스템에서는 달라질 수 있습니다.
+
+## 4-Backend 정확도 및 성능 비교
+
+운영 GUI에는 benchmark 기능을 넣지 않고 `scripts/compare_all_backends.py`에서 PyTorch CUDA, Python ONNX Runtime CUDA, TensorRT FP32 persistent worker, TensorRT FP16 persistent worker를 순차 비교합니다. 이 분리는 운영 검사 화면의 수명주기와 GPU benchmark의 반복 실행 및 대용량 산출물 생성을 분리하기 위한 것입니다.
+
+비교 대상:
+
+- PyTorch CUDA
+- ONNX Runtime CUDA
+- TensorRT FP32 persistent worker
+- TensorRT FP16 persistent worker
+
+```powershell
+.\.venv\Scripts\python.exe scripts\compare_all_backends.py `
+  --images datasets\pcb\images\test `
+  --pytorch-model models\best.pt `
+  --onnx-model models\best.onnx `
+  --tensorrt-fp32-engine benchmarks\tensorrt\best_fp32.engine `
+  --tensorrt-fp16-engine benchmarks\tensorrt\best_fp16.engine `
+  --metadata models\model_metadata.json `
+  --output benchmarks\backend_comparison `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.5 `
+  --match-iou 0.5 `
+  --warmup 5 `
+  --repeat 20 `
+  --device 0 `
+  --provider CUDAExecutionProvider
+```
+
+모든 backend에 같은 이미지와 설정을 적용하고 PyTorch 결과를 기준으로 class-aware IoU matching을 수행합니다. 2026-07-26 RTX 4060 8GB Windows/CUDA 환경에서 사용한 공통 조건은 테스트 이미지 21장, `imgsz=960`, `conf=0.15`, NMS `iou=0.5`, `match_iou=0.5`, warmup 5회, 측정 20회입니다. backend는 순차 실행하며 warmup은 각 backend의 첫 선택 이미지에서만 수행하고 통계에서 제외합니다. TensorRT startup은 steady-state와 분리했습니다.
+
+생성 파일은 `summary.json`, `summary.csv`, `per_image_results.csv`, `detection_comparisons.csv`, `timing_samples.csv`, `report.md`이며 mismatch가 있으면 `mismatch_cases/`에 backend별 detection JSON을 기록합니다. 생성 CSV/JSON과 mismatch 산출물은 git에서 제외하고 최종 `report.md`와 `.gitkeep`만 추적합니다.
+
+정확도 비교:
+
+| Comparison | Reference detections | Target detections | FP | FN | Class mismatch | Result |
+|---|---:|---:|---:|---:|---:|---|
+| PyTorch vs ONNX Runtime CUDA | 78 | 78 | 0 | 0 | 0 | PASS |
+| PyTorch vs TensorRT FP32 | 78 | 79 | 1 | 0 | 0 | FAIL |
+| PyTorch vs TensorRT FP16 | 78 | 79 | 1 | 0 | 0 | FAIL |
+| TensorRT FP32 vs FP16 | 79 | 79 | 0 | 0 | 0 | WARNING |
+
+TensorRT FP32와 FP16은 `05_short_06.jpg`에서 confidence가 임계값 `0.15`를 아주 조금 초과한 `short` detection을 각각 하나 더 생성했습니다. FP32 confidence는 `0.150476`, FP16 confidence는 `0.150527`입니다. 이는 backend별 부동소수점 계산과 전처리 경계 차이가 threshold 부근에서 드러난 사례이며, 현재 판정 정책대로 FP 1건으로 유지해 FAIL로 기록했습니다. FP32와 FP16끼리는 detection 구성이 같지만 strict bbox IoU `0.99` 기준을 일부 벗어나 WARNING입니다.
+
+성능 비교:
+
+| Backend | Pure inference mean | Host end-to-end mean |
+|---|---:|---:|
+| PyTorch CUDA | 8.98 ms | 43.57 ms |
+| ONNX Runtime CUDA | 8.67 ms | 46.84 ms |
+| TensorRT FP32 | 3.40 ms | 71.99 ms |
+| TensorRT FP16 | 2.27 ms | 69.94 ms |
+
+TensorRT FP16의 순수 inference는 FP32보다 빨랐고, 두 TensorRT engine 모두 모델 계산 자체에서는 PyTorch와 ONNX Runtime보다 짧았습니다. 반면 현재 통합 구조의 host end-to-end에는 Python-C++ JSONL IPC, 파일 기반 이미지 로딩, 결과 직렬화, 전처리와 후처리가 포함되어 PyTorch와 ONNX Runtime보다 길었습니다. 따라서 TensorRT 적용 여부는 순수 GPU inference뿐 아니라 전체 파이프라인 지연시간을 기준으로 판단해야 합니다. Persistent worker는 engine을 한 번만 deserialize하고 backend별 같은 PID를 재사용했으며, 실제 비교에서 one-shot fallback은 0회였고 종료 후 orphan `pcb_onnx_infer.exe` 프로세스는 없었습니다.
+
+이 결과는 RTX 4060 8GB와 당시 Windows/CUDA 환경의 측정값입니다. 하드웨어, 드라이버, CUDA/TensorRT 버전, 이미지와 설정에 따라 달라질 수 있습니다. GUI는 비교 기능을 제공하지 않으며 운영 검사 흐름과 개발 benchmark를 분리하기 위해 독립 CLI로 실행합니다. 전체 테스트 결과는 `443 passed`였고, 상세 측정 근거는 `benchmarks/backend_comparison/report.md`에 보존합니다.
+
+기본 backend는 기존 동작과 동일하게 `pytorch`입니다. CLI에서 선택 가능한 backend는 다음과 같습니다.
+
+```powershell
+--backend pytorch
+--backend onnx
+--backend tensorrt
+```
+
+GUI에서는 상단 메뉴의 `추론 설정` 화면에서 backend를 선택하고 저장합니다. 설정은 Qt `QSettings`에 저장되므로 개인 로컬 경로가 저장소 파일로 생성되지 않습니다.
+
+예시 설정:
+
+```text
+Backend: TensorRT
+Executable: cpp_inference/build_gpu/Release/pcb_onnx_infer.exe
+Engine: benchmarks/tensorrt/best_fp16.engine
+Precision: FP16
+Metadata: models/model_metadata.json
+Device ID: 0
+```
+
+TensorRT를 선택하면 실행 파일, engine, precision, metadata, CUDA device ID 입력이 활성화됩니다. PyTorch 또는 ONNX Runtime을 선택하면 TensorRT 전용 입력은 비활성화됩니다. 저장 시 TensorRT 설정은 다음 조건을 검사합니다.
+
+- 실행 파일 존재 및 `.exe` 확장자
+- engine 존재 및 `.engine` 또는 `.plan` 확장자
+- metadata 존재 및 `.json` 확장자
+- device ID 0 이상
+- precision `FP16` 또는 `FP32`
+
+저장한 설정은 다음 검사 시작 때 적용됩니다. 검사 화면에는 현재 적용될 backend가 `추론 Backend: ...` 형태로 표시됩니다. 기본값은 기존 호환성을 위해 `PyTorch`입니다.
+
 ## 예측 오류 분석
 
 `compare_predictions.py`는 PCB 테스트 이미지와 YOLO TXT 정답 라벨을 직접 매칭해 TP/FP/FN을 계산합니다.

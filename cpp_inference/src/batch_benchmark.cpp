@@ -9,6 +9,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "unicode_utils.hpp"
+
 namespace pcb_vision::benchmark {
 namespace {
 
@@ -39,7 +41,7 @@ std::vector<std::filesystem::path> collect_images(
     bool recursive
 ) {
     if (!std::filesystem::exists(image_root) || !std::filesystem::is_directory(image_root)) {
-        throw std::runtime_error("Image directory does not exist: " + image_root.string());
+        throw std::runtime_error("Image directory does not exist: " + path_to_utf8(image_root));
     }
 
     std::set<std::string> allowed;
@@ -304,7 +306,7 @@ void validate_confidence_tolerances(
 }
 
 std::string sanitize_filename(const std::filesystem::path& image_path) {
-    std::string name = image_path.stem().string();
+    std::string name = path_to_utf8(image_path.stem());
     for (char& ch : name) {
         if (!std::isalnum(static_cast<unsigned char>(ch)) && ch != '_' && ch != '-') {
             ch = '_';

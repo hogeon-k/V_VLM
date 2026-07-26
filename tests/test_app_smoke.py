@@ -17,7 +17,7 @@ def test_main_window_smoke(monkeypatch) -> None:
     window = MainWindow()
 
     assert window.windowTitle() == "PCB Vision Inspection"
-    assert window.stack.count() == 4
+    assert window.stack.count() == 5
     assert window.stack.currentIndex() == 0
     window.close()
 

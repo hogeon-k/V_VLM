@@ -3,6 +3,7 @@
 #include <opencv2/core.hpp>
 
 #include <array>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -31,9 +32,9 @@ struct PreprocessResult {
     float max_value = 0.0F;
 };
 
-bool can_load_image(const std::string& image_path);
+bool can_load_image(const std::filesystem::path& image_path);
 
-cv::Mat load_bgr_image(const std::string& image_path);
+cv::Mat load_bgr_image(const std::filesystem::path& image_path);
 
 LetterboxResult letterbox_resize(
     const cv::Mat& image,

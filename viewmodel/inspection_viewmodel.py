@@ -4,8 +4,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, Signal
 
+from config.detector_settings import DetectorSettings, backend_display_text, load_detector_settings
 from model.inspection_result import InspectionResult
 from service.auto_inspection_service import AutoInspectionService
+from service.detector_backend_factory import create_yolo_service_from_settings
 from service.inspection_service import InspectionService
 
 
@@ -71,6 +73,8 @@ class InspectionViewModel(QObject):
         auto_inspection_service: AutoInspectionService | None = None,
     ) -> None:
         super().__init__()
+        self.detector_settings: DetectorSettings = load_detector_settings()
+        self._external_inspection_service = inspection_service is not None
         self.inspection_service = inspection_service or InspectionService()
         self.auto_inspection_service = auto_inspection_service or AutoInspectionService(self.inspection_service)
         self.current_result: InspectionResult | None = None
@@ -78,8 +82,10 @@ class InspectionViewModel(QObject):
         self.image_paths: list[Path] = []
         self._thread: QThread | None = None
         self._worker: InspectionWorker | None = None
+        self._active_detector_settings: DetectorSettings | None = None
 
     def inspect_image(self, image_path: Path) -> InspectionResult:
+        self._apply_detector_settings()
         self.current_result = self.inspection_service.inspect_image(image_path)
         return self.current_result
 
@@ -96,6 +102,7 @@ class InspectionViewModel(QObject):
         if self._thread is not None:
             raise RuntimeError("자동 검사가 이미 실행 중입니다.")
 
+        self._apply_detector_settings()
         self._thread = QThread()
         self._worker = InspectionWorker(self.image_paths, self.inspection_service)
         self._worker.moveToThread(self._thread)
@@ -126,6 +133,10 @@ class InspectionViewModel(QObject):
     def is_running(self) -> bool:
         return self._thread is not None
 
+    def backend_display_text(self) -> str:
+        self.detector_settings = load_detector_settings()
+        return backend_display_text(self.detector_settings)
+
     def _on_result_ready(self, result: InspectionResult) -> None:
         self.current_result = result
         self.result_ready.emit(result)
@@ -133,3 +144,27 @@ class InspectionViewModel(QObject):
     def _cleanup_thread(self) -> None:
         self._thread = None
         self._worker = None
+
+    def _apply_detector_settings(self) -> None:
+        self.detector_settings = load_detector_settings()
+        if self._external_inspection_service:
+            return
+        if self.detector_settings == self._active_detector_settings:
+            return
+        previous_service = self.inspection_service
+        yolo_service = create_yolo_service_from_settings(self.detector_settings)
+        self.inspection_service = InspectionService(yolo_service=yolo_service)
+        self.auto_inspection_service = AutoInspectionService(self.inspection_service)
+        self._active_detector_settings = self.detector_settings
+        close = getattr(previous_service, "close", None)
+        if callable(close):
+            close()
+
+    def shutdown(self) -> None:
+        self.stop()
+        close = getattr(self.inspection_service, "close", None)
+        if callable(close):
+            close()
+        self._active_detector_settings = None
+
+    close = shutdown
