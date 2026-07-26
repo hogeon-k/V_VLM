@@ -122,6 +122,14 @@ add_executable(pcb_onnx_batch_benchmark
     src/postprocessor.cpp
 )
 
+add_executable(pcb_tensorrt_batch_benchmark
+    src/tensorrt_batch_benchmark_main.cpp
+    src/batch_benchmark.cpp
+    src/tensorrt_detector.cpp
+    src/image_preprocessor.cpp
+    src/postprocessor.cpp
+)
+
 target_include_directories(pcb_onnx_infer
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -135,18 +143,30 @@ target_include_directories(pcb_onnx_batch_benchmark
         ${ONNXRUNTIME_INCLUDE_DIR}
 )
 
+target_include_directories(pcb_tensorrt_batch_benchmark
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${TENSORRT_INCLUDE_DIR}
+)
+
 target_link_libraries(pcb_onnx_infer PRIVATE ${OpenCV_LIBS} ${ONNXRUNTIME_LIBRARY} ${TENSORRT_NVINFER_LIBRARY} CUDA::cudart)
 if(TENSORRT_PLUGIN_LIBRARY)
     target_link_libraries(pcb_onnx_infer PRIVATE ${TENSORRT_PLUGIN_LIBRARY})
 endif()
 target_link_libraries(pcb_onnx_batch_benchmark PRIVATE ${OpenCV_LIBS} ${ONNXRUNTIME_LIBRARY})
+target_link_libraries(pcb_tensorrt_batch_benchmark PRIVATE ${OpenCV_LIBS} ${TENSORRT_NVINFER_LIBRARY} CUDA::cudart)
+if(TENSORRT_PLUGIN_LIBRARY)
+    target_link_libraries(pcb_tensorrt_batch_benchmark PRIVATE ${TENSORRT_PLUGIN_LIBRARY})
+endif()
 
 if(MSVC)
     target_compile_options(pcb_onnx_infer PRIVATE /W4 /permissive-)
     target_compile_options(pcb_onnx_batch_benchmark PRIVATE /W4 /permissive-)
+    target_compile_options(pcb_tensorrt_batch_benchmark PRIVATE /W4 /permissive-)
 else()
     target_compile_options(pcb_onnx_infer PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(pcb_onnx_batch_benchmark PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(pcb_tensorrt_batch_benchmark PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 if(WIN32)
@@ -188,6 +208,11 @@ if(WIN32)
                         "${trt_dll}"
                         "$<TARGET_FILE_DIR:pcb_onnx_infer>/"
             )
+            add_custom_command(TARGET pcb_tensorrt_batch_benchmark POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${trt_dll}"
+                        "$<TARGET_FILE_DIR:pcb_tensorrt_batch_benchmark>/"
+            )
         else()
             message(STATUS "TensorRT runtime DLL was not found or not needed: ${trt_dll}")
         endif()
@@ -215,6 +240,11 @@ if(WIN32)
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                             "${opencv_dll}"
                             "$<TARGET_FILE_DIR:pcb_onnx_batch_benchmark>/"
+                )
+                add_custom_command(TARGET pcb_tensorrt_batch_benchmark POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            "${opencv_dll}"
+                            "$<TARGET_FILE_DIR:pcb_tensorrt_batch_benchmark>/"
                 )
             endforeach()
             message(STATUS "OpenCV runtime DLLs: ${OpenCV_RUNTIME_DLLS}")

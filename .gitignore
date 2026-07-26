@@ -87,6 +87,9 @@ benchmarks/cpp_onnx/cpu_cuda_batch/
 benchmarks/cpp_onnx/single_cpu/
 benchmarks/cpp_onnx/single_gpu/
 benchmarks/cpp_onnx/single_gpu_second/
+benchmarks/cpp_onnx/batch_cuda_final/comparisons/
+benchmarks/cpp_onnx/batch_cuda_final/cpu/predictions/
+benchmarks/cpp_onnx/batch_cuda_final/cuda/predictions/
 benchmarks/cpp_onnx/**/result.json
 benchmarks/cpp_onnx/**/detections.csv
 benchmarks/cpp_onnx/**/benchmark.json
@@ -101,6 +104,10 @@ benchmarks/tensorrt/**/*.json
 benchmarks/tensorrt/**/*.csv
 benchmarks/tensorrt/**/*.jpg
 benchmarks/tensorrt/**/*.png
+benchmarks/tensorrt/**/*.jpeg
+benchmarks/tensorrt/**/*.bmp
+benchmarks/tensorrt/**/failure_cases/*
+!benchmarks/tensorrt/**/failure_cases/.gitkeep
 
 # Editor and OS temporary files
 .vscode/

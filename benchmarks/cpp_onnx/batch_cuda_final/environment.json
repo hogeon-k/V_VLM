@@ -1,0 +1,15 @@
+{
+  "os": "Windows",
+  "cpu": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+  "gpu": "unavailable",
+  "nvidia_driver": "unavailable",
+  "cuda_version": "12.6",
+  "cudnn_version": "9.25",
+  "onnxruntime_version": "unavailable",
+  "opencv_version": "4.12.0",
+  "msvc_compiler_version": "1951",
+  "cmake_version": "unavailable",
+  "model": "models\\best.onnx",
+  "model_size": 10776549,
+  "model_sha256": null
+}

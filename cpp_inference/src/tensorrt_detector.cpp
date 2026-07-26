@@ -210,8 +210,12 @@ struct TensorRtDetector::Impl {
     std::unique_ptr<nvinfer1::ICudaEngine> engine;
     std::unique_ptr<nvinfer1::IExecutionContext> context;
     StreamPtr stream;
+    EventPtr h2d_start;
+    EventPtr h2d_end;
     EventPtr gpu_start;
     EventPtr gpu_end;
+    EventPtr d2h_start;
+    EventPtr d2h_end;
     CudaBuffer input_buffer;
     CudaBuffer output_buffer;
     std::vector<float> host_output;
@@ -307,8 +311,12 @@ TensorRtDetector::TensorRtDetector(
     impl_->output_buffer = CudaBuffer(output_bytes);
     impl_->host_output.resize(output_count);
     impl_->stream = make_stream();
+    impl_->h2d_start = make_event();
+    impl_->h2d_end = make_event();
     impl_->gpu_start = make_event();
     impl_->gpu_end = make_event();
+    impl_->d2h_start = make_event();
+    impl_->d2h_end = make_event();
 }
 
 TensorRtDetector::~TensorRtDetector() = default;
@@ -368,13 +376,15 @@ RawInferenceResult TensorRtDetector::run_preprocessed(PreprocessResult& preproce
     }
 
     const auto total_start = std::chrono::steady_clock::now();
-    const auto h2d_start = std::chrono::steady_clock::now();
+    check_cuda(cudaEventRecord(impl_->h2d_start.get(), impl_->stream.get()), "cudaEventRecord h2d_start");
     check_cuda(
         cudaMemcpyAsync(impl_->input_buffer.data, preprocess.tensor.data(), input_bytes, cudaMemcpyHostToDevice, impl_->stream.get()),
         "cudaMemcpyAsync Host to Device"
     );
-    check_cuda(cudaStreamSynchronize(impl_->stream.get()), "cudaStreamSynchronize after Host to Device");
-    const double h2d_ms = elapsed_ms(h2d_start);
+    check_cuda(cudaEventRecord(impl_->h2d_end.get(), impl_->stream.get()), "cudaEventRecord h2d_end");
+    check_cuda(cudaEventSynchronize(impl_->h2d_end.get()), "cudaEventSynchronize h2d_end");
+    float h2d_ms = 0.0F;
+    check_cuda(cudaEventElapsedTime(&h2d_ms, impl_->h2d_start.get(), impl_->h2d_end.get()), "cudaEventElapsedTime H2D");
 
     if (!impl_->context->setTensorAddress(impl_->input_info.name.c_str(), impl_->input_buffer.data)) {
         throw std::runtime_error("Failed to set TensorRT input tensor address: " + impl_->input_info.name);
@@ -392,7 +402,7 @@ RawInferenceResult TensorRtDetector::run_preprocessed(PreprocessResult& preproce
     float gpu_ms = 0.0F;
     check_cuda(cudaEventElapsedTime(&gpu_ms, impl_->gpu_start.get(), impl_->gpu_end.get()), "cudaEventElapsedTime");
 
-    const auto d2h_start = std::chrono::steady_clock::now();
+    check_cuda(cudaEventRecord(impl_->d2h_start.get(), impl_->stream.get()), "cudaEventRecord d2h_start");
     check_cuda(
         cudaMemcpyAsync(
             impl_->host_output.data(),
@@ -403,17 +413,19 @@ RawInferenceResult TensorRtDetector::run_preprocessed(PreprocessResult& preproce
         ),
         "cudaMemcpyAsync Device to Host"
     );
-    check_cuda(cudaStreamSynchronize(impl_->stream.get()), "cudaStreamSynchronize after Device to Host");
-    const double d2h_ms = elapsed_ms(d2h_start);
+    check_cuda(cudaEventRecord(impl_->d2h_end.get(), impl_->stream.get()), "cudaEventRecord d2h_end");
+    check_cuda(cudaEventSynchronize(impl_->d2h_end.get()), "cudaEventSynchronize d2h_end");
+    float d2h_ms = 0.0F;
+    check_cuda(cudaEventElapsedTime(&d2h_ms, impl_->d2h_start.get(), impl_->d2h_end.get()), "cudaEventElapsedTime D2H");
 
     RawInferenceResult result;
     result.inference_ms = static_cast<double>(gpu_ms);
     result.output_shape = impl_->output_info.shape;
     result.output = impl_->host_output;
 
-    impl_->last_timing.h2d_ms = h2d_ms;
+    impl_->last_timing.h2d_ms = static_cast<double>(h2d_ms);
     impl_->last_timing.gpu_execution_ms = static_cast<double>(gpu_ms);
-    impl_->last_timing.d2h_ms = d2h_ms;
+    impl_->last_timing.d2h_ms = static_cast<double>(d2h_ms);
     impl_->last_timing.total_ms = elapsed_ms(total_start);
     return result;
 }

@@ -255,6 +255,58 @@ TensorRT output files use the same folder contract as ONNX single-image runs:
 `benchmark.csv`. The benchmark JSON records input/output tensor metadata,
 H2D mean, D2H mean, TensorRT total mean, and GPU execution mean/median/p95.
 
+## Native TensorRT Batch Benchmark
+
+The TensorRT batch executable reuses the same `TensorRtDetector`,
+`ImagePreprocessor`, YOLO postprocessing, detection matching, and timing stats
+helpers. One TensorRT runtime, engine, execution context, stream, and buffer set
+is created per process and reused for every image.
+
+FP32:
+
+```powershell
+.\cpp_inference\build_gpu\Release\pcb_tensorrt_batch_benchmark.exe `
+  --engine benchmarks\tensorrt\best_fp32.engine `
+  --engine-label fp32 `
+  --images datasets\pcb\images\test `
+  --output benchmarks\tensorrt\batch_fp32 `
+  --metadata models\model_metadata.json `
+  --device-id 0 `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --match-iou 0.5 `
+  --warmup 10 `
+  --repeat 30
+```
+
+FP16:
+
+```powershell
+.\cpp_inference\build_gpu\Release\pcb_tensorrt_batch_benchmark.exe `
+  --engine benchmarks\tensorrt\best_fp16.engine `
+  --engine-label fp16 `
+  --images datasets\pcb\images\test `
+  --output benchmarks\tensorrt\batch_fp16 `
+  --metadata models\model_metadata.json `
+  --device-id 0 `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --match-iou 0.5 `
+  --warmup 10 `
+  --repeat 30
+```
+
+Outputs:
+
+```text
+summary.json
+per_image.csv
+detections.json
+failure_cases/.gitkeep
+```
+
 ## Python Reference And Comparison
 
 Create the Python ONNX reference for the same image:
