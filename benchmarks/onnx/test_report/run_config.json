@@ -1,0 +1,19 @@
+{
+  "images": "datasets\\pcb\\images\\test",
+  "pytorch_model": "models\\best.pt",
+  "onnx_model": "models\\best.onnx",
+  "output": "benchmarks\\onnx\\test_report",
+  "imgsz": 960,
+  "conf": 0.15,
+  "iou": 0.7,
+  "match_iou": 0.5,
+  "device": "0",
+  "warmup": 5,
+  "repeat": 20,
+  "save_all_images": false,
+  "fail_on_warning": false,
+  "extensions": ".jpg,.jpeg,.png,.bmp,.webp",
+  "recursive": false,
+  "max_images": null,
+  "seed": null
+}

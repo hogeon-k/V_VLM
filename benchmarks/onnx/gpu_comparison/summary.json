@@ -1,0 +1,242 @@
+{
+  "final_status": "PASS",
+  "accuracy_comparison_valid": true,
+  "speed_comparison_valid": true,
+  "speed_comparison_reason": "Both backends used CUDA with the same image set, batch size, thresholds, warm-up, and repeat count.",
+  "image_count": 21,
+  "detection_summary": {
+    "pytorch_detection_count": 79,
+    "onnx_detection_count": 79,
+    "matched_detection_count": 79,
+    "pytorch_only_count": 0,
+    "onnx_only_count": 0,
+    "total_pytorch_detections": 79,
+    "total_onnx_detections": 79,
+    "total_matched_detections": 79,
+    "total_pytorch_only": 0,
+    "total_onnx_only": 0
+  },
+  "accuracy_summary": {
+    "confidence_diff_mean": 0.00023695185214658328,
+    "confidence_diff_max": 0.001336812973022461,
+    "bbox_iou_mean": 0.9998734177215189,
+    "bbox_iou_min": 0.99
+  },
+  "pytorch_timing": {
+    "preprocess_ms": {
+      "count": 1050,
+      "mean_ms": 8.832460857229307,
+      "median_ms": 8.505300007527694,
+      "min_ms": 4.192199994577095,
+      "max_ms": 22.89540000492707,
+      "std_ms": 2.7522290644879392,
+      "p95_ms": 14.220224997552577,
+      "fps": 113.21872988336054
+    },
+    "inference_ms": {
+      "count": 1050,
+      "mean_ms": 12.333940475225626,
+      "median_ms": 11.944500001845881,
+      "min_ms": 6.985300016822293,
+      "max_ms": 44.99729999224655,
+      "std_ms": 3.3270406723066763,
+      "p95_ms": 17.83331000624457,
+      "fps": 81.07708984072318
+    },
+    "postprocess_ms": {
+      "count": 1050,
+      "mean_ms": 2.909003333354901,
+      "median_ms": 2.7639000036288053,
+      "min_ms": 1.5069000073708594,
+      "max_ms": 10.568700003204867,
+      "std_ms": 0.873297012230899,
+      "p95_ms": 4.320549995463807,
+      "fps": 343.76034861627954
+    },
+    "total_ms": {
+      "count": 1050,
+      "mean_ms": 64.69504238050874,
+      "median_ms": 64.16819999867585,
+      "min_ms": 36.239200009731576,
+      "max_ms": 170.29499998898245,
+      "std_ms": 13.880829700985684,
+      "p95_ms": 87.19648999394848,
+      "fps": 15.457134939620644
+    }
+  },
+  "onnx_timing": {
+    "preprocess_ms": {
+      "count": 1050,
+      "mean_ms": 21.544984856625973,
+      "median_ms": 20.290849992306903,
+      "min_ms": 10.087000002386048,
+      "max_ms": 79.41880001453683,
+      "std_ms": 6.11409324172897,
+      "p95_ms": 32.736480003222816,
+      "fps": 46.41451394162659
+    },
+    "inference_ms": {
+      "count": 1050,
+      "mean_ms": 10.945048380693022,
+      "median_ms": 10.062700006528758,
+      "min_ms": 8.161500009009615,
+      "max_ms": 32.82809999655001,
+      "std_ms": 2.3190402662755054,
+      "p95_ms": 15.077025003847664,
+      "fps": 91.3655166444026
+    },
+    "postprocess_ms": {
+      "count": 1050,
+      "mean_ms": 1.1698803815913077,
+      "median_ms": 1.0676499950932339,
+      "min_ms": 0.544899987289682,
+      "max_ms": 8.642799977678806,
+      "std_ms": 0.5341697655452718,
+      "p95_ms": 1.9021500003873364,
+      "fps": 854.788246504116
+    },
+    "total_ms": {
+      "count": 1050,
+      "mean_ms": 33.66985104764657,
+      "median_ms": 31.75955002370756,
+      "min_ms": 19.54509998904541,
+      "max_ms": 113.24839998269454,
+      "std_ms": 7.932513004870923,
+      "p95_ms": 48.265069992339704,
+      "fps": 29.700161090255175
+    }
+  },
+  "speedup": {
+    "total_mean": 1.9214531804419952,
+    "total_median": 2.0204379454613237,
+    "total_p95": 1.8066168765069168,
+    "inference_mean": 1.1268968437802978
+  },
+  "providers": {
+    "pytorch_actual_device": "cuda:0",
+    "onnx_actual_providers": [
+      "CUDAExecutionProvider"
+    ]
+  },
+  "environment": {
+    "python_version": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "opencv_version": "5.0.0",
+    "pytorch_model_path": "models\\best.pt",
+    "onnx_model_path": "models\\best.onnx",
+    "pytorch_model_size_bytes": 5552723,
+    "onnx_model_size_bytes": 10776549,
+    "started_at": "2026-07-24T12:11:27",
+    "cli_args": {
+      "images": "datasets\\pcb\\images\\test",
+      "pytorch_model": "models\\best.pt",
+      "onnx_model": "models\\best.onnx",
+      "output": "benchmarks\\onnx\\gpu_comparison",
+      "imgsz": 960,
+      "conf": 0.15,
+      "iou": 0.7,
+      "match_iou": 0.5,
+      "device": "0",
+      "warmup": 10,
+      "repeat": 50,
+      "save_all_images": false,
+      "fail_on_warning": false,
+      "require_cuda": true,
+      "extensions": ".jpg,.jpeg,.png,.bmp,.webp",
+      "recursive": false,
+      "max_images": null,
+      "seed": null
+    },
+    "pytorch_version": "2.5.1+cu121",
+    "cuda_available": true,
+    "gpu_name": "NVIDIA GeForce RTX 4060",
+    "pytorch_cuda_version": "12.1",
+    "cudnn_version": 90100,
+    "pytorch_device": "0",
+    "ultralytics_version": "8.4.90",
+    "onnxruntime_version": "1.20.1",
+    "onnxruntime_available_providers": [
+      "TensorrtExecutionProvider",
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ]
+  },
+  "run_info": {
+    "started_at": "2026-07-24T12:14:36",
+    "command": "scripts\\compare_pytorch_onnx_batch.py --images datasets\\pcb\\images\\test --pytorch-model models\\best.pt --onnx-model models\\best.onnx --output benchmarks\\onnx\\gpu_comparison --imgsz 960 --conf 0.15 --iou 0.7 --match-iou 0.5 --device 0 --warmup 10 --repeat 50 --require-cuda",
+    "output": "benchmarks\\onnx\\gpu_comparison",
+    "final_status": "PASS"
+  },
+  "models": {
+    "pytorch": "models\\best.pt",
+    "onnx": "models\\best.onnx"
+  },
+  "dataset": {
+    "image_directory": "datasets\\pcb\\images\\test",
+    "total_discovered_images": 21,
+    "extensions": [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".bmp",
+      ".webp"
+    ],
+    "recursive": false
+  },
+  "onnx_runtime": {
+    "available_providers": [
+      "TensorrtExecutionProvider",
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "selected_providers": [
+      "CUDAExecutionProvider"
+    ]
+  },
+  "thresholds": {
+    "imgsz": 960,
+    "conf": 0.15,
+    "iou": 0.7,
+    "match_iou": 0.5,
+    "confidence_diff_max": 0.01,
+    "bbox_iou_min": 0.99
+  },
+  "counts": {
+    "total_images": 21,
+    "processed_images": 21,
+    "pass_count": 21,
+    "warning_count": 0,
+    "fail_count": 0,
+    "error_count": 0,
+    "pass_rate": 1.0,
+    "warning_rate": 0.0,
+    "fail_rate": 0.0
+  },
+  "legacy_detection_summary": {
+    "total_pytorch_detections": 79,
+    "total_onnx_detections": 79,
+    "total_matched_detections": 79,
+    "total_pytorch_only": 0,
+    "total_onnx_only": 0
+  },
+  "accuracy_difference_summary": {
+    "overall_confidence_diff_mean": 0.00023695185214658328,
+    "overall_confidence_diff_max": 0.001336812973022461,
+    "overall_bbox_iou_mean": 0.9998734177215189,
+    "overall_bbox_iou_min": 0.99
+  },
+  "timing_summary": {
+    "pytorch_total_mean_ms": 64.69504238050874,
+    "pytorch_total_median_ms": 64.16819999867585,
+    "pytorch_total_p95_ms": 87.19648999394848,
+    "onnx_total_mean_ms": 33.66985104764657,
+    "onnx_total_median_ms": 31.75955002370756,
+    "onnx_total_p95_ms": 48.265069992339704,
+    "speedup_mean": 1.9391906024746164,
+    "speedup_median": 1.869505253403298
+  },
+  "mismatch_images": [],
+  "warning_images": [],
+  "fail_images": [],
+  "error_images": []
+}

@@ -1,0 +1,66 @@
+{
+  "created_at": "2026-07-24T11:42:15",
+  "data": "C:\\workspace\\V_VLM\\datasets\\pcb\\data.yaml",
+  "split": "test",
+  "onnx_metrics": {
+    "precision": 0.1130690161527166,
+    "recall": 0.9746835443037974,
+    "f1": 0.2026315789473684,
+    "mAP50": 0.9439113881691629,
+    "mAP50-95": 0.4485610684166872,
+    "tp": 77,
+    "fp": 604,
+    "fn": 2,
+    "gt": 79,
+    "pred": 681
+  },
+  "overall_result": "PASS",
+  "differences": {
+    "precision": 0.0001657903462649879,
+    "recall": 0.0,
+    "f1": 0.00026627014316343844,
+    "mAP50": 4.721452204314858e-06,
+    "mAP50-95": 1.805521454550929e-05,
+    "tp": 0,
+    "fp": -1,
+    "fn": 0
+  },
+  "class_ap_differences": {
+    "open_circuit": {
+      "AP50": 0.0,
+      "AP50-95": 6.958498863285367e-06
+    },
+    "short": {
+      "AP50": 1.416435661283355e-05,
+      "AP50-95": 4.7207144773298015e-05
+    },
+    "missing_hole": {
+      "AP50": 0.0,
+      "AP50-95": 0.0
+    }
+  },
+  "average_confidence_difference": 4.351016858157739e-05,
+  "average_matched_box_iou": 0.9993893747535936,
+  "class_mismatch_count": 0,
+  "new_fp_count": 0,
+  "new_fn_count": 0,
+  "bbox_evaluation_dtype": "float64",
+  "display_bbox_dtype": "int",
+  "accuracy_comparison_valid": true,
+  "thresholds": {
+    "mAP50_difference": 0.01,
+    "mAP50_95_difference": 0.01,
+    "precision_difference": 0.02,
+    "recall_difference": 0.02,
+    "new_fp_count": 0,
+    "new_fn_count": 0,
+    "average_matched_box_iou": 0.99
+  },
+  "warnings": [],
+  "speed_comparison_valid": false,
+  "speed_comparison_reason": "PyTorch used cuda while ONNX Runtime used CPUExecutionProvider.",
+  "notes": [
+    "PASS/WARNING compares metric deltas against configurable thresholds.",
+    "FAIL is reserved for fatal execution/model errors that prevent evaluation."
+  ]
+}

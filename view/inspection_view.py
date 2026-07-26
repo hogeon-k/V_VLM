@@ -66,7 +66,7 @@ class InspectionView(QWidget):
 
         self.description = QPlainTextEdit()
         self.description.setReadOnly(True)
-        self.description.setPlainText("VLM 분석 결과가 여기에 표시됩니다.")
+        self.description.setPlainText("VLM 설명은 아직 생성되지 않았습니다.\n이력 화면에서 VLM 설명 생성을 실행할 수 있습니다.")
         self.description.setMinimumHeight(96)
 
         self.choose_button.clicked.connect(self._choose_folder)
@@ -215,6 +215,8 @@ class InspectionView(QWidget):
         self._current_index = index
         self._total_count = total
         self.current_image_panel.set_image(Path(image_path))
+        self.result_image_panel.clear_image("검사 중입니다. 결과 이미지는 완료 후 표시됩니다.")
+        self._set_judgment(None, [], None)
         self.progress_bar.setRange(0, max(1, total))
         self.progress_bar.setValue(max(0, index - 1))
         self.progress_label.setText(f"검사 진행률: {max(0, index - 1)} / {total}")
@@ -232,8 +234,7 @@ class InspectionView(QWidget):
         self._set_judgment(getattr(result, "status", None), detections, result)
         self.progress_bar.setValue(self._current_index)
         self.progress_label.setText(f"검사 진행률: {self._current_index} / {self._total_count}")
-        description = getattr(result, "vlm_description", None) or "정상 이미지입니다. 탐지된 불량이 없습니다."
-        self.description.setPlainText(description)
+        self.description.setPlainText(_inspection_description_text(result, detections))
 
     def _on_finished(self) -> None:
         self._paused = False
@@ -406,6 +407,39 @@ def _value_panel(label: QLabel) -> QWidget:
     layout.setContentsMargins(0, 0, 0, 0)
     layout.addWidget(label)
     return panel
+
+
+def _inspection_description_text(result: object, detections: list[object]) -> str:
+    description = getattr(result, "vlm_description", None)
+    if description:
+        return str(description)
+    if getattr(result, "status", None) == "OK":
+        return "정상 이미지입니다. 탐지된 불량이 없습니다."
+
+    lines = [
+        "VLM 설명은 아직 생성되지 않았습니다.",
+        "이력 화면에서 VLM 설명 생성을 실행할 수 있습니다.",
+    ]
+    inspection_id = getattr(result, "id", None)
+    if inspection_id is not None:
+        lines.append(f"저장된 검사 ID: {inspection_id}")
+    if detections:
+        lines.append("")
+        lines.append("YOLO 탐지 정보:")
+        for index, detection in enumerate(detections, start=1):
+            class_name = getattr(detection, "class_name", "-")
+            confidence = getattr(detection, "confidence", None)
+            confidence_text = f"{float(confidence) * 100:.1f}%" if confidence is not None else "-"
+            box = (
+                getattr(detection, "x1", "-"),
+                getattr(detection, "y1", "-"),
+                getattr(detection, "x2", "-"),
+                getattr(detection, "y2", "-"),
+            )
+            lines.append(
+                f"{index}. {class_name} / {confidence_text} / bbox=({box[0]}, {box[1]}, {box[2]}, {box[3]})"
+            )
+    return "\n".join(lines)
 
 
 def _inspection_stylesheet() -> str:

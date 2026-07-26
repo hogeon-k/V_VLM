@@ -1,0 +1,17 @@
+{
+  "image": "datasets\\pcb\\images\\test\\12_short_03.jpg",
+  "status": "PASS",
+  "failure_reason": "within tolerances",
+  "cpu_detection_count": 5,
+  "cuda_detection_count": 5,
+  "matched_count": 5,
+  "cpu_only_count": 0,
+  "cuda_only_count": 0,
+  "class_mismatch_count": 0,
+  "avg_confidence_diff": 0.000317,
+  "max_confidence_diff": 0.000654,
+  "avg_bbox_diff": 0.006311,
+  "max_bbox_diff": 0.009399,
+  "avg_matched_iou": 0.999822,
+  "min_matched_iou": 0.999763
+}

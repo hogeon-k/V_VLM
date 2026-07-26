@@ -1,0 +1,8 @@
+{
+  "provider": "CPUExecutionProvider",
+  "detections": [
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.815177, "bbox": [474.707123, 2238.909668, 534.989807, 2304.804932]},
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.277042, "bbox": [436.479431, 1722.261475, 485.269348, 1774.219727]},
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.201416, "bbox": [127.205368, 1236.532471, 191.572250, 1284.803467]}
+  ]
+}

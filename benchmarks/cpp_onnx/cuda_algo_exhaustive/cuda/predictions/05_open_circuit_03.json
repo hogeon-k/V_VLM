@@ -1,0 +1,8 @@
+{
+  "provider": "CUDAExecutionProvider",
+  "detections": [
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.918281, "bbox": [1611.495972, 1374.613037, 1658.833862, 1419.341064]},
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.552208, "bbox": [1401.864868, 836.791504, 1444.239624, 886.535156]},
+    {"class_id": 0, "class_name": "open_circuit", "confidence": 0.467197, "bbox": [1599.423828, 745.431519, 1642.469604, 791.093750]}
+  ]
+}

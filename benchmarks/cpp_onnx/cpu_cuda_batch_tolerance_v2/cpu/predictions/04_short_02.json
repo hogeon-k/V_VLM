@@ -1,0 +1,8 @@
+{
+  "provider": "CPUExecutionProvider",
+  "detections": [
+    {"class_id": 1, "class_name": "short", "confidence": 0.665725, "bbox": [2587.490723, 1702.940186, 2692.175537, 1788.679565]},
+    {"class_id": 1, "class_name": "short", "confidence": 0.651626, "bbox": [1579.757935, 1164.713745, 1658.612915, 1251.022461]},
+    {"class_id": 1, "class_name": "short", "confidence": 0.624968, "bbox": [2032.952393, 1610.772339, 2090.615967, 1673.124023]}
+  ]
+}

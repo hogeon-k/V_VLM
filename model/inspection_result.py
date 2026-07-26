@@ -6,6 +6,11 @@ from pathlib import Path
 
 from model.defect_info import DefectInfo, Detection
 
+VLM_STATUS_NOT_REQUESTED = "NOT_REQUESTED"
+VLM_STATUS_PROCESSING = "PROCESSING"
+VLM_STATUS_COMPLETED = "COMPLETED"
+VLM_STATUS_FAILED = "FAILED"
+
 
 @dataclass(slots=True)
 class YoloDetectionResult:
@@ -24,6 +29,9 @@ class InspectionResult:
     status: str = "PENDING"
     detections: list[Detection] = field(default_factory=list)
     vlm_explanation: str | None = None
+    vlm_status: str = VLM_STATUS_NOT_REQUESTED
+    vlm_error_message: str | None = None
+    vlm_updated_at: datetime | None = None
     inspected_at: datetime | None = None
 
     @property

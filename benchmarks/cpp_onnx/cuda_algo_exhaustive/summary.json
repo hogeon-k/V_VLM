@@ -1,0 +1,8 @@
+{
+  "config": {"model": "models\\best.onnx", "metadata": "models/model_metadata.json", "images": "datasets\\pcb\\images\\test", "image_count": 21, "imgsz": 960, "conf": 0.150000, "iou": 0.700000, "match_iou": 0.500000, "warmup": 10, "repeat": 30, "strict_confidence_tolerance": 0.001000, "practical_confidence_tolerance": 0.002000, "bbox_tolerance": 1.000000, "cuda_device_id": 0, "cudnn_conv_algo_search": "EXHAUSTIVE", "provider_order": "alternate"},
+  "providers": {"available": ["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"], "cpu": {"name": "CPUExecutionProvider"}, "cuda": {"name": "CUDAExecutionProvider"}},
+  "accuracy_comparison": {"passed_images": 16, "numerical_warning_images": 5, "warning_images": 5, "failed_images": 0, "matched_detections": 79, "cpu_only_detections": 0, "cuda_only_detections": 0, "class_mismatches": 0, "structural_detection_mismatch_images": 0, "max_confidence_difference": 0.001716, "max_bbox_difference": 0.044678, "minimum_matched_iou": 0.999120},
+  "timing": {"cpu": {"session_mean": 97.893534, "session_median": 97.219520, "session_p95": 108.525470, "total_mean": 113.611260, "total_median": 112.850887}, "cuda": {"session_mean": 8.433915, "session_median": 8.215937, "session_p95": 9.737953, "total_mean": 24.114917, "total_median": 23.982550}, "speedup": {"session_run_speedup_mean": 11.607129, "session_run_speedup_median": 11.833042, "session_run_speedup_p95": 11.144587, "end_to_end_speedup_mean": 4.711244, "end_to_end_speedup_median": 4.705542}},
+  "validation": {"cpu_internal_mismatches": 0, "cuda_internal_mismatches": 0, "cpu_cuda_mismatches": 5},
+  "final_status": "NUMERICAL_WARNING"
+}

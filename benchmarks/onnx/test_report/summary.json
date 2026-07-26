@@ -1,0 +1,82 @@
+{
+  "run_info": {
+    "started_at": "2026-07-23T15:25:00",
+    "command": "scripts\\compare_pytorch_onnx_batch.py --images datasets\\pcb\\images\\test --pytorch-model models\\best.pt --onnx-model models\\best.onnx --output benchmarks\\onnx\\test_report --imgsz 960 --conf 0.15 --iou 0.7 --match-iou 0.5 --device 0 --warmup 5 --repeat 20",
+    "output": "benchmarks\\onnx\\test_report",
+    "final_status": "PASS"
+  },
+  "models": {
+    "pytorch": "models\\best.pt",
+    "onnx": "models\\best.onnx"
+  },
+  "dataset": {
+    "image_directory": "datasets\\pcb\\images\\test",
+    "total_discovered_images": 21,
+    "extensions": [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".bmp",
+      ".webp"
+    ],
+    "recursive": false
+  },
+  "onnx_runtime": {
+    "available_providers": [
+      "TensorrtExecutionProvider",
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "selected_providers": [
+      "0",
+      "CUDAExecutionProvider"
+    ]
+  },
+  "thresholds": {
+    "imgsz": 960,
+    "conf": 0.15,
+    "iou": 0.7,
+    "match_iou": 0.5,
+    "confidence_diff_max": 0.01,
+    "bbox_iou_min": 0.99
+  },
+  "counts": {
+    "total_images": 21,
+    "processed_images": 21,
+    "pass_count": 21,
+    "warning_count": 0,
+    "fail_count": 0,
+    "error_count": 0,
+    "pass_rate": 1.0,
+    "warning_rate": 0.0,
+    "fail_rate": 0.0
+  },
+  "detection_summary": {
+    "total_pytorch_detections": 79,
+    "total_onnx_detections": 79,
+    "total_matched_detections": 79,
+    "total_pytorch_only": 0,
+    "total_onnx_only": 0
+  },
+  "accuracy_difference_summary": {
+    "overall_confidence_diff_mean": 0.00023695185214658328,
+    "overall_confidence_diff_max": 0.001336812973022461,
+    "overall_bbox_iou_mean": 0.9998734177215189,
+    "overall_bbox_iou_min": 0.99
+  },
+  "timing_summary": {
+    "pytorch_total_mean_ms": 54.933054285789865,
+    "pytorch_total_median_ms": 53.81430000124965,
+    "pytorch_total_p95_ms": 73.59533999442647,
+    "onnx_total_mean_ms": 26.059504999838758,
+    "onnx_total_median_ms": 24.56884999992326,
+    "onnx_total_p95_ms": 35.69533500012767,
+    "speedup_mean": 2.1097246961350407,
+    "speedup_median": 2.00417537833905
+  },
+  "mismatch_images": [],
+  "warning_images": [],
+  "fail_images": [],
+  "error_images": [],
+  "final_status": "PASS"
+}

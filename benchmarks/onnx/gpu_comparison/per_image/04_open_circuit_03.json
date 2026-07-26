@@ -1,0 +1,1265 @@
+{
+  "image_name": "04_open_circuit_03.jpg",
+  "image_path": "datasets\\pcb\\images\\test\\04_open_circuit_03.jpg",
+  "status": "PASS",
+  "status_reason": "Detection counts, classes, confidence, and boxes are within thresholds.",
+  "pytorch_detection_count": 3,
+  "onnx_detection_count": 3,
+  "matched_count": 3,
+  "pytorch_only_count": 0,
+  "onnx_only_count": 0,
+  "classes_match": true,
+  "confidence_diff_mean": 0.00048081080118815106,
+  "confidence_diff_max": 0.0007822513580322266,
+  "bbox_iou_mean": 1.0,
+  "bbox_iou_min": 1.0,
+  "pytorch_timing": {
+    "preprocess_ms": {
+      "count": 50,
+      "mean_ms": 7.941922002937645,
+      "median_ms": 8.093200012808666,
+      "min_ms": 5.411900026956573,
+      "max_ms": 11.392899992642924,
+      "std_ms": 1.3678344612013968,
+      "p95_ms": 9.863225019944366,
+      "fps": 125.91410487664184
+    },
+    "inference_ms": {
+      "count": 50,
+      "mean_ms": 11.819173999247141,
+      "median_ms": 11.98759998078458,
+      "min_ms": 7.629599975189194,
+      "max_ms": 14.851100015221164,
+      "std_ms": 1.7848979695020148,
+      "p95_ms": 14.282575006654952,
+      "fps": 84.60828143013192
+    },
+    "postprocess_ms": {
+      "count": 50,
+      "mean_ms": 2.7497759979451075,
+      "median_ms": 2.773099986370653,
+      "min_ms": 1.9189000013284385,
+      "max_ms": 3.569299995433539,
+      "std_ms": 0.3344031229641281,
+      "p95_ms": 3.153289994224906,
+      "fps": 363.66598615570666
+    },
+    "total_ms": {
+      "count": 50,
+      "mean_ms": 68.22263399837539,
+      "median_ms": 69.22775000566617,
+      "min_ms": 51.4940999855753,
+      "max_ms": 80.55790001526475,
+      "std_ms": 5.729062967726402,
+      "p95_ms": 74.89160499244463,
+      "fps": 14.657891983821871
+    }
+  },
+  "onnx_timing": {
+    "preprocess_ms": {
+      "count": 50,
+      "mean_ms": 17.327117998502217,
+      "median_ms": 17.52570000826381,
+      "min_ms": 13.601699989521876,
+      "max_ms": 20.934500003932044,
+      "std_ms": 1.8738400564968174,
+      "p95_ms": 19.89179000229342,
+      "fps": 57.713002248062345
+    },
+    "inference_ms": {
+      "count": 50,
+      "mean_ms": 9.762549998704344,
+      "median_ms": 9.688549995189533,
+      "min_ms": 8.614199992734939,
+      "max_ms": 12.410900002578273,
+      "std_ms": 0.7977927938882148,
+      "p95_ms": 11.271930001385044,
+      "fps": 102.43225388169249
+    },
+    "postprocess_ms": {
+      "count": 50,
+      "mean_ms": 0.871540000080131,
+      "median_ms": 0.9127000084845349,
+      "min_ms": 0.5708999815396965,
+      "max_ms": 1.1981000134255737,
+      "std_ms": 0.15881878187485277,
+      "p95_ms": 1.085309994232375,
+      "fps": 1147.3942675127455
+    },
+    "total_ms": {
+      "count": 50,
+      "mean_ms": 27.968613999546506,
+      "median_ms": 28.360850003082305,
+      "min_ms": 23.789400001987815,
+      "max_ms": 32.54899999592453,
+      "std_ms": 2.3930130196284494,
+      "p95_ms": 31.413814991537947,
+      "fps": 35.75436380280462
+    }
+  },
+  "speedup": 2.4392568755635002,
+  "onnx_provider": "CUDAExecutionProvider",
+  "error_message": "",
+  "pytorch_detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.7353897094726562,
+      "bbox": [
+        1205,
+        1207,
+        1254,
+        1257
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.7342721223831177,
+      "bbox": [
+        940,
+        851,
+        1007,
+        902
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.5604692697525024,
+      "bbox": [
+        1885,
+        452,
+        1949,
+        499
+      ]
+    }
+  ],
+  "onnx_detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.7351672649383545,
+      "bbox": [
+        1205,
+        1207,
+        1254,
+        1257
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.7350543737411499,
+      "bbox": [
+        940,
+        851,
+        1007,
+        902
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.560031533241272,
+      "bbox": [
+        1885,
+        452,
+        1949,
+        499
+      ]
+    }
+  ],
+  "matches": [
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.7353897094726562,
+        "bbox": [
+          1205,
+          1207,
+          1254,
+          1257
+        ]
+      },
+      "onnx": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.7351672649383545,
+        "bbox": [
+          1205,
+          1207,
+          1254,
+          1257
+        ]
+      },
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence_diff_abs": 0.0002224445343017578
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.7342721223831177,
+        "bbox": [
+          940,
+          851,
+          1007,
+          902
+        ]
+      },
+      "onnx": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.7350543737411499,
+        "bbox": [
+          940,
+          851,
+          1007,
+          902
+        ]
+      },
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence_diff_abs": 0.0007822513580322266
+    },
+    {
+      "status": "MATCHED",
+      "bbox_iou": 1.0,
+      "pytorch": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.5604692697525024,
+        "bbox": [
+          1885,
+          452,
+          1949,
+          499
+        ]
+      },
+      "onnx": {
+        "class_id": 0,
+        "class_name": "open_circuit",
+        "confidence": 0.560031533241272,
+        "bbox": [
+          1885,
+          452,
+          1949,
+          499
+        ]
+      },
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence_diff_abs": 0.00043773651123046875
+    }
+  ],
+  "warnings": [],
+  "timing_rows": [
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 0,
+      "preprocess_ms": 6.118599994806573,
+      "inference_ms": 9.868099994491786,
+      "postprocess_ms": 2.803899988066405,
+      "total_ms": 69.27030000952072,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 1,
+      "preprocess_ms": 8.190699998522177,
+      "inference_ms": 10.813200002303347,
+      "postprocess_ms": 2.7900999994017184,
+      "total_ms": 69.04289999511093,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 2,
+      "preprocess_ms": 6.865600007586181,
+      "inference_ms": 11.361700017005205,
+      "postprocess_ms": 2.9892000020481646,
+      "total_ms": 68.81890000659041,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 3,
+      "preprocess_ms": 7.984800002304837,
+      "inference_ms": 11.846800014609471,
+      "postprocess_ms": 2.722300007008016,
+      "total_ms": 71.18369999807328,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 4,
+      "preprocess_ms": 8.162600017385557,
+      "inference_ms": 11.807600007159635,
+      "postprocess_ms": 2.9562999843619764,
+      "total_ms": 70.00279999920167,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 5,
+      "preprocess_ms": 8.99930001469329,
+      "inference_ms": 13.472399994498119,
+      "postprocess_ms": 3.264300001319498,
+      "total_ms": 78.8520000060089,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 6,
+      "preprocess_ms": 9.51200001873076,
+      "inference_ms": 14.851100015221164,
+      "postprocess_ms": 2.8980000060983,
+      "total_ms": 80.55790001526475,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 7,
+      "preprocess_ms": 6.6301999904681,
+      "inference_ms": 10.674199991626665,
+      "postprocess_ms": 2.6305000064894557,
+      "total_ms": 68.21280001895502,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 8,
+      "preprocess_ms": 5.411900026956573,
+      "inference_ms": 7.629599975189194,
+      "postprocess_ms": 1.9189000013284385,
+      "total_ms": 51.4940999855753,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 9,
+      "preprocess_ms": 5.629999999655411,
+      "inference_ms": 9.15040000109002,
+      "postprocess_ms": 2.0520999969448894,
+      "total_ms": 54.44310000166297,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 10,
+      "preprocess_ms": 5.653599975630641,
+      "inference_ms": 10.689599992474541,
+      "postprocess_ms": 2.671900001587346,
+      "total_ms": 58.71499999193475,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 11,
+      "preprocess_ms": 5.964599986327812,
+      "inference_ms": 13.869499991415069,
+      "postprocess_ms": 2.8328000043984503,
+      "total_ms": 69.01040000957437,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 12,
+      "preprocess_ms": 6.539699999848381,
+      "inference_ms": 12.019199988571927,
+      "postprocess_ms": 2.9721000173594803,
+      "total_ms": 59.81989999418147,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 13,
+      "preprocess_ms": 6.129999994300306,
+      "inference_ms": 9.259499987820163,
+      "postprocess_ms": 2.71430000429973,
+      "total_ms": 59.95049999910407,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 14,
+      "preprocess_ms": 5.702099995687604,
+      "inference_ms": 8.23930001934059,
+      "postprocess_ms": 2.060600003460422,
+      "total_ms": 55.34869999974035,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 15,
+      "preprocess_ms": 6.85529998736456,
+      "inference_ms": 9.498900006292388,
+      "postprocess_ms": 1.9979999924544245,
+      "total_ms": 61.27649999689311,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 16,
+      "preprocess_ms": 8.124700019834563,
+      "inference_ms": 11.122700001578778,
+      "postprocess_ms": 2.586699993116781,
+      "total_ms": 67.38560000667349,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 17,
+      "preprocess_ms": 8.26299999607727,
+      "inference_ms": 10.820499999681488,
+      "postprocess_ms": 2.350399998249486,
+      "total_ms": 70.88729998213239,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 18,
+      "preprocess_ms": 7.8551000042352825,
+      "inference_ms": 10.748900007456541,
+      "postprocess_ms": 2.810200006933883,
+      "total_ms": 70.29319999855943,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 19,
+      "preprocess_ms": 6.520399998407811,
+      "inference_ms": 9.64529998600483,
+      "postprocess_ms": 2.33650000882335,
+      "total_ms": 67.59029999375343,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 20,
+      "preprocess_ms": 6.4236999896820635,
+      "inference_ms": 10.296299995388836,
+      "postprocess_ms": 3.1457000004593283,
+      "total_ms": 68.49779997719452,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 21,
+      "preprocess_ms": 7.238100020913407,
+      "inference_ms": 10.712199989939108,
+      "postprocess_ms": 2.7717999764718115,
+      "total_ms": 66.76990000414662,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 22,
+      "preprocess_ms": 6.338399980450049,
+      "inference_ms": 12.061999994330108,
+      "postprocess_ms": 3.0685999954584986,
+      "total_ms": 62.694899999769405,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 23,
+      "preprocess_ms": 6.142900005215779,
+      "inference_ms": 10.398699989309534,
+      "postprocess_ms": 3.006899991305545,
+      "total_ms": 58.993799990275875,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 24,
+      "preprocess_ms": 7.84960002056323,
+      "inference_ms": 11.955999972997233,
+      "postprocess_ms": 2.6529000024311244,
+      "total_ms": 66.48920002044179,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 25,
+      "preprocess_ms": 7.922699995106086,
+      "inference_ms": 12.73300001048483,
+      "postprocess_ms": 2.882500004488975,
+      "total_ms": 72.30440000421368,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 26,
+      "preprocess_ms": 8.858099987264723,
+      "inference_ms": 12.618400010978803,
+      "postprocess_ms": 3.0491999932564795,
+      "total_ms": 70.82899997476488,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 27,
+      "preprocess_ms": 7.903099991381168,
+      "inference_ms": 11.46019998122938,
+      "postprocess_ms": 2.9694999975617975,
+      "total_ms": 65.65440000849776,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 28,
+      "preprocess_ms": 7.90729999425821,
+      "inference_ms": 13.091799977701157,
+      "postprocess_ms": 3.12469998607412,
+      "total_ms": 71.5902000083588,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 29,
+      "preprocess_ms": 8.857400011038408,
+      "inference_ms": 13.186900003347546,
+      "postprocess_ms": 2.7743999962694943,
+      "total_ms": 71.58270000945777,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 30,
+      "preprocess_ms": 8.93270000233315,
+      "inference_ms": 12.988999980734661,
+      "postprocess_ms": 2.9175999807193875,
+      "total_ms": 73.19369999459013,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 31,
+      "preprocess_ms": 9.406099998159334,
+      "inference_ms": 13.481900008628145,
+      "postprocess_ms": 2.7123999898321927,
+      "total_ms": 71.11749998875894,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 32,
+      "preprocess_ms": 8.862399990903214,
+      "inference_ms": 13.481900008628145,
+      "postprocess_ms": 2.9494000191334635,
+      "total_ms": 68.0102999904193,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 33,
+      "preprocess_ms": 10.280200018314645,
+      "inference_ms": 14.320600021164864,
+      "postprocess_ms": 2.997499977936968,
+      "total_ms": 70.90349998907186,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 34,
+      "preprocess_ms": 9.207700000843033,
+      "inference_ms": 12.548300001071766,
+      "postprocess_ms": 2.7148000081069767,
+      "total_ms": 68.8568000041414,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 35,
+      "preprocess_ms": 8.694599993759766,
+      "inference_ms": 12.988700007554144,
+      "postprocess_ms": 3.1353000085800886,
+      "total_ms": 69.70039999578148,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 36,
+      "preprocess_ms": 9.277200006181374,
+      "inference_ms": 13.595800002804026,
+      "postprocess_ms": 3.159499989124015,
+      "total_ms": 69.8131000099238,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 37,
+      "preprocess_ms": 9.978200017940253,
+      "inference_ms": 14.236099988920614,
+      "postprocess_ms": 2.705099992454052,
+      "total_ms": 74.628100002883,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 38,
+      "preprocess_ms": 9.722700022393838,
+      "inference_ms": 12.804199999663979,
+      "postprocess_ms": 2.6596999960020185,
+      "total_ms": 73.2195999880787,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 39,
+      "preprocess_ms": 8.678000012878329,
+      "inference_ms": 14.664699992863461,
+      "postprocess_ms": 2.84019997343421,
+      "total_ms": 73.421299981419,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 40,
+      "preprocess_ms": 11.392899992642924,
+      "inference_ms": 13.339299999643117,
+      "postprocess_ms": 3.569299995433539,
+      "total_ms": 75.10719998390414,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 41,
+      "preprocess_ms": 8.790199994109571,
+      "inference_ms": 13.444699987303466,
+      "postprocess_ms": 2.4673000152688473,
+      "total_ms": 71.58740001614206,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 42,
+      "preprocess_ms": 8.537399990018457,
+      "inference_ms": 13.403200020547956,
+      "postprocess_ms": 2.5969000125769526,
+      "total_ms": 69.18520000181161,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 43,
+      "preprocess_ms": 8.505700010573491,
+      "inference_ms": 13.300799997523427,
+      "postprocess_ms": 2.6895999908447266,
+      "total_ms": 69.59660002030432,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 44,
+      "preprocess_ms": 7.844500010833144,
+      "inference_ms": 13.800199987599626,
+      "postprocess_ms": 2.9427999979816377,
+      "total_ms": 70.87279998813756,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 45,
+      "preprocess_ms": 7.868300017435104,
+      "inference_ms": 10.734699986642227,
+      "postprocess_ms": 2.1807000157423317,
+      "total_ms": 67.63409997802228,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 46,
+      "preprocess_ms": 8.820200018817559,
+      "inference_ms": 9.766500006662682,
+      "postprocess_ms": 2.3286999785341322,
+      "total_ms": 68.47240001661703,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 47,
+      "preprocess_ms": 8.914700010791421,
+      "inference_ms": 13.092600012896582,
+      "postprocess_ms": 2.734000008786097,
+      "total_ms": 71.21609998284839,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 48,
+      "preprocess_ms": 8.061700005782768,
+      "inference_ms": 10.088800016092137,
+      "postprocess_ms": 2.6205999893136322,
+      "total_ms": 71.03399999323301,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "pytorch",
+      "repeat_index": 49,
+      "preprocess_ms": 8.76520000747405,
+      "inference_ms": 8.97270001587458,
+      "postprocess_ms": 2.762099989922717,
+      "total_ms": 65.9993999870494,
+      "provider": "cuda:0"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 0,
+      "preprocess_ms": 19.16450000135228,
+      "inference_ms": 9.901799989165738,
+      "postprocess_ms": 1.0037000174634159,
+      "total_ms": 30.07789998082444,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 1,
+      "preprocess_ms": 19.079499994404614,
+      "inference_ms": 9.586700005456805,
+      "postprocess_ms": 0.7857999880798161,
+      "total_ms": 29.458300006808713,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 2,
+      "preprocess_ms": 18.676100007724017,
+      "inference_ms": 10.012100014137104,
+      "postprocess_ms": 0.8021000248845667,
+      "total_ms": 29.50019997661002,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 3,
+      "preprocess_ms": 19.25179999670945,
+      "inference_ms": 9.091699990676716,
+      "postprocess_ms": 0.7998000073712319,
+      "total_ms": 29.151199996704236,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 4,
+      "preprocess_ms": 16.93599999998696,
+      "inference_ms": 12.410900002578273,
+      "postprocess_ms": 0.6033999961800873,
+      "total_ms": 29.957199993077666,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 5,
+      "preprocess_ms": 14.723300002515316,
+      "inference_ms": 8.87340001645498,
+      "postprocess_ms": 0.9769000171218067,
+      "total_ms": 24.580600002082065,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 6,
+      "preprocess_ms": 15.412900014780462,
+      "inference_ms": 8.614199992734939,
+      "postprocess_ms": 0.6053999823052436,
+      "total_ms": 24.63879997958429,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 7,
+      "preprocess_ms": 13.601699989521876,
+      "inference_ms": 9.861300000920892,
+      "postprocess_ms": 0.6708999862894416,
+      "total_ms": 24.13999999407679,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 8,
+      "preprocess_ms": 15.76420001219958,
+      "inference_ms": 9.24519999534823,
+      "postprocess_ms": 0.9477999992668629,
+      "total_ms": 25.96540001104586,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 9,
+      "preprocess_ms": 15.162199997575954,
+      "inference_ms": 9.048600011738017,
+      "postprocess_ms": 0.9471999946981668,
+      "total_ms": 25.165800005197525,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 10,
+      "preprocess_ms": 14.394800004083663,
+      "inference_ms": 9.126999997533858,
+      "postprocess_ms": 0.9597000025678426,
+      "total_ms": 24.4896000076551,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 11,
+      "preprocess_ms": 15.80719999037683,
+      "inference_ms": 9.278599987737834,
+      "postprocess_ms": 0.5956999957561493,
+      "total_ms": 25.68950000568293,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 12,
+      "preprocess_ms": 17.458899994380772,
+      "inference_ms": 9.356800001114607,
+      "postprocess_ms": 1.0181000106967986,
+      "total_ms": 27.84369999426417,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 13,
+      "preprocess_ms": 17.670499975793064,
+      "inference_ms": 10.48820000141859,
+      "postprocess_ms": 0.9045999904628843,
+      "total_ms": 29.072699981043115,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 14,
+      "preprocess_ms": 18.1909000093583,
+      "inference_ms": 10.737600008724257,
+      "postprocess_ms": 0.9208999981638044,
+      "total_ms": 29.8575000197161,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 15,
+      "preprocess_ms": 20.055500004673377,
+      "inference_ms": 11.543000000528991,
+      "postprocess_ms": 0.9446000040043145,
+      "total_ms": 32.54899999592453,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 16,
+      "preprocess_ms": 18.213799980003387,
+      "inference_ms": 9.866999986115843,
+      "postprocess_ms": 0.9508999937679619,
+      "total_ms": 29.037000000244007,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 17,
+      "preprocess_ms": 20.934500003932044,
+      "inference_ms": 10.094999975990504,
+      "postprocess_ms": 0.5720999906770885,
+      "total_ms": 31.606099975761026,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 18,
+      "preprocess_ms": 19.239599991124123,
+      "inference_ms": 9.983299998566508,
+      "postprocess_ms": 1.0588000004645437,
+      "total_ms": 30.290700000477955,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 19,
+      "preprocess_ms": 17.837399995187297,
+      "inference_ms": 9.733400016557425,
+      "postprocess_ms": 0.8728000102564692,
+      "total_ms": 28.44850000110455,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 20,
+      "preprocess_ms": 17.649900022661313,
+      "inference_ms": 9.449900011532009,
+      "postprocess_ms": 0.9116000146605074,
+      "total_ms": 28.019099991070107,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 21,
+      "preprocess_ms": 19.691699999384582,
+      "inference_ms": 9.720600006403401,
+      "postprocess_ms": 0.8387999841943383,
+      "total_ms": 30.259799998020753,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 22,
+      "preprocess_ms": 17.263199988519773,
+      "inference_ms": 8.822600007988513,
+      "postprocess_ms": 0.8653000113554299,
+      "total_ms": 26.95780000067316,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 23,
+      "preprocess_ms": 16.731000010622665,
+      "inference_ms": 9.393999993335456,
+      "postprocess_ms": 0.5708999815396965,
+      "total_ms": 26.70310001121834,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 24,
+      "preprocess_ms": 16.169099981198087,
+      "inference_ms": 8.82899999851361,
+      "postprocess_ms": 0.9068000072147697,
+      "total_ms": 25.91039999970235,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 25,
+      "preprocess_ms": 14.000499999383464,
+      "inference_ms": 8.852400002069771,
+      "postprocess_ms": 0.9299000084865838,
+      "total_ms": 23.789400001987815,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 26,
+      "preprocess_ms": 13.881699997000396,
+      "inference_ms": 9.339699987322092,
+      "postprocess_ms": 0.9178000036627054,
+      "total_ms": 24.14710001903586,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 27,
+      "preprocess_ms": 18.941199989058077,
+      "inference_ms": 9.52669998514466,
+      "postprocess_ms": 0.9338999807368964,
+      "total_ms": 29.407499998342246,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 28,
+      "preprocess_ms": 17.228400014573708,
+      "inference_ms": 10.131500021088868,
+      "postprocess_ms": 0.9410000056959689,
+      "total_ms": 28.312600014032796,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 29,
+      "preprocess_ms": 17.277500010095537,
+      "inference_ms": 10.018800006946549,
+      "postprocess_ms": 1.1069999891333282,
+      "total_ms": 28.409099992131814,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 30,
+      "preprocess_ms": 18.104899994796142,
+      "inference_ms": 11.396400019293651,
+      "postprocess_ms": 0.8746999956201762,
+      "total_ms": 30.387000006157905,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 31,
+      "preprocess_ms": 18.81799998227507,
+      "inference_ms": 11.119799979496747,
+      "postprocess_ms": 1.1554000084288418,
+      "total_ms": 31.098199979169294,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 32,
+      "preprocess_ms": 19.424800004344434,
+      "inference_ms": 10.131800023373216,
+      "postprocess_ms": 0.9897999989334494,
+      "total_ms": 30.5522000126075,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 33,
+      "preprocess_ms": 19.593100005295128,
+      "inference_ms": 10.498999996343628,
+      "postprocess_ms": 0.9409999765921384,
+      "total_ms": 31.038999994052574,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 34,
+      "preprocess_ms": 17.22369997878559,
+      "inference_ms": 10.232699976768345,
+      "postprocess_ms": 0.7243000145535916,
+      "total_ms": 28.18599998136051,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 35,
+      "preprocess_ms": 18.928599980426952,
+      "inference_ms": 9.090300009120256,
+      "postprocess_ms": 0.8864999981597066,
+      "total_ms": 28.911400004290044,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 36,
+      "preprocess_ms": 19.310799980303273,
+      "inference_ms": 9.121399983996525,
+      "postprocess_ms": 0.5930000043008476,
+      "total_ms": 29.032599995844066,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 37,
+      "preprocess_ms": 16.37479997589253,
+      "inference_ms": 9.321699995780364,
+      "postprocess_ms": 0.608200003625825,
+      "total_ms": 26.311199995689094,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 38,
+      "preprocess_ms": 16.1437000206206,
+      "inference_ms": 8.931500022299588,
+      "postprocess_ms": 0.6446999905165285,
+      "total_ms": 25.730299996212125,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 39,
+      "preprocess_ms": 14.257200004067272,
+      "inference_ms": 8.880099980160594,
+      "postprocess_ms": 0.9091999963857234,
+      "total_ms": 24.054500012425706,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 40,
+      "preprocess_ms": 15.17599998624064,
+      "inference_ms": 8.654999983264133,
+      "postprocess_ms": 0.6003000016789883,
+      "total_ms": 24.43920000223443,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 41,
+      "preprocess_ms": 15.047900000354275,
+      "inference_ms": 9.426300006452948,
+      "postprocess_ms": 0.9083999902941287,
+      "total_ms": 25.392399984411895,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 42,
+      "preprocess_ms": 16.63850000477396,
+      "inference_ms": 9.303800005000085,
+      "postprocess_ms": 0.8067000017035753,
+      "total_ms": 26.75610000733286,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 43,
+      "preprocess_ms": 17.65779999550432,
+      "inference_ms": 9.656499983975664,
+      "postprocess_ms": 0.9651000145822763,
+      "total_ms": 28.28990001580678,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 44,
+      "preprocess_ms": 17.59250002214685,
+      "inference_ms": 10.070899996208027,
+      "postprocess_ms": 0.9906000050250441,
+      "total_ms": 28.662100026849657,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 45,
+      "preprocess_ms": 15.963199984980747,
+      "inference_ms": 9.951499989256263,
+      "postprocess_ms": 1.041900017298758,
+      "total_ms": 26.962900010403246,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 46,
+      "preprocess_ms": 15.926299995044246,
+      "inference_ms": 10.164699982851744,
+      "postprocess_ms": 0.9138000023085624,
+      "total_ms": 27.011899976059794,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 47,
+      "preprocess_ms": 19.016000005649403,
+      "inference_ms": 10.957499995129183,
+      "postprocess_ms": 1.1981000134255737,
+      "total_ms": 31.17880001082085,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 48,
+      "preprocess_ms": 20.478000020375475,
+      "inference_ms": 10.548199992626905,
+      "postprocess_ms": 0.9499999869149178,
+      "total_ms": 31.985600013285875,
+      "provider": "CUDAExecutionProvider"
+    },
+    {
+      "image_name": "04_open_circuit_03.jpg",
+      "backend": "onnx",
+      "repeat_index": 49,
+      "preprocess_ms": 18.270600005052984,
+      "inference_ms": 9.727399999974295,
+      "postprocess_ms": 1.0110999864991754,
+      "total_ms": 29.013799998210743,
+      "provider": "CUDAExecutionProvider"
+    }
+  ]
+}

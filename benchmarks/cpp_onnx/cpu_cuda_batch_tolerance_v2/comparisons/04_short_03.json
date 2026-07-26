@@ -1,0 +1,17 @@
+{
+  "image": "datasets\\pcb\\images\\test\\04_short_03.jpg",
+  "status": "NUMERICAL_WARNING",
+  "failure_reason": "numerical_difference",
+  "cpu_detection_count": 3,
+  "cuda_detection_count": 3,
+  "matched_count": 3,
+  "cpu_only_count": 0,
+  "cuda_only_count": 0,
+  "class_mismatch_count": 0,
+  "avg_confidence_diff": 0.000568,
+  "max_confidence_diff": 0.001522,
+  "avg_bbox_diff": 0.015096,
+  "max_bbox_diff": 0.020508,
+  "avg_matched_iou": 0.999686,
+  "min_matched_iou": 0.999628
+}
