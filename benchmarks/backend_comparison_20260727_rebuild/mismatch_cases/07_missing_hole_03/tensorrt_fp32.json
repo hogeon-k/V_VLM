@@ -1,0 +1,61 @@
+{
+  "backend": "tensorrt_fp32",
+  "image": "07_missing_hole_03.jpg",
+  "detections": [
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.922054,
+      "bbox": [
+        2107,
+        1034,
+        2181,
+        1123
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.913845,
+      "bbox": [
+        1857,
+        286,
+        1933,
+        364
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.884485,
+      "bbox": [
+        1692,
+        521,
+        1765,
+        600
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.854007,
+      "bbox": [
+        847,
+        1023,
+        931,
+        1122
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.672333,
+      "bbox": [
+        1089,
+        754,
+        1161,
+        843
+      ]
+    }
+  ]
+}

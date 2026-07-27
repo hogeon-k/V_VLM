@@ -1,0 +1,61 @@
+{
+  "backend": "tensorrt_fp16",
+  "image": "05_open_circuit_04.jpg",
+  "detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.917896,
+      "bbox": [
+        1611,
+        1374,
+        1659,
+        1419
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.853913,
+      "bbox": [
+        1823,
+        1550,
+        1868,
+        1596
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.550608,
+      "bbox": [
+        1402,
+        837,
+        1444,
+        887
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.464901,
+      "bbox": [
+        1599,
+        745,
+        1643,
+        791
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.451326,
+      "bbox": [
+        1243,
+        1766,
+        1308,
+        1823
+      ]
+    }
+  ]
+}

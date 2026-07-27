@@ -1,0 +1,39 @@
+{
+  "backend": "pytorch",
+  "image": "04_open_circuit_02.jpg",
+  "detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.8150784373283386,
+      "bbox": [
+        475,
+        2239,
+        535,
+        2305
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.27734413743019104,
+      "bbox": [
+        436,
+        1722,
+        485,
+        1774
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.20168444514274597,
+      "bbox": [
+        127,
+        1237,
+        192,
+        1285
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "backend": "tensorrt_fp32",
+  "image": "01_missing_hole_03.jpg",
+  "detections": [
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.911629,
+      "bbox": [
+        2077,
+        575,
+        2140,
+        632
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.89317,
+      "bbox": [
+        1337,
+        741,
+        1395,
+        799
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.851832,
+      "bbox": [
+        2644,
+        482,
+        2702,
+        535
+      ]
+    }
+  ]
+}

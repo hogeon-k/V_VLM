@@ -1,0 +1,61 @@
+{
+  "backend": "onnx_cuda",
+  "image": "05_open_circuit_04.jpg",
+  "detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.918181300163269,
+      "bbox": [
+        1611,
+        1375,
+        1659,
+        1419
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.8540801405906677,
+      "bbox": [
+        1823,
+        1550,
+        1868,
+        1596
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.5519428849220276,
+      "bbox": [
+        1402,
+        837,
+        1444,
+        887
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.4672294855117798,
+      "bbox": [
+        1599,
+        745,
+        1642,
+        791
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.44738978147506714,
+      "bbox": [
+        1243,
+        1766,
+        1308,
+        1823
+      ]
+    }
+  ]
+}

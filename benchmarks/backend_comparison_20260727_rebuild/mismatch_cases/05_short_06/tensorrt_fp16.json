@@ -1,0 +1,39 @@
+{
+  "backend": "tensorrt_fp16",
+  "image": "05_short_06.jpg",
+  "detections": [
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.839735,
+      "bbox": [
+        1975,
+        343,
+        2052,
+        423
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.801936,
+      "bbox": [
+        588,
+        635,
+        667,
+        731
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.150527,
+      "bbox": [
+        1991,
+        864,
+        2087,
+        955
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "backend": "onnx_cuda",
+  "image": "05_open_circuit_03.jpg",
+  "detections": [
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.9182501435279846,
+      "bbox": [
+        1611,
+        1375,
+        1659,
+        1419
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.5513573884963989,
+      "bbox": [
+        1402,
+        837,
+        1444,
+        887
+      ]
+    },
+    {
+      "class_id": 0,
+      "class_name": "open_circuit",
+      "confidence": 0.4672078490257263,
+      "bbox": [
+        1599,
+        745,
+        1642,
+        791
+      ]
+    }
+  ]
+}

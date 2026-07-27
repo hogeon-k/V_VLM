@@ -1,0 +1,39 @@
+{
+  "backend": "onnx_cuda",
+  "image": "01_short_02.jpg",
+  "detections": [
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.8478876948356628,
+      "bbox": [
+        1495,
+        1314,
+        1556,
+        1381
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.8176028728485107,
+      "bbox": [
+        2550,
+        544,
+        2620,
+        615
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.6791443824768066,
+      "bbox": [
+        1004,
+        1371,
+        1063,
+        1433
+      ]
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "backend": "pytorch",
+  "image": "07_missing_hole_03.jpg",
+  "detections": [
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.92176753282547,
+      "bbox": [
+        2107,
+        1034,
+        2181,
+        1123
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.9138675928115845,
+      "bbox": [
+        1857,
+        286,
+        1933,
+        364
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.8845520615577698,
+      "bbox": [
+        1692,
+        521,
+        1765,
+        600
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.8536537885665894,
+      "bbox": [
+        847,
+        1023,
+        931,
+        1122
+      ]
+    },
+    {
+      "class_id": 2,
+      "class_name": "missing_hole",
+      "confidence": 0.6721959710121155,
+      "bbox": [
+        1089,
+        754,
+        1161,
+        843
+      ]
+    }
+  ]
+}

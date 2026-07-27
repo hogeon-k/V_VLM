@@ -1,0 +1,39 @@
+{
+  "backend": "pytorch",
+  "image": "05_short_04.jpg",
+  "detections": [
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.7825401425361633,
+      "bbox": [
+        1858,
+        1338,
+        1931,
+        1412
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.7219886779785156,
+      "bbox": [
+        1987,
+        899,
+        2091,
+        993
+      ]
+    },
+    {
+      "class_id": 1,
+      "class_name": "short",
+      "confidence": 0.5532808899879456,
+      "bbox": [
+        1381,
+        1505,
+        1447,
+        1565
+      ]
+    }
+  ]
+}
