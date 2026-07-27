@@ -26,7 +26,7 @@ class YoloDetector:
     def detect(self, image_path: str | Path, output_path: str | Path | None = None) -> YoloResult:
         """Run YOLO inference and save one annotated result image."""
         source_path = Path(image_path)
-        if not source_path.exists():
+        if not source_path.is_file():
             raise FileNotFoundError(f"Input image not found: {source_path}")
 
         model = self.model_loader.load()
@@ -48,8 +48,7 @@ class YoloDetector:
         target_path = Path(output_path) if output_path is not None else self._build_output_path(source_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if not cv2.imwrite(str(target_path), annotated_image):
-            raise RuntimeError(f"Failed to save YOLO annotated result image: {target_path}")
+        self._write_annotated_image(target_path, annotated_image)
 
         return YoloResult(
             image_path=source_path,
@@ -60,6 +59,17 @@ class YoloDetector:
     def _build_output_path(self, image_path: Path) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         return RESULT_IMAGE_DIR / f"{image_path.stem}_yolo_{timestamp}_{uuid4().hex[:8]}{image_path.suffix}"
+
+    def _write_annotated_image(self, target_path: Path, annotated_image: object) -> None:
+        try:
+            encoded, buffer = cv2.imencode(target_path.suffix, annotated_image)
+            if not encoded:
+                raise RuntimeError
+            buffer.tofile(str(target_path))
+        except (cv2.error, OSError, RuntimeError) as exc:
+            raise RuntimeError(
+                f"Failed to save YOLO annotated result image: {target_path}"
+            ) from exc
 
     def _to_detections(self, result: object) -> list[Detection]:
         boxes = getattr(result, "boxes", None)
