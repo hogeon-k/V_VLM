@@ -101,6 +101,11 @@ def extract_ollama_content(
     error = response_data.get("error")
     if error:
         raise RuntimeError(f"Ollama returned an error: {error}")
+    if metadata.done is False:
+        raise OllamaContentError(
+            "Ollama response did not complete (done=false).",
+            metadata,
+        )
 
     message = response_data.get("message")
     if isinstance(message, Mapping):

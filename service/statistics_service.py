@@ -32,7 +32,7 @@ class StatisticsService:
         ok_placeholders = ",".join("?" for _ in OK_STATUSES)
         ng_placeholders = ",".join("?" for _ in NG_STATUSES)
 
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             status_row = connection.execute(
                 f"""
                 SELECT

@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -98,7 +99,29 @@ class MainWindow(QMainWindow):
             button.style().polish(button)
 
     def closeEvent(self, event: object) -> None:
-        self.status_view.stop_vlm_status_check()
+        inspection_running = self.inspection_view.viewmodel.is_running()
+        vlm_running = self.history_view.is_vlm_running()
+        if inspection_running:
+            self.inspection_view.viewmodel.stop()
+        if inspection_running or vlm_running:
+            QMessageBox.information(
+                self,
+                "작업 종료 대기",
+                "실행 중인 검사 또는 VLM 작업이 완료될 때까지 창을 닫을 수 없습니다.",
+            )
+            if hasattr(event, "ignore"):
+                event.ignore()
+            return
+
+        if not self.status_view.stop_vlm_status_check():
+            QMessageBox.information(
+                self,
+                "작업 종료 대기",
+                "시스템 상태 확인 작업이 완료될 때까지 창을 닫을 수 없습니다.",
+            )
+            if hasattr(event, "ignore"):
+                event.ignore()
+            return
         shutdown = getattr(self.inspection_view.viewmodel, "shutdown", None)
         if callable(shutdown):
             shutdown()

@@ -158,10 +158,14 @@ def letterbox(
     center: bool = True,
 ) -> tuple[np.ndarray, LetterboxInfo]:
     """Resize and pad like Ultralytics LetterBox for fixed-size detection input."""
+    if image.ndim < 2 or image.shape[0] <= 0 or image.shape[1] <= 0:
+        raise ValueError(f"Letterbox requires a non-empty image, got shape {image.shape}")
     if isinstance(new_shape, int):
         target_shape = (new_shape, new_shape)
     else:
         target_shape = new_shape
+    if len(target_shape) != 2 or target_shape[0] <= 0 or target_shape[1] <= 0:
+        raise ValueError(f"Letterbox target shape must be positive, got {target_shape}")
 
     shape = image.shape[:2]
     ratio = min(target_shape[0] / shape[0], target_shape[1] / shape[1])
@@ -169,8 +173,17 @@ def letterbox(
         ratio = min(ratio, 1.0)
 
     new_unpad = (round(shape[1] * ratio), round(shape[0] * ratio))
+    if new_unpad[0] <= 0 or new_unpad[1] <= 0:
+        raise ValueError(
+            f"Letterbox resize produced a non-positive size {new_unpad} "
+            f"for image shape {shape} and target {target_shape}"
+        )
     dw = target_shape[1] - new_unpad[0]
     dh = target_shape[0] - new_unpad[1]
+    if dw < 0 or dh < 0:
+        raise ValueError(
+            f"Letterbox resize exceeds target: resized={new_unpad}, target={target_shape}"
+        )
 
     if auto:
         dw = int(np.mod(dw, stride))
@@ -304,11 +317,18 @@ def postprocess_output(
     class_names: dict[int, str] | None = None,
 ) -> list[Detection]:
     predictions = validate_onnx_output(output)
+    names = class_names or DEFAULT_CLASS_NAMES
+    expected_channels = 4 + len(names)
+    if predictions.shape[1] != expected_channels:
+        raise ValueError(
+            f"Expected {expected_channels} ONNX output channels for {len(names)} classes, "
+            f"got {predictions.shape[1]}"
+        )
     boxes_xywh = predictions[:, :4]
     class_scores = predictions[:, 4:]
     class_ids = np.argmax(class_scores, axis=1).astype(np.int32)
     confidences = np.max(class_scores, axis=1).astype(np.float32)
-    candidates = confidences >= conf_threshold
+    candidates = np.all(np.isfinite(class_scores), axis=1) & (confidences >= conf_threshold)
     if not np.any(candidates):
         return []
 
@@ -316,8 +336,17 @@ def postprocess_output(
     boxes = restore_boxes_to_original(boxes, letterbox_info)
     scores = confidences[candidates]
     classes = class_ids[candidates]
+    valid_boxes = (
+        np.all(np.isfinite(boxes), axis=1)
+        & (boxes[:, 2] > boxes[:, 0])
+        & (boxes[:, 3] > boxes[:, 1])
+    )
+    if not np.any(valid_boxes):
+        return []
+    boxes = boxes[valid_boxes]
+    scores = scores[valid_boxes]
+    classes = classes[valid_boxes]
     keep = class_aware_nms(boxes, scores, classes, iou_threshold)
-    names = class_names or DEFAULT_CLASS_NAMES
 
     detections: list[Detection] = []
     for index in keep:
@@ -393,6 +422,7 @@ class OnnxDetector:
         self._input_name = ""
         self._output_name = ""
         self._input_shape: list[Any] = []
+        self._output_shape: list[Any] = []
 
     def _requested_providers(self, available: list[str]) -> list[Any]:
         if self.requested_provider == "CPUExecutionProvider":
@@ -457,12 +487,22 @@ class OnnxDetector:
         self._input_name = inputs[0].name
         self._output_name = outputs[0].name
         self._input_shape = list(inputs[0].shape)
+        self._output_shape = list(outputs[0].shape)
+        self._validate_tensor_type(inputs[0].type, "input")
+        self._validate_tensor_type(outputs[0].type, "output")
         self._validate_input_shape(self._input_shape)
+        self._validate_output_shape(self._output_shape)
         return self._session
+
+    def _validate_tensor_type(self, tensor_type: str, label: str) -> None:
+        if tensor_type != "tensor(float)":
+            raise ValueError(f"Expected ONNX {label} dtype tensor(float), got {tensor_type}")
 
     def _validate_input_shape(self, shape: list[Any]) -> None:
         if len(shape) != 4:
             raise ValueError(f"Expected ONNX input rank 4 [1, 3, H, W], got {shape}")
+        if isinstance(shape[0], int) and shape[0] != 1:
+            raise ValueError(f"Expected ONNX input batch dimension 1, got {shape}")
         if shape[1] not in (3, "3"):
             raise ValueError(f"Expected ONNX input channel dimension 3, got {shape}")
         expected = [self.imgsz, self.imgsz]
@@ -470,6 +510,19 @@ class OnnxDetector:
         concrete = [value for value in actual_hw if isinstance(value, int)]
         if concrete and actual_hw != expected:
             raise ValueError(f"Expected ONNX input size {expected}, got {shape}")
+
+    def _validate_output_shape(self, shape: list[Any]) -> None:
+        if len(shape) != 3:
+            raise ValueError(f"Expected ONNX output rank 3 [1, C, N], got {shape}")
+        if isinstance(shape[0], int) and shape[0] != 1:
+            raise ValueError(f"Expected ONNX output batch dimension 1, got {shape}")
+        expected_channels = 4 + len(self.class_names)
+        if isinstance(shape[1], int) and shape[1] != expected_channels:
+            raise ValueError(
+                f"Expected ONNX output channel dimension {expected_channels}, got {shape}"
+            )
+        if isinstance(shape[2], int) and shape[2] <= 0:
+            raise ValueError(f"Expected ONNX output candidate dimension > 0, got {shape}")
 
     def detect(self, image_path: str | Path, output_path: str | Path | None = None) -> YoloResult:
         return YoloResult(image_path=Path(image_path), detections=self.detect_timed(image_path).detections)
@@ -495,7 +548,11 @@ class OnnxDetector:
         inference_ms = (time.perf_counter() - start) * 1000
 
         start = time.perf_counter()
+        if len(outputs) != 1:
+            raise RuntimeError(f"Expected one ONNX Runtime output, got {len(outputs)}")
         output = np.asarray(outputs[0])
+        if output.dtype != np.float32:
+            raise ValueError(f"Expected ONNX Runtime output dtype float32, got {output.dtype}")
         detections = postprocess_output(output, letterbox_info, self.conf, self.iou, self.class_names)
         postprocess_ms = (time.perf_counter() - start) * 1000
         total_ms = (time.perf_counter() - total_start) * 1000

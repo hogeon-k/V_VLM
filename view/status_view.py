@@ -119,10 +119,11 @@ class StatusView(QWidget):
         self.stop_vlm_status_check()
         super().closeEvent(event)
 
-    def stop_vlm_status_check(self) -> None:
+    def stop_vlm_status_check(self) -> bool:
         if self._vlm_thread is not None and self._vlm_thread.isRunning():
             self._vlm_thread.quit()
-            self._vlm_thread.wait(3000)
+            return self._vlm_thread.wait(3000)
+        return True
 
     @Slot(str, str)
     def _on_vlm_status_finished(self, state: str, detail: str) -> None:

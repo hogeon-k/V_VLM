@@ -83,6 +83,38 @@ def test_cpp_native_tensorrt_uses_tensor_api_and_reused_pre_postprocessing() -> 
     assert "Native TensorRT" in main
 
 
+def test_cpp_native_tensorrt_validates_io_and_cuda_execution_contract() -> None:
+    source = read_cpp("cpp_inference/src/tensorrt_detector.cpp")
+
+    for expected in (
+        "TensorRT engine file is empty",
+        "Failed to create TensorRT runtime",
+        "Failed to deserialize TensorRT engine",
+        "Failed to create TensorRT execution context",
+        "Expected exactly one TensorRT input tensor",
+        "Expected exactly one TensorRT output tensor",
+        'impl_->input_info.name != "images"',
+        'impl_->output_info.name != "output0"',
+        "TensorRT input dtype",
+        "TensorRT output dtype",
+        "Preprocessed tensor size does not match TensorRT input buffer size",
+        "cudaMemcpyHostToDevice",
+        "cudaMemcpyDeviceToHost",
+        "TensorRT enqueueV3 failed",
+        "cudaEventSynchronize d2h_end",
+    ):
+        assert expected in source
+
+    assert source.index("cudaMemcpyHostToDevice") < source.index("enqueueV3")
+    assert source.index("enqueueV3") < source.index("cudaMemcpyDeviceToHost")
+    assert source.index("cudaMemcpyDeviceToHost") < source.index(
+        "cudaEventSynchronize d2h_end"
+    )
+    assert "struct CudaBuffer" in source
+    assert "StreamPtr" in source
+    assert "EventPtr" in source
+
+
 def test_cpp_cuda_provider_uses_v2_options_and_reports_cudnn_search() -> None:
     header = read_cpp("cpp_inference/include/detector.hpp")
     source = read_cpp("cpp_inference/src/detector.cpp")

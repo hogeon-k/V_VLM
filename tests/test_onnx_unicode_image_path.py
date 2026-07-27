@@ -156,7 +156,7 @@ def test_backend_factory_onnx_creation_still_returns_python_onnx_detector() -> N
     assert isinstance(service.detector, OnnxDetector)
     assert service.detector.imgsz == 960
     assert service.detector.conf == 0.15
-    assert service.detector.iou == 0.5
+    assert service.detector.iou == 0.7
     assert service.detector.requested_provider == "CUDAExecutionProvider"
 
 

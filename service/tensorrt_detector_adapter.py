@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import shutil
 import subprocess
 import tempfile
@@ -380,10 +381,13 @@ class TensorRtDetectorAdapter:
 
     def _load_result_json(self, result_json_path: Path) -> dict[str, Any]:
         try:
-            payload = json.loads(result_json_path.read_text(encoding="utf-8-sig"))
+            payload = json.loads(
+                result_json_path.read_text(encoding="utf-8-sig"),
+                parse_constant=self._reject_json_constant,
+            )
         except UnicodeDecodeError as exc:
             raise TensorRtResultParseError(f"TensorRT result JSON is not valid UTF-8: {result_json_path}; {exc}") from exc
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, ValueError) as exc:
             raise TensorRtResultParseError(f"TensorRT result JSON is invalid: {result_json_path}; {exc}") from exc
         if not isinstance(payload, dict):
             raise TensorRtResultParseError(f"TensorRT result JSON root must be an object: {result_json_path}")
@@ -422,24 +426,29 @@ class TensorRtDetectorAdapter:
         return detections
 
     def _parse_class_id(self, value: object, index: int) -> int:
-        if not isinstance(value, int):
+        if type(value) is not int:
             raise TensorRtResultParseError(f"TensorRT detection #{index} class_id must be an integer.")
         if value not in self.class_names:
             raise TensorRtResultParseError(f"TensorRT detection #{index} class_id out of range: {value}")
         return value
 
     def _parse_confidence(self, value: object, index: int) -> float:
-        if not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TensorRtResultParseError(f"TensorRT detection #{index} confidence must be numeric.")
         confidence = float(value)
-        if confidence < 0.0 or confidence > 1.0:
+        if not math.isfinite(confidence) or confidence < 0.0 or confidence > 1.0:
             raise TensorRtResultParseError(f"TensorRT detection #{index} confidence out of range: {confidence}")
         return confidence
 
     def _parse_bbox(self, value: object, index: int) -> tuple[int, int, int, int]:
         if not isinstance(value, list) or len(value) != 4:
             raise TensorRtResultParseError(f"TensorRT detection #{index} bbox must be [x1, y1, x2, y2].")
-        if not all(isinstance(item, (int, float)) for item in value):
+        if not all(
+            not isinstance(item, bool)
+            and isinstance(item, (int, float))
+            and math.isfinite(float(item))
+            for item in value
+        ):
             raise TensorRtResultParseError(f"TensorRT detection #{index} bbox values must be numeric.")
         x1, y1, x2, y2 = (int(round(float(item))) for item in value)
         if x2 < x1 or y2 < y1:
@@ -461,9 +470,18 @@ class TensorRtDetectorAdapter:
             return {}
         parsed: dict[str, float] = {}
         for key, value in timing.items():
-            if isinstance(key, str) and isinstance(value, (int, float)):
+            if (
+                isinstance(key, str)
+                and not isinstance(value, bool)
+                and isinstance(value, (int, float))
+                and math.isfinite(float(value))
+            ):
                 parsed[key] = float(value)
         return parsed
+
+    @staticmethod
+    def _reject_json_constant(value: str) -> object:
+        raise ValueError(f"non-standard numeric constant {value}")
 
     def _resolve_annotated_image(self, output_dir: Path, output_path: str | Path | None) -> Path | None:
         result_image = output_dir / "result.jpg"

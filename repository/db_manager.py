@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+import sqlite3
 
 from config.settings import DATABASE_PATH
 
@@ -19,11 +21,22 @@ class DBManager:
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
+    @contextmanager
+    def connection(self) -> Iterator[sqlite3.Connection]:
+        """Yield a transactional connection and always close it."""
+        connection = self.get_connection()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     def initialize(self) -> None:
         """Create the application schema when it does not exist yet."""
-        with self.get_connection() as connection:
+        with self.connection() as connection:
             connection.executescript(self.schema_path.read_text(encoding="utf-8"))
             _ensure_inspection_vlm_columns(connection)
+            _ensure_defect_class_id_column(connection)
 
 
 def _ensure_inspection_vlm_columns(connection: sqlite3.Connection) -> None:
@@ -60,4 +73,15 @@ def _ensure_inspection_vlm_columns(connection: sqlite3.Connection) -> None:
             END
             WHERE vlm_status IS NULL OR vlm_status = ''
             """
+        )
+
+
+def _ensure_defect_class_id_column(connection: sqlite3.Connection) -> None:
+    existing_columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(defects)").fetchall()
+    }
+    if "class_id" not in existing_columns:
+        connection.execute(
+            "ALTER TABLE defects ADD COLUMN class_id INTEGER NOT NULL DEFAULT -1"
         )

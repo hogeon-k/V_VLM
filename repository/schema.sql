@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS defects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     inspection_id INTEGER NOT NULL,
     defect_type TEXT NOT NULL,
+    class_id INTEGER NOT NULL DEFAULT -1,
     confidence REAL NOT NULL,
     bbox_x1 INTEGER NOT NULL,
     bbox_y1 INTEGER NOT NULL,

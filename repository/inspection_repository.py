@@ -28,7 +28,7 @@ class InspectionRepository:
         self.db_manager.initialize()
         inspected_at = inspection_result.inspected_at or datetime.now()
         vlm_status = _vlm_status_for_save(inspection_result)
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO inspections (
@@ -66,7 +66,7 @@ class InspectionRepository:
 
     def find_by_id(self, inspection_id: int) -> InspectionResult | None:
         self.db_manager.initialize()
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             row = connection.execute(
                 "SELECT * FROM inspections WHERE id = ?",
                 (inspection_id,),
@@ -77,14 +77,14 @@ class InspectionRepository:
 
     def count(self) -> int:
         self.db_manager.initialize()
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             row = connection.execute("SELECT COUNT(*) AS count FROM inspections").fetchone()
         return int(row["count"])
 
     def delete_by_id(self, inspection_id: int) -> int:
         """Delete one inspection row and its child defects in one transaction."""
         self.db_manager.initialize()
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             try:
                 connection.execute("BEGIN")
                 cursor = connection.execute(
@@ -101,7 +101,7 @@ class InspectionRepository:
     def delete_all(self) -> int:
         """Delete all inspection rows and their child defects in one transaction."""
         self.db_manager.initialize()
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             try:
                 connection.execute("BEGIN")
                 cursor = connection.execute("DELETE FROM inspections")
@@ -116,7 +116,7 @@ class InspectionRepository:
         """Atomically reserve one inspection row for VLM generation."""
         self.db_manager.initialize()
         now = datetime.now().isoformat(timespec="seconds")
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             cursor = connection.execute(
                 """
                 UPDATE inspections
@@ -137,7 +137,7 @@ class InspectionRepository:
         """Update VLM fields for an existing inspection row."""
         self.db_manager.initialize()
         now = datetime.now().isoformat(timespec="seconds")
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             cursor = connection.execute(
                 """
                 UPDATE inspections
@@ -188,13 +188,13 @@ class InspectionRepository:
         query += " ORDER BY i.inspected_at DESC, i.id DESC LIMIT ?"
         params.append(max(1, int(limit)))
 
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             rows = connection.execute(query, params).fetchall()
         return [self._row_to_result(row) for row in rows]
 
     def list_defect_types(self) -> list[str]:
         self.db_manager.initialize()
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             rows = connection.execute(
                 "SELECT DISTINCT defect_type FROM defects ORDER BY defect_type"
             ).fetchall()

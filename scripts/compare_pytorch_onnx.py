@@ -187,22 +187,35 @@ def measure_onnx(detector: OnnxDetector, image_path: Path, warmup: int, runs: in
 
 
 def match_detections(pt: list[Detection], onnx: list[Detection], match_iou: float = 0.5) -> list[DetectionMatch]:
-    matches: list[DetectionMatch] = []
-    used_onnx: set[int] = set()
-    for pt_detection in pt:
-        best_index: int | None = None
-        best_iou = 0.0
-        for index, onnx_detection in enumerate(onnx):
-            if index in used_onnx or pt_detection.class_id != onnx_detection.class_id:
+    candidate_pairs: list[tuple[float, int, int]] = []
+    for pt_index, pt_detection in enumerate(pt):
+        for onnx_index, onnx_detection in enumerate(onnx):
+            if pt_detection.class_id != onnx_detection.class_id:
                 continue
             current_iou = bbox_iou(_bbox(pt_detection), _bbox(onnx_detection))
-            if current_iou > best_iou:
-                best_iou = current_iou
-                best_index = index
-        if best_index is not None and best_iou >= match_iou:
-            used_onnx.add(best_index)
-            matches.append(DetectionMatch(status="MATCHED", pt=pt_detection, onnx=onnx[best_index], iou=best_iou))
-        else:
+            if current_iou >= match_iou:
+                candidate_pairs.append((current_iou, pt_index, onnx_index))
+
+    candidate_pairs.sort(key=lambda item: (-item[0], item[1], item[2]))
+    used_pt: set[int] = set()
+    used_onnx: set[int] = set()
+    matches: list[DetectionMatch] = []
+    for current_iou, pt_index, onnx_index in candidate_pairs:
+        if pt_index in used_pt or onnx_index in used_onnx:
+            continue
+        used_pt.add(pt_index)
+        used_onnx.add(onnx_index)
+        matches.append(
+            DetectionMatch(
+                status="MATCHED",
+                pt=pt[pt_index],
+                onnx=onnx[onnx_index],
+                iou=current_iou,
+            )
+        )
+
+    for index, pt_detection in enumerate(pt):
+        if index not in used_pt:
             matches.append(DetectionMatch(status="PT_ONLY", pt=pt_detection))
 
     for index, onnx_detection in enumerate(onnx):

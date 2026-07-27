@@ -126,10 +126,18 @@ class PromptBuilder:
         ).strip()
 
     def _format_detection(self, index: int, detection: Detection) -> str:
+        low_confidence_note = ""
+        if detection.confidence < LOW_CONFIDENCE_THRESHOLD:
+            low_confidence_note = (
+                "\n재확인 참고: YOLO 신뢰도 0.70 미만입니다. "
+                "시각적 특징이 불명확하면 visibility=\"unclear\", "
+                "review_required=true로 응답하세요."
+            )
         return (
             f"탐지 {index}\n"
             f"클래스: {detection.class_name}\n"
             f"신뢰도: {detection.confidence:.4f}\n"
             f"위치: {detection.location or '위치 정보 없음'}\n"
             f"바운딩 박스: ({detection.x1}, {detection.y1}, {detection.x2}, {detection.y2})"
+            f"{low_confidence_note}"
         )

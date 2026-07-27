@@ -44,6 +44,23 @@ def test_match_detections_does_not_match_different_classes() -> None:
     assert [match.status for match in matches] == ["PT_ONLY", "ONNX_ONLY"]
 
 
+def test_match_detections_is_stable_when_reference_order_changes() -> None:
+    first = Detection(1, "short", 0.9, 0, 0, 10, 10)
+    second = Detection(1, "short", 0.8, 3, 0, 13, 10)
+    onnx = [
+        Detection(1, "short", 0.9, 0, 0, 10, 10),
+        Detection(1, "short", 0.8, -2, 0, 8, 10),
+    ]
+
+    forward = match_detections([first, second], onnx, match_iou=0.5)
+    reversed_order = match_detections([second, first], onnx, match_iou=0.5)
+
+    assert [match.status for match in forward].count("MATCHED") == 1
+    assert [match.status for match in reversed_order].count("MATCHED") == 1
+    assert [match.status for match in forward].count("PT_ONLY") == 1
+    assert [match.status for match in reversed_order].count("PT_ONLY") == 1
+
+
 def test_empty_detection_summary() -> None:
     summary, warnings = summarize_accuracy([])
 

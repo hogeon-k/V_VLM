@@ -12,6 +12,22 @@
 #include "unicode_utils.hpp"
 
 namespace pcb_vision {
+namespace {
+
+int round_half_to_even(double value) {
+    const double lower_value = std::floor(value);
+    const double fraction = value - lower_value;
+    const int lower = static_cast<int>(lower_value);
+    if (fraction < 0.5) {
+        return lower;
+    }
+    if (fraction > 0.5) {
+        return lower + 1;
+    }
+    return lower % 2 == 0 ? lower : lower + 1;
+}
+
+}  // namespace
 
 bool can_load_image(const std::filesystem::path& image_path) {
     return !read_image_unicode(image_path, cv::IMREAD_COLOR).empty();
@@ -38,12 +54,18 @@ LetterboxResult letterbox_resize(
         throw std::invalid_argument("letterbox target size must be positive.");
     }
 
-    const float scale = std::min(
-        static_cast<float>(target_width) / static_cast<float>(image.cols),
-        static_cast<float>(target_height) / static_cast<float>(image.rows)
+    const double scale = std::min(
+        static_cast<double>(target_width) / static_cast<double>(image.cols),
+        static_cast<double>(target_height) / static_cast<double>(image.rows)
     );
-    const int resized_width = static_cast<int>(std::round(static_cast<float>(image.cols) * scale));
-    const int resized_height = static_cast<int>(std::round(static_cast<float>(image.rows) * scale));
+    const int resized_width = round_half_to_even(static_cast<double>(image.cols) * scale);
+    const int resized_height = round_half_to_even(static_cast<double>(image.rows) * scale);
+    if (resized_width <= 0 || resized_height <= 0) {
+        throw std::runtime_error("letterbox resize produced a non-positive image size.");
+    }
+    if (resized_width > target_width || resized_height > target_height) {
+        throw std::runtime_error("letterbox resize exceeds the target size.");
+    }
 
     cv::Mat resized;
     if (image.cols != resized_width || image.rows != resized_height) {
@@ -64,7 +86,7 @@ LetterboxResult letterbox_resize(
 
     LetterboxResult result;
     result.image = canvas;
-    result.scale = scale;
+    result.scale = static_cast<float>(scale);
     result.pad_x = static_cast<float>(left);
     result.pad_y = static_cast<float>(top);
     result.pad_left = left;

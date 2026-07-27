@@ -16,6 +16,7 @@ from service.onnx_detector import (
     detection_to_dict,
     letterbox,
     postprocess_output,
+    preprocess_image,
     register_windows_dll_directories,
     restore_boxes_to_original,
     validate_onnx_output,
@@ -32,6 +33,55 @@ def test_letterbox_result_shape() -> None:
     assert info.original_shape == (100, 200)
     assert info.new_unpad == (960, 480)
     assert info.pad == (0, 240)
+
+
+@pytest.mark.parametrize(
+    ("shape", "expected_unpad", "expected_pad"),
+    [
+        ((960, 960), (960, 960), (0, 0)),
+        ((718, 1280), (960, 538), (0, 211)),
+        ((1280, 718), (538, 960), (211, 0)),
+        ((719, 1280), (960, 539), (0, 210)),
+    ],
+)
+def test_letterbox_shape_rounding_and_padding(
+    shape: tuple[int, int],
+    expected_unpad: tuple[int, int],
+    expected_pad: tuple[int, int],
+) -> None:
+    image = np.zeros((*shape, 3), dtype=np.uint8)
+
+    padded, info = letterbox(image, new_shape=960)
+
+    assert padded.shape == (960, 960, 3)
+    assert info.new_unpad == expected_unpad
+    assert info.pad == expected_pad
+
+
+def test_letterbox_padding_color_and_invalid_inputs() -> None:
+    padded, _ = letterbox(np.zeros((100, 200, 3), dtype=np.uint8), new_shape=960)
+
+    assert np.all(padded[0, 0] == 114)
+    with pytest.raises(ValueError, match="non-empty image"):
+        letterbox(np.empty((0, 10, 3), dtype=np.uint8), new_shape=960)
+    with pytest.raises(ValueError, match="target shape must be positive"):
+        letterbox(np.zeros((10, 10, 3), dtype=np.uint8), new_shape=0)
+
+
+def test_preprocess_image_converts_bgr_to_contiguous_rgb_float32_nchw() -> None:
+    image = np.array([[[0, 127, 255]]], dtype=np.uint8)
+
+    tensor, info = preprocess_image(image, imgsz=1)
+
+    assert tensor.shape == (1, 3, 1, 1)
+    assert tensor.dtype == np.float32
+    assert tensor.flags.c_contiguous is True
+    assert info.original_shape == (1, 1)
+    np.testing.assert_allclose(
+        tensor[0, :, 0, 0],
+        np.array([1.0, 127.0 / 255.0, 0.0], dtype=np.float32),
+        atol=1e-6,
+    )
 
 
 def test_letterbox_coordinate_restore() -> None:
@@ -81,6 +131,16 @@ def test_class_aware_nms_suppresses_same_class_overlap() -> None:
     assert keep == [0]
 
 
+def test_class_aware_nms_keeps_box_at_exact_iou_threshold() -> None:
+    boxes = np.array([[0, 0, 10, 10], [5, 0, 15, 10]], dtype=np.float32)
+    scores = np.array([0.9, 0.8], dtype=np.float32)
+    class_ids = np.array([0, 0], dtype=np.int32)
+    boundary_iou = bbox_iou(boxes[0], boxes[1])
+
+    assert class_aware_nms(boxes, scores, class_ids, boundary_iou) == [0, 1]
+    assert class_aware_nms(boxes, scores, class_ids, boundary_iou - 1e-6) == [0]
+
+
 def test_postprocess_empty_detection() -> None:
     output = np.zeros((1, 7, 2), dtype=np.float32)
     info = LetterboxInfo(
@@ -94,6 +154,68 @@ def test_postprocess_empty_detection() -> None:
     detections = postprocess_output(output, info, conf_threshold=0.15, iou_threshold=0.5)
 
     assert detections == []
+
+
+def test_postprocess_removes_clipped_zero_area_and_non_finite_boxes() -> None:
+    output = np.zeros((1, 7, 2), dtype=np.float32)
+    output[0, :, 0] = [100.0, 100.0, 20.0, 20.0, 0.9, 0.0, 0.0]
+    output[0, :, 1] = [np.nan, 500.0, 20.0, 20.0, 0.8, 0.0, 0.0]
+    info = LetterboxInfo(
+        original_shape=(100, 200),
+        resized_shape=(960, 960),
+        ratio=(4.8, 4.8),
+        pad=(0, 240),
+        new_unpad=(960, 480),
+    )
+
+    detections = postprocess_output(
+        output,
+        info,
+        conf_threshold=0.15,
+        iou_threshold=0.5,
+    )
+
+    assert detections == []
+
+
+def test_postprocess_confidence_boundary_and_non_finite_scores() -> None:
+    output = np.zeros((1, 7, 5), dtype=np.float32)
+    output[0, 0, :] = [100.0, 300.0, 500.0, 700.0, 900.0]
+    output[0, 1, :] = 500.0
+    output[0, 2:4, :] = 20.0
+    output[0, 4, :] = [0.149999, 0.15, 0.150001, np.nan, np.inf]
+    info = LetterboxInfo(
+        original_shape=(960, 960),
+        resized_shape=(960, 960),
+        ratio=(1.0, 1.0),
+        pad=(0, 0),
+        new_unpad=(960, 960),
+    )
+
+    detections = postprocess_output(
+        output,
+        info,
+        conf_threshold=0.15,
+        iou_threshold=0.5,
+    )
+
+    assert [detection.confidence for detection in detections] == pytest.approx(
+        [0.150001, 0.15]
+    )
+
+
+def test_postprocess_rejects_output_class_count_mismatch() -> None:
+    output = np.zeros((1, 8, 2), dtype=np.float32)
+    info = LetterboxInfo(
+        original_shape=(100, 100),
+        resized_shape=(960, 960),
+        ratio=(9.6, 9.6),
+        pad=(0, 0),
+        new_unpad=(960, 960),
+    )
+
+    with pytest.raises(ValueError, match="7 ONNX output channels"):
+        postprocess_output(output, info, conf_threshold=0.15, iou_threshold=0.5)
 
 
 def test_validate_onnx_output_shape() -> None:
@@ -164,9 +286,10 @@ def test_register_windows_dll_directories_noop_on_non_windows(monkeypatch) -> No
 
 
 class _FakeNode:
-    def __init__(self, name: str, shape: list[int]) -> None:
+    def __init__(self, name: str, shape: list[int], tensor_type: str = "tensor(float)") -> None:
         self.name = name
         self.shape = shape
+        self.type = tensor_type
 
 
 class _FakeSession:
@@ -219,6 +342,33 @@ def test_onnx_detector_cpu_request_skips_torch_cuda_preload(monkeypatch, tmp_pat
 
     assert detector.using_cuda is False
     assert detector.cuda_preload_attempted is False
+
+
+def test_onnx_detector_rejects_non_float_output(monkeypatch, tmp_path) -> None:
+    model = tmp_path / "best.onnx"
+    model.write_bytes(b"fake")
+
+    class Float16OutputSession(_FakeSession):
+        def get_outputs(self) -> list[_FakeNode]:
+            return [_FakeNode("output0", [1, 7, 18900], "tensor(float16)")]
+
+    _install_fake_onnxruntime(monkeypatch, Float16OutputSession)
+
+    with pytest.raises(ValueError, match=r"output dtype tensor\(float\)"):
+        OnnxDetector(
+            model,
+            requested_provider="CPUExecutionProvider",
+            register_windows_dlls=False,
+        )._load_session()
+
+
+def test_onnx_detector_rejects_wrong_fixed_batch_and_output_channels() -> None:
+    detector = OnnxDetector("unused.onnx")
+
+    with pytest.raises(ValueError, match="input batch dimension 1"):
+        detector._validate_input_shape([2, 3, 960, 960])
+    with pytest.raises(ValueError, match="output channel dimension 7"):
+        detector._validate_output_shape([1, 8, 18900])
 
 
 def test_onnx_detector_require_cuda_raises_on_fallback(monkeypatch, tmp_path) -> None:

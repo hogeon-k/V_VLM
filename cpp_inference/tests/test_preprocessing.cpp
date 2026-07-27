@@ -23,6 +23,32 @@ void test_letterbox_scale_and_padding() {
     require(result.pad_top == 240 && result.pad_bottom == 240, "y padding mismatch");
 }
 
+void test_letterbox_matches_python_half_to_even_rounding() {
+    const cv::Mat landscape(718, 1280, CV_8UC3, cv::Scalar(0, 0, 0));
+    const pcb_vision::LetterboxResult landscape_result =
+        pcb_vision::letterbox_resize(landscape, 960, 960);
+    require(
+        landscape_result.resized_width == 960 && landscape_result.resized_height == 538,
+        "landscape half-to-even resize mismatch"
+    );
+    require(
+        landscape_result.pad_top == 211 && landscape_result.pad_bottom == 211,
+        "landscape padding mismatch"
+    );
+
+    const cv::Mat portrait(1280, 718, CV_8UC3, cv::Scalar(0, 0, 0));
+    const pcb_vision::LetterboxResult portrait_result =
+        pcb_vision::letterbox_resize(portrait, 960, 960);
+    require(
+        portrait_result.resized_width == 538 && portrait_result.resized_height == 960,
+        "portrait half-to-even resize mismatch"
+    );
+    require(
+        portrait_result.pad_left == 211 && portrait_result.pad_right == 211,
+        "portrait padding mismatch"
+    );
+}
+
 void test_preprocess_rgb_chw_normalization() {
     cv::Mat image(1, 1, CV_8UC3);
     image.at<cv::Vec3b>(0, 0) = cv::Vec3b(0, 127, 255);
@@ -40,6 +66,7 @@ void test_preprocess_rgb_chw_normalization() {
 
 void run_preprocessing_tests() {
     test_letterbox_scale_and_padding();
+    test_letterbox_matches_python_half_to_even_rounding();
     test_preprocess_rgb_chw_normalization();
     std::cout << "preprocessing tests passed\n";
 }

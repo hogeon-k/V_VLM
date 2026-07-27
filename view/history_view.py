@@ -384,6 +384,9 @@ class HistoryView(QWidget):
             if result is not None:
                 self._render_detail(result)
 
+    def is_vlm_running(self) -> bool:
+        return self._vlm_thread is not None and self._vlm_thread.isRunning()
+
     def _replace_result(self, updated_result: object) -> None:
         updated_id = getattr(updated_result, "id", None)
         if updated_id is None:
