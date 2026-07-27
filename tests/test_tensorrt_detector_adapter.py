@@ -266,6 +266,37 @@ def test_tensorrt_adapter_reports_invalid_result_schema(monkeypatch, tmp_path) -
         detector.detect(image)
 
 
+@pytest.mark.parametrize(
+    "detection",
+    [
+        '{"class_id": true, "confidence": 0.5, "bbox": [1, 2, 3, 4]}',
+        '{"class_id": 0, "confidence": NaN, "bbox": [1, 2, 3, 4]}',
+        '{"class_id": 0, "confidence": 0.5, "bbox": [1, 2, Infinity, 4]}',
+    ],
+)
+def test_tensorrt_adapter_rejects_non_standard_numeric_values(
+    monkeypatch,
+    tmp_path,
+    detection: str,
+) -> None:
+    _, _, _, image = make_adapter_files(tmp_path)
+    detector = make_adapter(tmp_path)
+
+    def invalid(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        output_dir = Path(command[command.index("--output") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "result.json").write_text(
+            '{"detections": [' + detection + "]}",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(adapter_module.subprocess, "run", invalid)
+
+    with pytest.raises(TensorRtResultParseError):
+        detector.detect(image)
+
+
 def test_tensorrt_adapter_reports_non_utf8_result_json_separately(monkeypatch, tmp_path) -> None:
     _, _, _, image = make_adapter_files(tmp_path)
     detector = make_adapter(tmp_path)

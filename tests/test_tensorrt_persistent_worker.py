@@ -277,6 +277,50 @@ def test_inference_timeout_terminates_worker(monkeypatch, tmp_path) -> None:
     assert process.terminated is True
 
 
+def test_broken_pipe_terminates_worker_and_next_request_restarts(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    first = FakeProcess(ready(), successful_responder)
+
+    def broken_write(payload: bytes) -> int:
+        raise BrokenPipeError("worker exited")
+
+    first.stdin.write = broken_write
+    second = FakeProcess(ready(), successful_responder)
+    processes = [first, second]
+    monkeypatch.setattr(
+        worker_module.subprocess,
+        "Popen",
+        lambda *args, **kwargs: processes.pop(0),
+    )
+    worker = make_worker(tmp_path)
+
+    with pytest.raises(TensorRtWorkerProtocolError, match="Failed to write"):
+        worker.infer(tmp_path / "first.jpg", 0.15, 0.5)
+    response = worker.infer(tmp_path / "second.jpg", 0.15, 0.5)
+
+    assert first.terminated is True
+    assert response["ok"] is True
+    assert worker.pid == second.pid
+    worker.stop()
+
+
+def test_non_finite_request_value_is_not_written_and_terminates_worker(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    process = FakeProcess(ready(), successful_responder)
+    install_process(monkeypatch, process)
+    worker = make_worker(tmp_path)
+
+    with pytest.raises(TensorRtWorkerProtocolError, match="not valid JSON"):
+        worker.infer(tmp_path / "image.jpg", float("nan"), 0.5)
+
+    assert process.stdin.writes == []
+    assert process.terminated is True
+
+
 def test_worker_restarts_after_timeout(monkeypatch, tmp_path) -> None:
     first = FakeProcess(ready(), lambda request: None)
     second = FakeProcess(ready(), successful_responder)
@@ -306,6 +350,27 @@ def test_startup_timeout_terminates_worker(monkeypatch, tmp_path) -> None:
 
     with pytest.raises(TensorRtWorkerTimeoutError, match="startup timed out"):
         worker.start()
+
+    assert process.terminated is True
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+def test_non_standard_json_number_terminates_worker(
+    monkeypatch,
+    tmp_path,
+    constant: str,
+) -> None:
+    response = (
+        '{"request_id":"wrong","ok":true,"detections":[],"value":'
+        + constant
+        + "}"
+    ).encode("ascii")
+    process = FakeProcess(ready(), lambda request: response)
+    install_process(monkeypatch, process)
+    worker = make_worker(tmp_path)
+
+    with pytest.raises(TensorRtWorkerProtocolError, match="invalid JSON"):
+        worker.infer(tmp_path / "image.jpg", 0.15, 0.5)
 
     assert process.terminated is True
 

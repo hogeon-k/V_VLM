@@ -195,8 +195,8 @@ class TensorRtPersistentWorker:
                 request["output"] = str(Path(output_dir))
 
             started = time.perf_counter()
-            self._write_request(request)
             try:
+                self._write_request(request)
                 response = self._read_json_response(
                     timeout=self.inference_timeout_seconds,
                     context=f"infer request_id={request_id}",
@@ -282,12 +282,7 @@ class TensorRtPersistentWorker:
                 f"TensorRT worker is not running. stderr={self.stderr_excerpt()}"
             )
         payload = (
-            json.dumps(
-                request,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
-            + b"\n"
+            self._serialize_request(request) + b"\n"
         )
         try:
             process.stdin.write(payload)
@@ -320,8 +315,8 @@ class TensorRtPersistentWorker:
                 f"TensorRT worker emitted non-UTF-8 protocol output during {context}: {exc}"
             ) from exc
         try:
-            payload = json.loads(line)
-        except json.JSONDecodeError as exc:
+            payload = json.loads(line, parse_constant=self._reject_json_constant)
+        except (json.JSONDecodeError, ValueError) as exc:
             raise TensorRtWorkerProtocolError(
                 f"TensorRT worker emitted invalid JSON during {context}: {exc}; "
                 f"line={line[:500]!r}"
@@ -393,3 +388,21 @@ class TensorRtPersistentWorker:
             except UnicodeDecodeError:
                 continue
         return data.decode("utf-8", errors="replace")
+
+    @staticmethod
+    def _serialize_request(request: dict[str, object]) -> bytes:
+        try:
+            return json.dumps(
+                request,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise TensorRtWorkerProtocolError(
+                f"TensorRT worker request is not valid JSON: {exc}"
+            ) from exc
+
+    @staticmethod
+    def _reject_json_constant(value: str) -> object:
+        raise ValueError(f"non-standard numeric constant {value}")
