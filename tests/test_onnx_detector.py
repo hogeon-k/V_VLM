@@ -35,6 +35,39 @@ def test_letterbox_result_shape() -> None:
     assert info.pad == (0, 240)
 
 
+@pytest.mark.parametrize(
+    ("shape", "expected_unpad", "expected_pad"),
+    [
+        ((960, 960), (960, 960), (0, 0)),
+        ((718, 1280), (960, 538), (0, 211)),
+        ((1280, 718), (538, 960), (211, 0)),
+        ((719, 1280), (960, 539), (0, 210)),
+    ],
+)
+def test_letterbox_shape_rounding_and_padding(
+    shape: tuple[int, int],
+    expected_unpad: tuple[int, int],
+    expected_pad: tuple[int, int],
+) -> None:
+    image = np.zeros((*shape, 3), dtype=np.uint8)
+
+    padded, info = letterbox(image, new_shape=960)
+
+    assert padded.shape == (960, 960, 3)
+    assert info.new_unpad == expected_unpad
+    assert info.pad == expected_pad
+
+
+def test_letterbox_padding_color_and_invalid_inputs() -> None:
+    padded, _ = letterbox(np.zeros((100, 200, 3), dtype=np.uint8), new_shape=960)
+
+    assert np.all(padded[0, 0] == 114)
+    with pytest.raises(ValueError, match="non-empty image"):
+        letterbox(np.empty((0, 10, 3), dtype=np.uint8), new_shape=960)
+    with pytest.raises(ValueError, match="target shape must be positive"):
+        letterbox(np.zeros((10, 10, 3), dtype=np.uint8), new_shape=0)
+
+
 def test_preprocess_image_converts_bgr_to_contiguous_rgb_float32_nchw() -> None:
     image = np.array([[[0, 127, 255]]], dtype=np.uint8)
 
@@ -109,6 +142,28 @@ def test_postprocess_empty_detection() -> None:
     )
 
     detections = postprocess_output(output, info, conf_threshold=0.15, iou_threshold=0.5)
+
+    assert detections == []
+
+
+def test_postprocess_removes_clipped_zero_area_and_non_finite_boxes() -> None:
+    output = np.zeros((1, 7, 2), dtype=np.float32)
+    output[0, :, 0] = [100.0, 100.0, 20.0, 20.0, 0.9, 0.0, 0.0]
+    output[0, :, 1] = [np.nan, 500.0, 20.0, 20.0, 0.8, 0.0, 0.0]
+    info = LetterboxInfo(
+        original_shape=(100, 200),
+        resized_shape=(960, 960),
+        ratio=(4.8, 4.8),
+        pad=(0, 240),
+        new_unpad=(960, 480),
+    )
+
+    detections = postprocess_output(
+        output,
+        info,
+        conf_threshold=0.15,
+        iou_threshold=0.5,
+    )
 
     assert detections == []
 

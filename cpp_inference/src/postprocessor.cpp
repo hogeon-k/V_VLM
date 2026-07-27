@@ -76,7 +76,9 @@ std::vector<Detection> decode_yolo_output(
         const float height = output_data[3 * candidate_count + candidate_index];
         cv::Rect2f box = xywh_to_xyxy(x_center, y_center, width, height);
         box = restore_box_to_original_image(box, letterbox, original_size);
-        if (box.width <= 0.0F || box.height <= 0.0F) {
+        if (!std::isfinite(box.x) || !std::isfinite(box.y)
+            || !std::isfinite(box.width) || !std::isfinite(box.height)
+            || box.width <= 0.0F || box.height <= 0.0F) {
             continue;
         }
 

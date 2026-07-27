@@ -158,10 +158,14 @@ def letterbox(
     center: bool = True,
 ) -> tuple[np.ndarray, LetterboxInfo]:
     """Resize and pad like Ultralytics LetterBox for fixed-size detection input."""
+    if image.ndim < 2 or image.shape[0] <= 0 or image.shape[1] <= 0:
+        raise ValueError(f"Letterbox requires a non-empty image, got shape {image.shape}")
     if isinstance(new_shape, int):
         target_shape = (new_shape, new_shape)
     else:
         target_shape = new_shape
+    if len(target_shape) != 2 or target_shape[0] <= 0 or target_shape[1] <= 0:
+        raise ValueError(f"Letterbox target shape must be positive, got {target_shape}")
 
     shape = image.shape[:2]
     ratio = min(target_shape[0] / shape[0], target_shape[1] / shape[1])
@@ -169,8 +173,17 @@ def letterbox(
         ratio = min(ratio, 1.0)
 
     new_unpad = (round(shape[1] * ratio), round(shape[0] * ratio))
+    if new_unpad[0] <= 0 or new_unpad[1] <= 0:
+        raise ValueError(
+            f"Letterbox resize produced a non-positive size {new_unpad} "
+            f"for image shape {shape} and target {target_shape}"
+        )
     dw = target_shape[1] - new_unpad[0]
     dh = target_shape[0] - new_unpad[1]
+    if dw < 0 or dh < 0:
+        raise ValueError(
+            f"Letterbox resize exceeds target: resized={new_unpad}, target={target_shape}"
+        )
 
     if auto:
         dw = int(np.mod(dw, stride))
@@ -323,6 +336,16 @@ def postprocess_output(
     boxes = restore_boxes_to_original(boxes, letterbox_info)
     scores = confidences[candidates]
     classes = class_ids[candidates]
+    valid_boxes = (
+        np.all(np.isfinite(boxes), axis=1)
+        & (boxes[:, 2] > boxes[:, 0])
+        & (boxes[:, 3] > boxes[:, 1])
+    )
+    if not np.any(valid_boxes):
+        return []
+    boxes = boxes[valid_boxes]
+    scores = scores[valid_boxes]
+    classes = classes[valid_boxes]
     keep = class_aware_nms(boxes, scores, classes, iou_threshold)
 
     detections: list[Detection] = []

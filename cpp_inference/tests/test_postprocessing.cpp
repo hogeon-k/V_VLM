@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -89,6 +90,37 @@ void test_invalid_shape() {
     require(threw, "invalid output shape should throw");
 }
 
+void test_invalid_restored_boxes_are_removed() {
+    const std::vector<std::string> class_names = {"open_circuit", "short", "missing_hole"};
+    pcb_vision::LetterboxResult letterbox;
+    letterbox.scale = 4.8F;
+    letterbox.pad_x = 0.0F;
+    letterbox.pad_y = 240.0F;
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    std::vector<float> output = {
+        100.0F, nan,    // x center
+        100.0F, 500.0F, // y center
+        20.0F, 20.0F,   // width
+        20.0F, 20.0F,   // height
+        0.9F, 0.8F,     // class 0
+        0.0F, 0.0F,     // class 1
+        0.0F, 0.0F      // class 2
+    };
+
+    const std::vector<pcb_vision::Detection> detections = pcb_vision::decode_yolo_output(
+        output.data(),
+        {1, 7, 2},
+        letterbox,
+        cv::Size(200, 100),
+        0.15F,
+        0.7F,
+        class_names
+    );
+
+    require(detections.empty(), "invalid restored boxes should be removed");
+}
+
 }  // namespace
 
 int main() {
@@ -98,6 +130,7 @@ int main() {
         test_restore_box_float_coordinates();
         test_decode_and_class_aware_nms();
         test_invalid_shape();
+        test_invalid_restored_boxes_are_removed();
         std::cout << "postprocessing tests passed\n";
         return 0;
     } catch (const std::exception& exc) {
