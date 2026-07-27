@@ -1,6 +1,6 @@
 ﻿# V_VLM
 
-PySide6 기반 PCB Vision Inspection 데스크톱 프로젝트입니다. PCB 이미지를 입력받아 YOLO로 불량 위치와 유형을 탐지하고, NG 결과에 대해서는 Ollama 기반 VLM 분석을 수행한 뒤 검사 이력과 통계를 SQLite에 저장합니다.
+PySide6 기반 PCB Vision Inspection 데스크톱 프로젝트입니다. PCB 이미지를 입력받아 YOLO로 불량 위치와 유형을 탐지한 뒤 검사 결과를 먼저 SQLite에 저장합니다. 저장된 NG 검사 이력을 사용자가 선택해 VLM 분석을 요청하면 Ollama 기반 설명을 생성하고 같은 검사 이력에 결과를 갱신합니다.
 
 YOLO + Ollama VLM 터미널 검사 가이드는 [docs/yolo_vlm_terminal.md](C:/workspace/V_VLM/docs/yolo_vlm_terminal.md)를 참고하세요.
 
@@ -18,7 +18,8 @@ YOLO + Ollama VLM 터미널 검사 가이드는 [docs/yolo_vlm_terminal.md](C:/w
 ## 주요 기능
 
 - PCB 이미지 검사 화면
-- YOLO Bounding Box 결과 이미지 생성
+- PyTorch와 TensorRT backend의 YOLO Bounding Box 결과 이미지 생성
+- Python ONNX Runtime backend의 detection 기반 OK/NG 판정 및 저장
 - Ollama VLM 기반 NG 이미지 분석
 - SQLite 검사 이력 저장 및 상세 조회
 - 검사 이력 삭제
@@ -29,27 +30,53 @@ YOLO + Ollama VLM 터미널 검사 가이드는 [docs/yolo_vlm_terminal.md](C:/w
 ## 시스템 구조
 
 ```text
-PySide6 GUI
+[PySide6 GUI 기본 흐름]
+
+이미지 폴더 선택
     |
-ViewModel / InspectionService
-    +-- YoloService / PyTorch Detector
-    +-- OnnxDetector / ONNX Runtime Detector
+하위 폴더를 포함한 이미지 목록 수집
+    |
+선택된 YOLO Backend
+    +-- YoloDetector / PyTorch
+    +-- OnnxDetector / Python ONNX Runtime
     +-- TensorRtDetectorAdapter
-            |
-            | UTF-8 JSON Lines
-            v
-       C++ Persistent Worker
-            |
-       TensorRT Engine
+             |
+             | UTF-8 JSON Lines
+             v
+        C++ Persistent Worker
+             |
+        TensorRT Engine
     |
-YOLO Detection Result
+Detection 기반 OK/NG 판정
     |
-NG Crop / Montage
+inspections와 defects를 SQLite에 저장
     |
-Ollama VLM
+메인 검사 GUI 갱신
     |
-SQLite Inspection History
+이력 화면에서 저장된 NG 검사 선택 및 VLM 생성
+    |
+전체 이미지 + 앞 2개 Detection Crop Montage
+    |
+Ollama VLM /api/chat
+    |
+JSON 파싱과 구조·Detection 개수·ID 검증
+    |
+정상 설명 또는 YOLO 기반 Fallback 설명을 inspections에 저장
+    |
+이력 GUI 갱신
+
+[통합 서비스 경로]
+
+InspectionService.inspect()
+    |
+YOLO 탐지 -> NG이면 VLM 즉시 실행 -> inspections와 defects 저장
 ```
+
+현재 GUI의 운영 backend는 PyTorch, Python ONNX Runtime, C++ TensorRT입니다. C++ ONNX Runtime 실행 경로는 단일 이미지 검증과 Python ONNX Runtime 결과 비교를 위한 CLI이며 GUI backend에는 연결되어 있지 않습니다. 4-backend 성능 비교도 운영 GUI가 아니라 독립 benchmark 스크립트에서 수행합니다.
+
+현재 PySide6 메인 GUI는 `InspectionService.inspect()`가 아니라 `inspect_image()`를 호출합니다. `inspect_image()`는 `inspect_yolo_only()`로 위임하므로 메인 검사 중에는 VLM을 자동 호출하지 않고, YOLO 판정과 SQLite 저장을 마친 뒤 GUI를 갱신합니다. `InspectionService.inspect()`에는 YOLO와 VLM을 연속 실행하는 통합 경로가 유지되어 있으며, `scripts/test_yolo_vlm.py`의 CLI 통합 실행과 `tests/test_inspection_service.py`에서 사용됩니다.
+
+이력 화면은 앱 시작 시 검사 기록을 조회하지만 탭 전환만으로 자동 reload하지 않습니다. 새 검사 결과는 메인 검사 완료 후 DB에 저장되며, 이력 화면에서는 검색 또는 reload를 수행해 최신 기록을 조회합니다.
 
 ## 기술 스택
 
@@ -122,6 +149,16 @@ GET /api/tags
 
 Ollama를 종료한 뒤 시스템 화면에서 상태 새로고침을 누르면 VLM 상태가 `연결 실패`로 표시되어야 합니다.
 
+### VLM 실행 및 JSON 검증
+
+메인 검사 과정에서는 VLM을 자동 실행하지 않습니다. 이력 화면에서 저장된 NG 검사를 선택하고 `VLM 설명 생성` 버튼을 누르면 별도 작업 스레드가 해당 inspection과 defects를 조회하고 `vlm_status`를 `PROCESSING`으로 갱신한 뒤 Ollama `/api/chat`을 호출합니다.
+
+기본 `full_montage` 모드에서는 전체 이미지와 YOLO detection 순서 기준 앞 2개 영역으로 만든 crop montage를 함께 VLM에 전달합니다. PyTorch와 TensorRT backend에서는 Bounding Box가 표시된 annotated 결과 이미지를 전체 이미지와 montage 생성 기준으로 사용합니다. Python ONNX Runtime backend에서는 annotated 결과 이미지가 없으므로 원본 이미지와 원본 기반 montage를 사용합니다.
+
+Ollama 요청에는 `vlm/response_schema.py`의 JSON Schema를 `format`으로 전달합니다. 최상위 필수 필드는 `final_judgment`, `detections`, `summary`이며, 각 detection에는 `detection_id`, `visual_feature`, `visibility`, `review_required`가 필요합니다. 응답 parser는 JSON 구조, 허용되지 않은 추가 필드, detection 개수, 필수 필드와 타입, detection ID 순서 `1..N`을 다시 검증합니다. 여기서 `N`은 전체 YOLO detection이 아니라 VLM에 전달하도록 제한한 detection 개수이며 기본 최대값은 2입니다.
+
+JSON 파싱 또는 구조 검증에 실패하면 YOLO 결과를 기준으로 fallback 설명을 생성합니다. Ollama 빈 응답, content 오류, `ValueError` 또는 `RuntimeError`도 `VlmService`의 재시도 대상이며, 재시도 후 복구되지 않으면 fallback 설명으로 변환됩니다. 정상 JSON 설명과 fallback 설명은 모두 현재 `COMPLETED` 상태로 저장됩니다. VLM 입력 이미지 누락이나 이미지 준비 오류처럼 `VlmService` 밖으로 예외가 전파된 경우에는 `FAILED` 상태와 오류 메시지를 저장합니다.
+
 ## 검사 이력 DB 구조
 
 검사 이력은 SQLite에 저장하며 기본 DB 파일은 `database/inspection_results.sqlite3`입니다. 스키마는 [repository/schema.sql](C:/workspace/V_VLM/repository/schema.sql)에 정의되어 있습니다.
@@ -141,7 +178,10 @@ Ollama를 종료한 뒤 시스템 화면에서 상태 새로고침을 누르면 
 | `result_image_path` | Bounding Box 결과 이미지 경로 |
 | `status` | 검사 상태 |
 | `defect_count` | 탐지된 불량 개수 |
+| `vlm_status` | VLM 상태: `NOT_REQUESTED`, `PROCESSING`, `COMPLETED`, `FAILED` |
 | `vlm_description` | 검사 단위 VLM 분석 결과 |
+| `vlm_error_message` | VLM 실행 경로 밖으로 전파되어 실패 처리된 예외 메시지 |
+| `vlm_updated_at` | VLM 상태 또는 결과를 마지막으로 갱신한 시각 |
 | `inspected_at` | 검사 시각 |
 
 `defects` 주요 컬럼:
@@ -155,6 +195,8 @@ Ollama를 종료한 뒤 시스템 화면에서 상태 새로고침을 누르면 
 | `vlm_description` | 불량 단위 VLM 분석 결과 |
 
 현재 기본 화면 흐름에서는 NG 검사 단위 VLM 결과를 `inspections.vlm_description`에 저장합니다. `defects.vlm_description`은 스키마와 저장소 코드에 존재하지만, 기본 VLM 생성 흐름에서는 불량별 개별 분석 결과가 아니라 검사 단위 설명을 사용합니다. 이 컬럼은 향후 불량별 분석 저장을 위한 확장 지점입니다.
+
+이력 화면의 VLM 실행은 `inspections.vlm_status`, `vlm_description`, `vlm_error_message`, `vlm_updated_at`을 갱신하며 `defects.vlm_description`은 개별 갱신하지 않습니다.
 
 `defects.inspection_id`는 `inspections.id`를 참조하며 `ON DELETE CASCADE`가 적용됩니다. 따라서 검사 이력 1건을 삭제하면 연결된 불량 상세 데이터도 함께 삭제됩니다.
 
@@ -320,9 +362,13 @@ ONNX 단독 평가 및 PyTorch 비교:
 
 ONNX Runtime은 `CUDAExecutionProvider`를 우선 사용하고 사용 불가하면 `CPUExecutionProvider`로 fallback합니다. 이 정보는 평가 결과의 `runtime.providers`에 기록됩니다.
 
+GUI에서 ONNX Runtime을 선택하면 `service/detector_backend_factory.py`가 Python `OnnxDetector`를 생성하므로 운영 검사 경로에 연결됩니다. 현재 `OnnxDetector.detect()`는 원본 이미지 경로와 detection 정보만 반환하고 annotated 결과 이미지를 생성하거나 `annotated_image_path`를 설정하지 않습니다. 따라서 메인 결과 이미지 패널과 이력의 YOLO 결과 이미지 영역은 비어 있으며, 원본 이미지는 메인 화면의 별도 현재 검사 이미지 영역에 표시됩니다. 이는 예외가 아니므로 detection 저장과 OK/NG 판정은 정상 동작합니다. 이력에서 VLM을 실행할 때 `result_image_path`가 없으면 원본 이미지로 fallback하며, backend 공통 annotation 후처리는 현재 없습니다.
+
 ## C++ ONNX 단일 이미지 추론
 
 `cpp_inference/`에는 `models/best.onnx`를 C++ ONNX Runtime으로 실행하는 단일 이미지 추론 CLI가 있습니다. Python 기준 구현(`service/onnx_detector.py`)과 동일하게 letterbox, BGR to RGB, HWC to CHW, `float32` 정규화, `[1, 7, 18900]` decode, class-aware NMS, 원본 좌표 복원을 적용합니다.
+
+이 C++ ONNX Runtime CLI는 현재 GUI의 backend factory에는 등록되어 있지 않습니다. standalone 단일 이미지 추론, Python/C++ 결과 비교와 정확도 검증, 배치 benchmark, ONNX Runtime CUDA 성능 측정에 사용합니다.
 
 빌드에는 Python wheel이 아니라 ONNX Runtime C/C++ 배포 패키지가 필요합니다. `ONNXRUNTIME_ROOT`는 `include/onnxruntime_cxx_api.h`, `lib/onnxruntime.lib`, Windows 기준 `bin/onnxruntime.dll`을 포함한 경로여야 합니다.
 
@@ -369,6 +415,8 @@ Python 검사 서비스는 검증된 C++ Native TensorRT CLI를 persistent subpr
 - `benchmarks/tensorrt/best_fp16.engine`
 - `models/model_metadata.json`
 
+위 경로는 `DetectorSettings`의 기본값이며 Qt `QSettings`와 GUI 추론 설정 화면에서 변경할 수 있습니다. TensorRT backend 실행에는 이 파일들뿐 아니라 CUDA runtime, TensorRT, ONNX Runtime, OpenCV 관련 runtime DLL이 필요합니다. 필요한 DLL은 실행 파일 인접 경로나 시스템 `PATH`에서 로드 가능해야 합니다.
+
 단일 검사 CLI 예:
 
 ```powershell
@@ -385,7 +433,7 @@ Python 검사 서비스는 검증된 C++ Native TensorRT CLI를 persistent subpr
   --device 0
 ```
 
-Worker는 시작 시 `ready` handshake를 반환하고, 각 `infer` 요청에 기존 result JSON과 같은 detection/timing schema를 한 줄 JSON으로 반환합니다. stdout은 프로토콜 전용이며 C++ 로그는 stderr로 분리됩니다. 탐지가 0개이면 기존 정책대로 OK로 처리되고, 탐지가 있으면 기존 OK/NG, crop montage, VLM, SQLite 저장 흐름을 그대로 사용합니다. annotated image 임시 산출물은 기본적으로 정리하며 VLM/DB에서 참조할 결과 이미지만 `data/result_images/`로 복사합니다.
+Worker는 시작 시 `ready` handshake를 반환하고, 각 `infer` 요청에 기존 result JSON과 같은 detection/timing schema를 한 줄 JSON으로 반환합니다. stdout은 프로토콜 전용이며 C++ 로그는 stderr로 분리됩니다. 탐지가 0개이면 OK, 탐지가 있으면 NG로 판정하며 YOLO 결과와 annotated image 경로를 SQLite에 먼저 저장합니다. 이후 사용자가 저장된 NG 검사 이력에서 VLM 실행을 요청하면 crop montage와 VLM 분석을 수행하고 같은 검사 이력의 VLM 상태와 설명을 갱신합니다. annotated image 임시 산출물은 기본적으로 정리하며 GUI/DB에서 참조할 결과 이미지만 `data/result_images/`로 복사합니다.
 
 Worker startup, timeout, crash 또는 JSONL protocol 오류는 warning 로그를 남기고 기존 one-shot CLI로 fallback합니다. 이미지 decode 같은 요청 단위 오류는 worker를 종료하거나 one-shot으로 재실행하지 않고 해당 요청의 명시적 오류로 반환합니다. fallback은 `DetectorSettings.tensorrt_fallback_to_oneshot`으로 끌 수 있고, persistent mode 자체는 `tensorrt_use_persistent_worker`로 제어합니다.
 
@@ -477,6 +525,8 @@ TensorRT를 선택하면 실행 파일, engine, precision, metadata, CUDA device
 - metadata 존재 및 `.json` 확장자
 - device ID 0 이상
 - precision `FP16` 또는 `FP32`
+
+Python 설정 단계의 검증 범위는 위 파일 존재, 확장자, device ID와 engine label입니다. 실제 C++ 실행 단계에서는 CUDA device 설정, engine deserialize, 입력·출력 tensor 개수, 이름, shape와 dtype을 추가로 검증합니다. metadata의 ONNX SHA256과 engine의 직접 대응 관계, 실제 engine 정밀도와 `engine_label`의 완전한 일치는 현재 검증하지 않습니다.
 
 저장한 설정은 다음 검사 시작 때 적용됩니다. 검사 화면에는 현재 적용될 backend가 `추론 Backend: ...` 형태로 표시됩니다. 기본값은 기존 호환성을 위해 `PyTorch`입니다.
 
