@@ -24,6 +24,7 @@ class DefectRepository:
             (
                 inspection_id,
                 str(getattr(defect, "defect_type", getattr(defect, "class_name", ""))),
+                int(getattr(defect, "class_id", -1)),
                 float(getattr(defect, "confidence")),
                 int(getattr(defect, "bbox_x1", getattr(defect, "x1"))),
                 int(getattr(defect, "bbox_y1", getattr(defect, "y1"))),
@@ -36,25 +37,26 @@ class DefectRepository:
 
         sql = """
             INSERT INTO defects (
-                inspection_id, defect_type, confidence,
+                inspection_id, defect_type, class_id, confidence,
                 bbox_x1, bbox_y1, bbox_x2, bbox_y2, vlm_description
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         if connection is not None:
             connection.executemany(sql, rows)
             return
 
         self.db_manager.initialize()
-        with self.db_manager.get_connection() as local_connection:
+        with self.db_manager.connection() as local_connection:
             local_connection.executemany(sql, rows)
 
     def find_by_inspection_id(self, inspection_id: int) -> list[Detection]:
         self.db_manager.initialize()
-        with self.db_manager.get_connection() as connection:
+        with self.db_manager.connection() as connection:
             rows = connection.execute(
                 """
-                SELECT defect_type, confidence, bbox_x1, bbox_y1, bbox_x2, bbox_y2, vlm_description
+                SELECT defect_type, class_id, confidence,
+                       bbox_x1, bbox_y1, bbox_x2, bbox_y2, vlm_description
                 FROM defects
                 WHERE inspection_id = ?
                 ORDER BY id
@@ -64,7 +66,7 @@ class DefectRepository:
 
         return [
             Detection(
-                class_id=-1,
+                class_id=row["class_id"],
                 class_name=row["defect_type"],
                 confidence=row["confidence"],
                 x1=row["bbox_x1"],

@@ -1,3 +1,8 @@
+import sqlite3
+from datetime import datetime
+
+import pytest
+
 from repository.db_manager import DBManager
 from repository.inspection_repository import InspectionRepository
 from model.defect_info import Detection
@@ -20,6 +25,16 @@ def test_db_manager_uses_configured_path(tmp_path) -> None:
     assert enabled == 1
 
 
+def test_db_manager_connection_context_closes_connection(tmp_path) -> None:
+    manager = DBManager(tmp_path / "inspection.sqlite3")
+
+    with manager.connection() as connection:
+        connection.execute("SELECT 1")
+
+    with pytest.raises(sqlite3.ProgrammingError):
+        connection.execute("SELECT 1")
+
+
 def test_repository_saves_and_loads_inspection_with_defects(tmp_path) -> None:
     manager = DBManager(tmp_path / "inspection.sqlite3")
     repository = InspectionRepository(manager)
@@ -38,6 +53,7 @@ def test_repository_saves_and_loads_inspection_with_defects(tmp_path) -> None:
     assert loaded.id == inspection_id
     assert loaded.status == "NG"
     assert loaded.defect_count == 1
+    assert loaded.defects[0].class_id == 0
     assert loaded.defects[0].defect_type == "short"
     assert loaded.vlm_description == "short near top-left"
     assert loaded.vlm_status == VLM_STATUS_COMPLETED
@@ -111,6 +127,61 @@ def test_repository_records_failed_vlm_without_removing_yolo_data(tmp_path) -> N
     assert loaded.vlm_error_message == "boom"
 
 
+def test_repository_updates_only_requested_vlm_row_and_rejects_missing_id(tmp_path) -> None:
+    manager = DBManager(tmp_path / "inspection.sqlite3")
+    repository = InspectionRepository(manager)
+    first_id = repository.save(
+        InspectionResult(source_image_path=tmp_path / "first.png", status="OK")
+    )
+    second_id = repository.save(
+        InspectionResult(source_image_path=tmp_path / "second.png", status="OK")
+    )
+
+    assert repository.update_vlm_result(
+        first_id,
+        VLM_STATUS_COMPLETED,
+        "first explanation",
+        None,
+    )
+    assert not repository.update_vlm_result(
+        999_999,
+        VLM_STATUS_COMPLETED,
+        "missing",
+        None,
+    )
+
+    first = repository.find_by_id(first_id)
+    second = repository.find_by_id(second_id)
+    assert first is not None
+    assert first.vlm_description == "first explanation"
+    assert second is not None
+    assert second.vlm_description is None
+
+
+def test_repository_searches_newest_inspection_first(tmp_path) -> None:
+    manager = DBManager(tmp_path / "inspection.sqlite3")
+    repository = InspectionRepository(manager)
+    repository.save(
+        InspectionResult(
+            source_image_path=tmp_path / "old.png",
+            status="OK",
+            inspected_at=datetime(2026, 7, 1, 9, 0, 0),
+        )
+    )
+    repository.save(
+        InspectionResult(
+            source_image_path=tmp_path / "new.png",
+            status="OK",
+            inspected_at=datetime(2026, 7, 2, 9, 0, 0),
+        )
+    )
+
+    assert [item.image_name for item in repository.search(limit=2)] == [
+        "new.png",
+        "old.png",
+    ]
+
+
 def test_db_manager_adds_vlm_columns_to_existing_schema(tmp_path) -> None:
     db_path = tmp_path / "legacy.sqlite3"
     manager = DBManager(db_path)
@@ -165,3 +236,50 @@ def test_db_manager_adds_vlm_columns_to_existing_schema(tmp_path) -> None:
     new_loaded = repository.find_by_id(2)
     assert new_loaded is not None
     assert new_loaded.vlm_status == VLM_STATUS_NOT_REQUESTED
+    with manager.connection() as connection:
+        defect_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(defects)")
+        }
+    assert "class_id" in defect_columns
+
+
+def test_repository_rolls_back_inspection_when_defect_insert_fails(tmp_path) -> None:
+    manager = DBManager(tmp_path / "inspection.sqlite3")
+    repository = InspectionRepository(manager)
+    manager.initialize()
+    with manager.connection() as connection:
+        connection.execute(
+            """
+            CREATE TRIGGER fail_selected_defect
+            BEFORE INSERT ON defects
+            WHEN NEW.defect_type = 'force_failure'
+            BEGIN
+                SELECT RAISE(ABORT, 'forced defect failure');
+            END;
+            """
+        )
+
+    result = InspectionResult(
+        source_image_path=tmp_path / "failed.png",
+        status="NG",
+        detections=[
+            Detection(0, "short", 0.9, 1, 2, 3, 4),
+            Detection(1, "force_failure", 0.8, 5, 6, 7, 8),
+        ],
+    )
+
+    with pytest.raises(sqlite3.DatabaseError):
+        repository.save(result)
+
+    with manager.connection() as connection:
+        inspection_count = connection.execute(
+            "SELECT COUNT(*) FROM inspections"
+        ).fetchone()[0]
+        defect_count = connection.execute("SELECT COUNT(*) FROM defects").fetchone()[0]
+    assert inspection_count == 0
+    assert defect_count == 0
+
+    inspection_id = repository.save(
+        InspectionResult(source_image_path=tmp_path / "ok.png", status="OK")
+    )
+    assert repository.find_by_id(inspection_id) is not None
