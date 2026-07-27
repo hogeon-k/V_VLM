@@ -34,7 +34,13 @@ def create_yolo_service_from_settings(detector_settings: DetectorSettings) -> Yo
         return YoloService(detector)
 
     if detector_settings.detector_backend == "onnx":
-        detector = OnnxDetector(resolve_project_path("models/best.onnx"))
+        config = YoloConfig(model_path=YOLO_MODEL_PATH)
+        detector = OnnxDetector(
+            resolve_project_path("models/best.onnx"),
+            imgsz=config.image_size,
+            conf=config.confidence_threshold,
+            iou=config.iou_threshold,
+        )
         logger.info(
             "ONNX backend selected: implementation=%s model=%s provider=%s",
             detector.__class__.__name__,

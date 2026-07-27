@@ -131,6 +131,16 @@ def test_class_aware_nms_suppresses_same_class_overlap() -> None:
     assert keep == [0]
 
 
+def test_class_aware_nms_keeps_box_at_exact_iou_threshold() -> None:
+    boxes = np.array([[0, 0, 10, 10], [5, 0, 15, 10]], dtype=np.float32)
+    scores = np.array([0.9, 0.8], dtype=np.float32)
+    class_ids = np.array([0, 0], dtype=np.int32)
+    boundary_iou = bbox_iou(boxes[0], boxes[1])
+
+    assert class_aware_nms(boxes, scores, class_ids, boundary_iou) == [0, 1]
+    assert class_aware_nms(boxes, scores, class_ids, boundary_iou - 1e-6) == [0]
+
+
 def test_postprocess_empty_detection() -> None:
     output = np.zeros((1, 7, 2), dtype=np.float32)
     info = LetterboxInfo(
@@ -166,6 +176,32 @@ def test_postprocess_removes_clipped_zero_area_and_non_finite_boxes() -> None:
     )
 
     assert detections == []
+
+
+def test_postprocess_confidence_boundary_and_non_finite_scores() -> None:
+    output = np.zeros((1, 7, 5), dtype=np.float32)
+    output[0, 0, :] = [100.0, 300.0, 500.0, 700.0, 900.0]
+    output[0, 1, :] = 500.0
+    output[0, 2:4, :] = 20.0
+    output[0, 4, :] = [0.149999, 0.15, 0.150001, np.nan, np.inf]
+    info = LetterboxInfo(
+        original_shape=(960, 960),
+        resized_shape=(960, 960),
+        ratio=(1.0, 1.0),
+        pad=(0, 0),
+        new_unpad=(960, 960),
+    )
+
+    detections = postprocess_output(
+        output,
+        info,
+        conf_threshold=0.15,
+        iou_threshold=0.5,
+    )
+
+    assert [detection.confidence for detection in detections] == pytest.approx(
+        [0.150001, 0.15]
+    )
 
 
 def test_postprocess_rejects_output_class_count_mismatch() -> None:

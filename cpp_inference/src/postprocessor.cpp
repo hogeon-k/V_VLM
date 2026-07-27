@@ -59,14 +59,16 @@ std::vector<Detection> decode_yolo_output(
     for (int64_t candidate_index = 0; candidate_index < candidate_count; ++candidate_index) {
         int best_class = 0;
         float best_score = output_data[4 * candidate_count + candidate_index];
+        bool scores_are_finite = std::isfinite(best_score);
         for (int64_t class_offset = 1; class_offset < class_count; ++class_offset) {
             const float score = output_data[(4 + class_offset) * candidate_count + candidate_index];
+            scores_are_finite = scores_are_finite && std::isfinite(score);
             if (score > best_score) {
                 best_score = score;
                 best_class = static_cast<int>(class_offset);
             }
         }
-        if (best_score < confidence_threshold) {
+        if (!scores_are_finite || best_score < confidence_threshold) {
             continue;
         }
 

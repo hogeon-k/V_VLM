@@ -328,7 +328,7 @@ def postprocess_output(
     class_scores = predictions[:, 4:]
     class_ids = np.argmax(class_scores, axis=1).astype(np.int32)
     confidences = np.max(class_scores, axis=1).astype(np.float32)
-    candidates = confidences >= conf_threshold
+    candidates = np.all(np.isfinite(class_scores), axis=1) & (confidences >= conf_threshold)
     if not np.any(candidates):
         return []
 

@@ -121,6 +121,38 @@ void test_invalid_restored_boxes_are_removed() {
     require(detections.empty(), "invalid restored boxes should be removed");
 }
 
+void test_confidence_boundary_and_non_finite_scores() {
+    const std::vector<std::string> class_names = {"open_circuit", "short", "missing_hole"};
+    pcb_vision::LetterboxResult letterbox;
+    letterbox.scale = 1.0F;
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    std::vector<float> output = {
+        10.0F, 30.0F, 50.0F, 70.0F, 90.0F,       // x center
+        10.0F, 10.0F, 10.0F, 10.0F, 10.0F,       // y center
+        5.0F, 5.0F, 5.0F, 5.0F, 5.0F,            // width
+        5.0F, 5.0F, 5.0F, 5.0F, 5.0F,            // height
+        0.149999F, 0.15F, 0.150001F, nan, inf,    // class 0
+        0.0F, 0.0F, 0.0F, 0.0F, 0.0F,            // class 1
+        0.0F, 0.0F, 0.0F, 0.0F, 0.0F             // class 2
+    };
+
+    const std::vector<pcb_vision::Detection> detections = pcb_vision::decode_yolo_output(
+        output.data(),
+        {1, 7, 5},
+        letterbox,
+        cv::Size(100, 100),
+        0.15F,
+        0.5F,
+        class_names
+    );
+
+    require(detections.size() == 2, "threshold equality should pass and non-finite scores should be removed");
+    require(std::abs(detections[0].confidence - 0.150001F) < 1e-7F, "above-threshold score mismatch");
+    require(std::abs(detections[1].confidence - 0.15F) < 1e-7F, "threshold-equal score mismatch");
+}
+
 }  // namespace
 
 int main() {
@@ -131,6 +163,7 @@ int main() {
         test_decode_and_class_aware_nms();
         test_invalid_shape();
         test_invalid_restored_boxes_are_removed();
+        test_confidence_boundary_and_non_finite_scores();
         std::cout << "postprocessing tests passed\n";
         return 0;
     } catch (const std::exception& exc) {
