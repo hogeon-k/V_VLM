@@ -27,6 +27,7 @@ class InspectionView(QWidget):
         self.viewmodel = viewmodel or InspectionViewModel()
         self._paused = False
         self._stop_requested = False
+        self._worker_failed = False
         self._total_count = 0
         self._current_index = 0
 
@@ -138,7 +139,7 @@ class InspectionView(QWidget):
         self.viewmodel.started.connect(self._on_started)
         self.viewmodel.image_started.connect(self._on_image_started)
         self.viewmodel.result_ready.connect(self._on_result_ready)
-        self.viewmodel.error.connect(self._show_error)
+        self.viewmodel.error.connect(self._on_worker_error)
         self.viewmodel.finished.connect(self._on_finished)
 
     def _choose_folder(self) -> None:
@@ -196,6 +197,10 @@ class InspectionView(QWidget):
         if self.viewmodel.is_running():
             self._stop_requested = True
             self.viewmodel.stop()
+            self._paused = False
+            self._set_status("정지 중")
+            self._apply_stopping_state()
+            return
         self._paused = False
         self._current_index = 0
         self.progress_bar.setValue(0)
@@ -204,6 +209,7 @@ class InspectionView(QWidget):
         self._apply_idle_state()
 
     def _on_started(self, total: int) -> None:
+        self._worker_failed = False
         self.backend_label.setText(self._backend_label_text())
         self._total_count = total
         self._current_index = 0
@@ -249,11 +255,18 @@ class InspectionView(QWidget):
             self.progress_bar.setValue(0)
             self.progress_label.setText(f"검사 진행률: 0 / {self._total_count}")
             self._set_status("대기")
+        elif self._worker_failed:
+            self._set_status("오류")
         else:
             self.progress_bar.setValue(self._total_count)
             self.progress_label.setText(f"검사 진행률: {self._total_count} / {self._total_count}")
             self._set_status("완료")
+        self._worker_failed = False
         self._apply_idle_state()
+
+    def _on_worker_error(self, message: str) -> None:
+        self._worker_failed = True
+        self._show_error(message)
 
     def _show_error(self, message: str) -> None:
         self._set_status("오류")
@@ -288,6 +301,13 @@ class InspectionView(QWidget):
         self.start_button.setText("검사 재개")
         self.pause_button.setEnabled(False)
         self.stop_button.setEnabled(True)
+        self.choose_button.setEnabled(False)
+
+    def _apply_stopping_state(self) -> None:
+        self.start_button.setEnabled(False)
+        self.start_button.setText("정지 중")
+        self.pause_button.setEnabled(False)
+        self.stop_button.setEnabled(False)
         self.choose_button.setEnabled(False)
 
     def _set_status(self, status: str) -> None:

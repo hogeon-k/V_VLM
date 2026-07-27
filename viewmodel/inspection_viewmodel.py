@@ -38,12 +38,15 @@ class InspectionWorker(QObject):
 
                 self.image_started.emit(str(image_path), index, len(self.image_paths))
                 result = self.inspection_service.inspect_image(image_path)
+                if self._stop_requested:
+                    break
                 self.result_ready.emit(result)
 
-                for _ in range(20):
-                    if self._stop_requested or self._pause_requested:
-                        break
-                    QThread.msleep(100)
+                if index < len(self.image_paths):
+                    for _ in range(20):
+                        if self._stop_requested or self._pause_requested:
+                            break
+                        QThread.msleep(100)
         except Exception as exc:
             self.error.emit(str(exc))
         finally:
@@ -160,11 +163,15 @@ class InspectionViewModel(QObject):
         if callable(close):
             close()
 
-    def shutdown(self) -> None:
+    def shutdown(self) -> bool:
+        if self.is_running():
+            self.stop()
+            return False
         self.stop()
         close = getattr(self.inspection_service, "close", None)
         if callable(close):
             close()
         self._active_detector_settings = None
+        return True
 
     close = shutdown
