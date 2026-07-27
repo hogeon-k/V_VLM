@@ -98,6 +98,7 @@ def test_vlm_response_schema_describes_visual_feature_quality_hint() -> None:
 
     assert visual_feature_schema["minLength"] == 1
     assert "YOLO 클래스명만 쓰지 말 것" in visual_feature_schema["description"]
+    assert VLM_RESPONSE_SCHEMA["properties"]["summary"]["minLength"] == 1
 
 
 def test_vlm_client_context_error_is_not_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -256,3 +257,21 @@ def test_vlm_client_preserves_done_false_empty_content_metadata(monkeypatch: pyt
     assert metadata.prompt_eval_duration == 0
     assert metadata.eval_duration == 0
     assert metadata.response_source == "none"
+
+
+def test_vlm_client_rejects_done_false_even_with_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    install_fake_post(
+        monkeypatch,
+        {
+            "message": {"content": '{"summary":"partial"}'},
+            "done": False,
+        },
+    )
+
+    with pytest.raises(OllamaContentError, match="done=false") as exc_info:
+        VlmClient().generate("prompt", image_bytes=b"image")
+
+    assert exc_info.value.metadata.done is False
+    assert exc_info.value.metadata.content_length == len('{"summary":"partial"}')

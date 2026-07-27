@@ -41,6 +41,7 @@ VLM_RESPONSE_SCHEMA = {
         },
         "summary": {
             "type": "string",
+            "minLength": 1,
         },
     },
     "required": [

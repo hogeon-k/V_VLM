@@ -52,6 +52,22 @@ def test_prompt_builder_includes_korean_rules_and_detection_metadata() -> None:
     assert "바운딩 박스: (2711, 946, 2739, 979)" in prompt
     assert "탐지 2" in prompt
     assert "위치: upper right" in prompt
+    assert prompt.count("YOLO 신뢰도 0.70 미만입니다.") == 1
+    assert (
+        "시각적 특징이 불명확하면 visibility=\"unclear\", "
+        "review_required=true로 응답하세요."
+    ) in prompt
+
+
+def test_prompt_builder_does_not_mark_threshold_or_higher_as_low_confidence() -> None:
+    result = YoloResult(
+        image_path="sample.jpg",
+        detections=[Detection(0, "short", 0.70, 1, 2, 3, 4)],
+    )
+
+    prompt = PromptBuilder().build_defect_prompt(result)
+
+    assert "YOLO 신뢰도 0.70 미만입니다." not in prompt
 
 
 def test_prompt_builder_uses_location_unavailable_when_missing() -> None:

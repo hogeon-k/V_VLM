@@ -142,7 +142,11 @@ class VlmResponseParser:
     def parse_response(self, raw_response: str, yolo_result: YoloResult) -> VlmParseResult:
         """Parse structured JSON and fall back to YOLO-authoritative text on failure."""
         try:
-            parsed_response = parse_vlm_response(raw_response, yolo_result.defect_count)
+            parsed_response = parse_vlm_response(
+                raw_response,
+                yolo_result.defect_count,
+                expected_final_judgment="NG" if yolo_result.is_ng else "OK",
+            )
             quality_info = evaluate_response_quality(parsed_response, yolo_result)
             corrected_response = apply_semantic_corrections(parsed_response, yolo_result)
             quality_info = _merge_corrected_summary_quality(
@@ -178,13 +182,18 @@ class VlmResponseParser:
         return self.parse_response(response_text, yolo_result).formatted_response
 
 
-def parse_vlm_response(raw_response: str, expected_detection_count: int) -> ParsedVlmResponse:
+def parse_vlm_response(
+    raw_response: str,
+    expected_detection_count: int,
+    expected_final_judgment: str | None = None,
+) -> ParsedVlmResponse:
     """Validate the exact JSON structure expected from the VLM."""
     if not raw_response or not raw_response.strip():
         raise ValueError("Empty VLM response")
 
+    json_payload = _extract_json_payload(raw_response)
     try:
-        data = json.loads(raw_response)
+        data = json.loads(json_payload)
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid JSON: {exc.msg}") from exc
 
@@ -196,6 +205,14 @@ def parse_vlm_response(raw_response: str, expected_detection_count: int) -> Pars
     final_judgment = data.get("final_judgment")
     if final_judgment not in {"OK", "NG"}:
         raise ValueError(f"Invalid final_judgment: {final_judgment}")
+    if (
+        expected_final_judgment is not None
+        and final_judgment != expected_final_judgment
+    ):
+        raise ValueError(
+            "Final judgment mismatch: "
+            f"expected={expected_final_judgment}, actual={final_judgment}"
+        )
 
     detections = data.get("detections")
     if not isinstance(detections, list):
@@ -231,6 +248,9 @@ def parse_vlm_response(raw_response: str, expected_detection_count: int) -> Pars
         visual_feature = item["visual_feature"]
         if not isinstance(visual_feature, str):
             raise ValueError(f"Invalid visual_feature for detection {detection_id}")
+        visual_feature = visual_feature.strip()
+        if not visual_feature:
+            raise ValueError(f"Empty visual_feature for detection {detection_id}")
 
         visibility = item["visibility"]
         if visibility not in {"clear", "unclear"}:
@@ -243,7 +263,7 @@ def parse_vlm_response(raw_response: str, expected_detection_count: int) -> Pars
         parsed_detections.append(
             ParsedVlmDetection(
                 detection_id=detection_id,
-                visual_feature=visual_feature.strip() or DEFAULT_VISUAL_FEATURE,
+                visual_feature=visual_feature,
                 visibility=visibility,
                 review_required=review_required,
             )
@@ -257,13 +277,26 @@ def parse_vlm_response(raw_response: str, expected_detection_count: int) -> Pars
     summary = data.get("summary")
     if not isinstance(summary, str):
         raise ValueError("Missing or invalid summary field")
+    summary = summary.strip()
+    if not summary:
+        raise ValueError("Empty summary field")
 
     return ParsedVlmResponse(
         final_judgment=final_judgment,
         detections=parsed_detections,
-        summary=summary.strip(),
+        summary=summary,
         raw_data=data,
     )
+
+
+def _extract_json_payload(raw_response: str) -> str:
+    stripped = raw_response.strip()
+    fenced = re.fullmatch(
+        r"```(?:json)?[ \t]*\r?\n(?P<payload>[\s\S]*?)\r?\n```",
+        stripped,
+        flags=re.IGNORECASE,
+    )
+    return fenced.group("payload").strip() if fenced else stripped
 
 
 def evaluate_response_quality(

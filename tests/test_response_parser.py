@@ -58,9 +58,47 @@ def test_parse_valid_json_succeeds() -> None:
     assert parsed.detections[0].visibility == "clear"
 
 
+@pytest.mark.parametrize(
+    "fenced",
+    [
+        "```json\n{payload}\n```",
+        "```\n{payload}\n```",
+    ],
+)
+def test_parse_strips_complete_json_code_fence(fenced: str) -> None:
+    parsed = parse_vlm_response(
+        fenced.format(payload=valid_raw_response()),
+        expected_detection_count=1,
+        expected_final_judgment="NG",
+    )
+
+    assert parsed.final_judgment == "NG"
+    assert parsed.detections[0].detection_id == 1
+
+
 def test_parse_invalid_json_raises() -> None:
     with pytest.raises(ValueError, match="Invalid JSON"):
         parse_vlm_response("{", expected_detection_count=1)
+
+
+@pytest.mark.parametrize(
+    "raw_response",
+    [
+        "Here is the result:\n" + valid_raw_response(),
+        valid_raw_response() + "\nDone.",
+        valid_raw_response() + "\n" + valid_raw_response(),
+    ],
+)
+def test_parse_does_not_extract_json_from_surrounding_prose_or_multiple_objects(
+    raw_response: str,
+) -> None:
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        parse_vlm_response(raw_response, expected_detection_count=1)
+
+
+def test_parse_rejects_array_root() -> None:
+    with pytest.raises(ValueError, match="root must be an object"):
+        parse_vlm_response("[]", expected_detection_count=0)
 
 
 def test_parse_missing_required_field_raises() -> None:
@@ -110,6 +148,40 @@ def test_parse_reordered_detection_ids_raise() -> None:
 def test_parse_empty_response_raises() -> None:
     with pytest.raises(ValueError, match="Empty VLM response"):
         parse_vlm_response("  ", expected_detection_count=1)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("visual_feature", "   ", "Empty visual_feature"),
+        ("summary", "\t", "Empty summary"),
+    ],
+)
+def test_parse_rejects_whitespace_only_required_text(
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    data = json.loads(valid_raw_response())
+    if field == "summary":
+        data[field] = value
+    else:
+        data["detections"][0][field] = value
+
+    with pytest.raises(ValueError, match=message):
+        parse_vlm_response(json.dumps(data), expected_detection_count=1)
+
+
+def test_parser_rejects_vlm_judgment_that_conflicts_with_yolo() -> None:
+    data = json.loads(valid_raw_response())
+    data["final_judgment"] = "OK"
+
+    result = VlmResponseParser().parse_response(json.dumps(data), make_result())
+
+    assert result.parse_success is False
+    assert result.fallback_used is True
+    assert result.parse_error == "Final judgment mismatch: expected=NG, actual=OK"
+    assert "최종 판정: NG" in result.formatted_response
 
 
 def test_parser_result_records_success_metadata_and_formats_text() -> None:
