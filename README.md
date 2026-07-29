@@ -11,7 +11,7 @@ YOLO + Ollama VLM 터미널 검사 가이드는 [docs/yolo_vlm_terminal.md](C:/w
 - Native C++ TensorRT FP32/FP16 추론 backend 구현
 - TensorRT engine 재사용을 위한 persistent subprocess worker 구현
 - PyTorch CUDA, ONNX Runtime CUDA, TensorRT FP32, TensorRT FP16 4-backend 비교
-- TensorRT FP16 순수 추론 평균 2.27 ms 확인
+- TensorRT FP16 inference-stage 측정값 평균 2.27 ms 확인
 - 파일 기반 Python-C++ 통합 구조에서 host end-to-end 병목 확인
 - 2026-07-26 기준 전체 테스트 443 passed 기록
 
@@ -214,7 +214,40 @@ JSON 파싱 또는 구조 검증에 실패하면 YOLO 결과를 기준으로 fal
 
 즉, 화면 번호는 사용자가 보기 쉬운 순번이고, DB `id`는 내부 식별자입니다.
 
-## Pascal VOC XML 라벨을 YOLO TXT로 변환
+## 개발 및 검증 흐름
+
+아래 순서는 데이터 준비부터 반복 학습 실험과 최종 모델 선정, 배포 형식 검증, native backend 구현, 운영 GUI 적용까지 이어지는 전체 개발·검증 흐름입니다.
+
+```text
+데이터 준비
+→ YOLO11n 기본 학습
+→ imgsz / augmentation 조건별 반복 실험
+→ compare_models.py로 Precision / Recall / mAP 비교
+→ 우수 후보 선정
+→ compare_predictions.py로 Ground Truth 기준 TP / FP / FN 및 오류 사례 분석
+→ 최종 imgsz=960 모델 선정
+→ models/best.pt 확정
+→ ONNX 변환 및 검증
+→ C++ ONNX Runtime 검증
+→ Native TensorRT FP32 / FP16
+→ Persistent Worker
+→ 4-Backend 정확도 및 성능 비교
+→ GUI backend 적용
+```
+
+세 비교 스크립트의 목적은 다음처럼 구분합니다.
+
+| 스크립트 | 비교 기준 | 목적 |
+| --- | --- | --- |
+| `compare_models.py` | Ground Truth | 학습 후보 모델 간 Precision / Recall / mAP 등 집계 성능을 비교 |
+| `compare_predictions.py` | Ground Truth | 우수 후보의 이미지별 TP / FP / FN과 실제 오류 사례를 분석해 최종 모델 선정 근거를 보완 |
+| `scripts/compare_all_backends.py` | 최종 `models/best.pt`의 PyTorch prediction reference | 선정이 끝난 동일 모델을 ONNX/TensorRT backend로 바꿨을 때 prediction 동등성과 속도 차이를 검증하며, 모델 선정에는 사용하지 않음 |
+
+`compare_models.py`와 `compare_predictions.py`의 FP/FN은 YOLO TXT Ground Truth 기준의 일반적인 detection 오류입니다. 반면 `compare_all_backends.py`의 문서상 **Reference-relative FP**는 PyTorch reference에 없지만 target backend에 추가된 detection, **Reference-relative FN**은 PyTorch reference에는 있지만 target backend에서 사라진 detection을 뜻합니다. 기존 CSV/JSON 컬럼명과 코드 호환성을 위해 산출물 내부의 `FP`, `FN`, `new_fp`, `new_fn` 이름은 변경하지 않고 README 표현만 구분합니다.
+
+### 1. 데이터셋 준비
+
+#### Pascal VOC XML 라벨을 YOLO TXT로 변환
 
 Pascal VOC XML 파일을 `data/annotations/` 아래에 두거나 [tools/convert_voc_to_yolo.py](C:/workspace/V_VLM/tools/convert_voc_to_yolo.py) 상단의 `XML_DIR` 값을 수정합니다. 변환된 YOLO TXT 라벨은 기본적으로 `labels/` 폴더에 저장됩니다.
 
@@ -230,12 +263,11 @@ Pascal VOC XML 파일을 `data/annotations/` 아래에 두거나 [tools/convert_
 .\.venv\Scripts\python.exe tools\convert_voc_to_yolo.py
 ```
 
-## YOLO 데이터셋 분할
+#### YOLO 데이터셋 분할
 
-이미지는 `data/images/`, YOLO TXT 라벨은 `labels/`에 둡니다. 현재 저장소의 분할 스크립트는 [tools/stratified_split_yolo_dataset.py](C:/workspace/V_VLM/tools/stratified_split_yolo_dataset.py)이며, 클래스별 대표 라벨을 기준으로 train/val/test를 층화 분할합니다.
+이미지는 `data/images/`, YOLO TXT 라벨은 `labels/`에 둡니다. 현재 저장소의 분할 스크립트는 [tools/stratified_split_yolo_dataset.py](C:/workspace/V_VLM/tools/stratified_split_yolo_dataset.py)입니다. 각 이미지에서 객체 수가 가장 많은 클래스를 대표 라벨로 정하고, 동률이면 작은 class ID를 선택합니다. 대표 라벨 그룹을 기준으로 seed `42`를 사용해 train/val/test를 70:15:15로 계층화 분할합니다.
 
-현재 데이터셋은 train/val/test = 70:15:15 비율로 계층화 분할합니다.
-클래스별 객체 분포를 고려해 각 split에 특정 클래스가 누락되지 않도록 구성했습니다.
+분할 후 실제 객체 클래스 분포를 확인하고 특정 split에서 클래스가 누락되면 warning을 출력하며, 누락 클래스를 자동으로 재분배하거나 분할을 다시 수행하지는 않습니다. 현재 생성된 데이터셋은 전체 140장 중 train 98장, val 21장, test 21장으로 분할되어 있으며 각 split에 세 클래스가 모두 존재합니다.
 
 ```powershell
 .\.venv\Scripts\python.exe tools\stratified_split_yolo_dataset.py
@@ -251,42 +283,27 @@ Pascal VOC XML 파일을 `data/annotations/` 아래에 두거나 [tools/convert_
 - `datasets/pcb/labels/test`
 - `datasets/pcb/data.yaml`
 
-## 테스트
+### 2. YOLO 모델 학습 및 모델 비교
 
-전체 테스트:
+처음부터 하나의 최종 모델을 정한 것이 아니라 `yolo11n.pt`를 기준으로 여러 후보를 학습하고 비교했습니다. 현재 저장된 `args.yaml`과 체크포인트의 학습 인자로 직접 확인되는 최종 후보는 동일한 주요 augmentation 및 optimizer 조건에서 학습된 `imgsz=640`과 `imgsz=960` 모델입니다.
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest
-```
+현재 저장소에서 직접 확인되는 학습·비교 흔적은 다음과 같습니다.
 
-문법 검사:
+- 최종 960 후보 `models/best.pt`와 대응 run `runs/detect/pcb_ablation_scale05_translate05`: `imgsz=960`, `epochs=300`, `batch=4`, `optimizer=AdamW`, `scale=0.5`, `translate=0.05`, `mosaic=0.5`, `box=7.5`
+- 640 후보 `runs/detect/pcb_ablation_scale05_translate05_img640/weights/best.pt`: 위 주요 augmentation 및 optimizer 조건과 같고 `imgsz=640`
+- `runs/compare/`: `scale05_ts03`, `scale05_ts05`, `scale05_ts05_img640`, `scale05_ts05_mos03`, `scale05_ts03_bx85` 이름의 추가 학습 후보 비교 산출물
+- 현재 `train.py`: 최종 `models/best.pt`의 학습 인자와 일치하는 `hsv_h=0.015`, `hsv_s=0.3`, `hsv_v=0.2`, `degrees=0.0`, `shear=0.0`, `flipud=0.0`, `fliplr=0.0`, `mixup=0.0`, `copy_paste=0.0`, `close_mosaic=10`
 
-```powershell
-.\.venv\Scripts\python.exe -m compileall .
-```
+`runs/compare/`에는 추가 후보를 비교한 산출물이 남아 있지만, 설정 파일이 보존되지 않은 run은 디렉터리 이름만으로 정확한 augmentation 또는 hyperparameter 값을 단정하지 않습니다. 현재 `train.py` 설정이 최종 모델과 일치한다는 사실도 모든 과거 실험에 동일한 설정이 적용됐다는 의미는 아닙니다. 이 비교 기록은 모든 실험을 같은 조건에서 한꺼번에 수행한 완전한 ablation study가 아니라, 각 단계에서 고른 후보를 `compare_models.py`로 같은 Ground Truth 데이터셋의 Precision / Recall / mAP, 클래스별 AP와 confusion matrix 등 집계 성능 기준으로 비교한 결과입니다.
 
-이번 시스템 상태 화면 변경과 관련된 주요 테스트:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests\test_ollama_status_service.py tests\test_status_view.py tests\test_app_smoke.py
-```
-
-검사 이력 삭제와 번호 표시 관련 테스트:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests\test_inspection_history_deletion.py
-```
-
-## 모델 비교
-
-`compare_models.py`는 두 YOLO 모델을 같은 검증 데이터셋에서 평가하고 precision, recall, mAP, confusion matrix 정보를 비교합니다.
+남아 있는 `runs/compare/comparison_summary.json`의 최종 640/960 후보 비교에서는 `scale05_ts05`로 기록된 960 학습 후보가 640 학습 후보보다 Precision, Recall, mAP50, mAP50-95가 높았습니다. 반면 640 후보의 inference speed가 더 빨랐으므로, 속도 하나만으로 선정하지 않고 정확도 지표와 다음 단계의 오류 사례를 함께 검토했습니다.
 
 ```powershell
 .\.venv\Scripts\python.exe compare_models.py `
-  --model-a runs\detect\pcb_default\weights\best.pt `
-  --model-b runs\detect\pcb_custom\weights\best.pt `
-  --name-a default `
-  --name-b custom `
+  --model-a models\best.pt `
+  --model-b runs\detect\pcb_ablation_scale05_translate05_img640\weights\best.pt `
+  --name-a img960 `
+  --name-b img640 `
   --data datasets\pcb\data.yaml `
   --imgsz 960 `
   --conf 0.001 `
@@ -297,9 +314,36 @@ Pascal VOC XML 파일을 `data/annotations/` 아래에 두거나 [tools/convert_
 
 기본 출력 위치는 `runs/compare/`입니다.
 
-## ONNX 변환 검증 및 평가
+### 3. 예측 오류 분석
 
-현재 ONNX 기준 모델은 `models/best.onnx`이며, PyTorch 원본 모델은 `models/best.pt`입니다. `benchmarks/onnx/onnx_validation.json` 기준 실제 ONNX 모델은 opset `17`, 고정 입력 `1 x 3 x 960 x 960`, 출력 `1 x 7 x 18900`, batch size `1`, dynamic shape 미사용입니다. 
+집계 성능만으로 최종 모델을 결정하지 않았습니다. 저장된 학습·비교 결과에서 성능이 우수한 후보를 좁힌 뒤, `compare_predictions.py`로 테스트 이미지와 YOLO TXT Ground Truth 라벨을 직접 매칭해 이미지별 TP / FP / FN과 실제 오탐·미탐 사례를 확인했습니다.
+
+저장된 `runs/prediction_compare/scale05ts05img960/class_summary.csv`를 클래스 전체로 합산하면 960 학습 후보는 TP 72 / FP 6 / FN 7, 640 학습 후보는 TP 70 / FP 14 / FN 9였습니다. `compare_predictions.py`는 한 실행에서 두 후보에 동일한 추론 `imgsz`를 적용합니다. 저장된 결과 폴더명과 스크립트 기본 설정은 `imgsz=960` 비교를 가리키지만 당시 실행 인자 파일은 별도로 보존되지 않았습니다. 집계 Precision / Recall / mAP와 Ground Truth 기반 오류 분석을 종합해 960 학습 후보를 최종 배포 모델로 선정하고 `models/best.pt`로 사용했습니다.
+
+따라서 `compare_models.py`는 후보 모델의 전체 성능을 비교해 우수 후보를 좁히는 도구이고, `compare_predictions.py`는 그 후보들의 이미지별 오류를 확인해 최종 선정 근거를 보완하는 도구입니다. 모델 선정이 끝난 뒤에만 `models/best.pt`를 ONNX로 변환하고 C++ ONNX Runtime 검증, Native TensorRT FP32/FP16, persistent worker와 4-backend 비교를 진행합니다.
+
+```powershell
+.\.venv\Scripts\python.exe compare_predictions.py `
+  --model-a models\best.pt `
+  --model-b runs\detect\pcb_ablation_scale05_translate05_img640\weights\best.pt `
+  --name-a img960 `
+  --name-b img640 `
+  --images datasets\pcb\images\test `
+  --labels datasets\pcb\labels\test `
+  --data datasets\pcb\data.yaml `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --match-iou 0.5 `
+  --device 0 `
+  --run-name img960_vs_img640
+```
+
+결과는 `runs/prediction_compare/<run-name>/` 아래에 생성됩니다. 여기의 TP / FP / FN은 Ground Truth 기준이며 backend-reference 기준 차이가 아닙니다.
+
+### 4. ONNX 변환 및 검증
+
+앞 단계에서 검토·선정한 `models/best.pt`를 `models/best.onnx`로 변환한 뒤 ONNX checker, 입출력 shape, opset, SHA256와 metadata를 검증합니다. 현재 ONNX 기준 모델은 `models/best.onnx`이며, PyTorch 원본 모델은 `models/best.pt`입니다. `benchmarks/onnx/onnx_validation.json` 기준 실제 ONNX 모델은 opset `17`, 고정 입력 `1 x 3 x 960 x 960`, 출력 `1 x 7 x 18900`, batch size `1`, dynamic shape 미사용입니다.
 
 ONNX 모델 유효성 검사와 메타데이터 생성:
 
@@ -313,6 +357,10 @@ ONNX 모델 유효성 검사와 메타데이터 생성:
 ```
 
 생성되는 `models/model_metadata.json`에는 모델명, 원본 모델, task, input/output 이름과 shape, batch size, dynamic 여부, opset, 클래스 순서, ONNX 파일 크기, SHA256, 생성 시각이 저장됩니다. 클래스 이름은 `datasets/pcb/data.yaml`의 `names` 순서를 우선 사용합니다.
+
+### 5. Python ONNX Runtime 평가
+
+같은 Ground Truth와 조건에서 PyTorch와 ONNX prediction의 동등성을 검증하고, ONNX 결과의 Precision / Recall / mAP를 평가합니다.
 
 ONNX 단독 평가 및 PyTorch 비교:
 
@@ -343,11 +391,11 @@ ONNX 단독 평가 및 PyTorch 비교:
 | `abs(precision difference)` | `<= 0.02` |
 | `abs(recall difference)` | `<= 0.02` |
 | `class mismatch count` | `0` |
-| `new FP count` | `0` |
-| `new FN count` | `0` |
+| `additional Ground-Truth FP (new FP) count` | `0` |
+| `additional Ground-Truth FN (new FN) count` | `0` |
 | `average matched box IoU` | `>= 0.99` |
 
-치명적인 실행 오류나 모델 오류는 `FAIL`, 기준 초과는 `WARNING`, 기준 만족은 `PASS`로 기록됩니다. 기준값은 `scripts\evaluate_onnx.py`의 CLI 인자로 조정할 수 있습니다.
+이 표의 `new FP`와 `new FN`은 Ground Truth 평가에서 ONNX의 FP/FN 총계가 PyTorch보다 추가로 증가한 수입니다. 아래 4-backend 비교의 prediction-reference 기준 `Reference-relative FP/FN`과는 다른 개념입니다. 치명적인 실행 오류나 모델 오류는 `FAIL`, 기준 초과는 `WARNING`, 기준 만족은 `PASS`로 기록됩니다. 기준값은 `scripts\evaluate_onnx.py`의 CLI 인자로 조정할 수 있습니다.
 
 주요 결과 파일:
 
@@ -358,17 +406,15 @@ ONNX 단독 평가 및 PyTorch 비교:
 - `benchmarks/onnx/pytorch_predictions.json`: 이미지별 PyTorch 예측 결과
 - `benchmarks/onnx/pytorch_vs_onnx.csv`: 이미지별 PyTorch/ONNX 탐지 수와 매칭 요약
 - `benchmarks/onnx/final_comparison.json`: 최종 PASS/WARNING/FAIL 판정과 차이 요약
-- `benchmarks/onnx/failure_cases/failure_cases.json`: ONNX FP/FN 감사 기록
+- `benchmarks/onnx/failure_cases/failure_cases.json`: Ground Truth 기준 ONNX FP/FN 감사 기록
 
 ONNX Runtime은 `CUDAExecutionProvider`를 우선 사용하고 사용 불가하면 `CPUExecutionProvider`로 fallback합니다. 이 정보는 평가 결과의 `runtime.providers`에 기록됩니다.
 
-GUI에서 ONNX Runtime을 선택하면 `service/detector_backend_factory.py`가 Python `OnnxDetector`를 생성하므로 운영 검사 경로에 연결됩니다. 현재 `OnnxDetector.detect()`는 원본 이미지 경로와 detection 정보만 반환하고 annotated 결과 이미지를 생성하거나 `annotated_image_path`를 설정하지 않습니다. 따라서 메인 결과 이미지 패널과 이력의 YOLO 결과 이미지 영역은 비어 있으며, 원본 이미지는 메인 화면의 별도 현재 검사 이미지 영역에 표시됩니다. 이는 예외가 아니므로 detection 저장과 OK/NG 판정은 정상 동작합니다. 이력에서 VLM을 실행할 때 `result_image_path`가 없으면 원본 이미지로 fallback하며, backend 공통 annotation 후처리는 현재 없습니다.
-
-## C++ ONNX 단일 이미지 추론
+### 6. C++ ONNX Runtime 검증
 
 `cpp_inference/`에는 `models/best.onnx`를 C++ ONNX Runtime으로 실행하는 단일 이미지 추론 CLI가 있습니다. Python 기준 구현(`service/onnx_detector.py`)과 동일하게 letterbox, BGR to RGB, HWC to CHW, `float32` 정규화, `[1, 7, 18900]` decode, class-aware NMS, 원본 좌표 복원을 적용합니다.
 
-이 C++ ONNX Runtime CLI는 현재 GUI의 backend factory에는 등록되어 있지 않습니다. standalone 단일 이미지 추론, Python/C++ 결과 비교와 정확도 검증, 배치 benchmark, ONNX Runtime CUDA 성능 측정에 사용합니다.
+Python ONNX와 C++ ONNX의 전처리·후처리 규칙을 동일하게 맞춘 뒤 결과를 비교합니다. 이 C++ ONNX Runtime CLI는 현재 GUI의 backend factory에는 등록되어 있지 않으며, standalone 단일 이미지 추론, Python/C++ 결과 비교와 정확도 검증, 배치 benchmark, ONNX Runtime CUDA 성능 측정에 사용합니다.
 
 빌드에는 Python wheel이 아니라 ONNX Runtime C/C++ 배포 패키지가 필요합니다. `ONNXRUNTIME_ROOT`는 `include/onnxruntime_cxx_api.h`, `lib/onnxruntime.lib`, Windows 기준 `bin/onnxruntime.dll`을 포함한 경로여야 합니다.
 
@@ -405,9 +451,31 @@ Python ONNX 기준 결과와 C++ 결과 비교:
 
 자세한 환경 준비와 산출물 설명은 `cpp_inference/README.md`를 참고하세요.
 
-## TensorRT 서비스 연결
+### 7. Native TensorRT FP32 / FP16 구현
 
-Python 검사 서비스는 검증된 C++ Native TensorRT CLI를 persistent subprocess worker로 호출합니다. GUI에서 TensorRT backend를 처음 사용할 때 engine을 한 번 deserialize하고, 이후 검사는 같은 프로세스의 stdin/stdout UTF-8 JSON Lines 프로토콜로 처리합니다. backend, engine, metadata, precision 또는 device ID가 바뀌거나 앱이 종료되면 기존 worker를 정상 종료합니다.
+검증된 ONNX 모델을 기반으로 FP32와 FP16 TensorRT engine을 사용합니다. `cpp_inference/`의 C++ native backend는 TensorRT runtime 생성, engine deserialize, execution context·CUDA stream·입출력 buffer 준비, H2D, GPU 실행, D2H, YOLO decode와 class-aware NMS를 직접 수행합니다. ONNX Runtime TensorRT Execution Provider를 사용하는 경로가 아니라 serialize된 `best_fp32.engine`과 `best_fp16.engine`을 실행하는 Native C++ TensorRT 구현입니다.
+
+단일 이미지 FP32 실행 예:
+
+```powershell
+.\cpp_inference\build_gpu\Release\pcb_onnx_infer.exe `
+  --backend tensorrt `
+  --engine benchmarks\tensorrt\best_fp32.engine `
+  --engine-label fp32 `
+  --metadata models\model_metadata.json `
+  --image datasets\pcb\images\test\01_missing_hole_03.jpg `
+  --output benchmarks\tensorrt\single_fp32 `
+  --imgsz 960 `
+  --conf 0.15 `
+  --iou 0.7 `
+  --device-id 0
+```
+
+FP16은 engine과 label을 각각 `benchmarks\tensorrt\best_fp16.engine`, `fp16`으로 바꿔 같은 native backend에서 실행합니다. 상세 빌드, 단일 이미지 및 batch benchmark 명령은 `cpp_inference/README.md`를 참고하세요.
+
+### 8. Persistent Worker
+
+Python 검사 서비스는 검증된 C++ Native TensorRT CLI를 persistent subprocess worker로 호출합니다. 요청마다 TensorRT engine을 deserialize하지 않도록 GUI에서 TensorRT backend를 처음 사용할 때 engine을 한 번 deserialize하고, 이후 검사는 같은 프로세스의 stdin/stdout UTF-8 JSON Lines(JSONL) IPC로 처리합니다. backend, engine, metadata, precision 또는 device ID가 바뀌거나 앱이 종료되면 기존 worker를 정상 종료합니다.
 
 필수 파일:
 
@@ -437,11 +505,11 @@ Worker는 시작 시 `ready` handshake를 반환하고, 각 `infer` 요청에 �
 
 Worker startup, timeout, crash 또는 JSONL protocol 오류는 warning 로그를 남기고 기존 one-shot CLI로 fallback합니다. 이미지 decode 같은 요청 단위 오류는 worker를 종료하거나 one-shot으로 재실행하지 않고 해당 요청의 명시적 오류로 반환합니다. fallback은 `DetectorSettings.tensorrt_fallback_to_oneshot`으로 끌 수 있고, persistent mode 자체는 `tensorrt_use_persistent_worker`로 제어합니다.
 
-2026-07-26 로컬 FP16 검증에서 `01_missing_hole_03.jpg`를 기준으로 one-shot 20회 평균은 467.91 ms, persistent 첫 JSONL 요청은 100.62 ms, 이후 protocol/inference 20회 평균/중앙값/p95는 63.14/62.86/64.99 ms였습니다. worker startup은 188.78 ms였고 요청 통계에서 분리했습니다. GUI adapter와 같은 annotated image 생성/복사까지 포함한 steady-state 20회 평균/중앙값/p95는 139.27/138.33/144.31 ms였습니다. 두 방식 모두 `missing_hole` 3개를 검출했으며 class, confidence(0.001), bbox(1 px) 허용 오차 내 mismatch는 0이었습니다. 이 수치는 현재 개발 PC의 참고값이며 다른 GPU와 시스템에서는 달라질 수 있습니다.
+2026-07-26 로컬 FP16 검증 기록에서 `01_missing_hole_03.jpg`를 기준으로 one-shot 20회 평균은 467.91 ms, persistent 첫 JSONL 요청은 100.62 ms, 이후 protocol/inference 20회 평균/중앙값/p95는 63.14/62.86/64.99 ms였습니다. worker startup은 188.78 ms였고 요청 통계에서 분리했습니다. GUI adapter 수준에서 annotated image 생성/복사까지 포함한 별도 steady-state 측정은 20회 평균/중앙값/p95 139.27/138.33/144.31 ms였으며, 이 측정의 별도 원시 benchmark 산출물은 현재 git 추적 대상에 보존되어 있지 않습니다. 두 방식 모두 `missing_hole` 3개를 검출했으며 class, confidence(0.001), bbox(1 px) 허용 오차 내 mismatch는 0이었습니다. GUI adapter 측정과 뒤의 4-backend Host end-to-end는 측정 범위가 다르므로 139.27 ms와 69.94 ms를 직접 비교하지 않습니다. 이 수치는 현재 개발 PC의 참고값이며 다른 GPU와 시스템에서는 달라질 수 있습니다.
 
-## 4-Backend 정확도 및 성능 비교
+### 9. 4-Backend 정확도 및 성능 비교
 
-운영 GUI에는 benchmark 기능을 넣지 않고 `scripts/compare_all_backends.py`에서 PyTorch CUDA, Python ONNX Runtime CUDA, TensorRT FP32 persistent worker, TensorRT FP16 persistent worker를 순차 비교합니다. 이 분리는 운영 검사 화면의 수명주기와 GPU benchmark의 반복 실행 및 대용량 산출물 생성을 분리하기 위한 것입니다.
+운영 GUI에는 benchmark 기능을 넣지 않고 `scripts/compare_all_backends.py`에서 PyTorch CUDA, Python ONNX Runtime CUDA, TensorRT FP32 persistent worker, TensorRT FP16 persistent worker를 순차 비교합니다. 이 스크립트의 목적은 Ground Truth 성능을 다시 평가하는 것이 아니라, PyTorch prediction을 reference로 두고 ONNX/TensorRT backend로 변경했을 때 prediction이 달라지는지 확인하는 것입니다. 이 분리는 운영 검사 화면의 수명주기와 GPU benchmark의 반복 실행 및 대용량 산출물 생성을 분리하기 위한 것입니다.
 
 비교 대상:
 
@@ -473,29 +541,33 @@ Worker startup, timeout, crash 또는 JSONL protocol 오류는 warning 로그를
 
 생성 파일은 `summary.json`, `summary.csv`, `per_image_results.csv`, `detection_comparisons.csv`, `timing_samples.csv`, `report.md`이며 mismatch가 있으면 `mismatch_cases/`에 backend별 detection JSON을 기록합니다. 생성 CSV/JSON과 mismatch 산출물은 git에서 제외하고 최종 `report.md`와 `.gitkeep`만 추적합니다.
 
-정확도 비교:
+정확도 비교에서 아래 `Reference-relative FP`는 PyTorch reference에 없지만 target backend에 추가된 detection이고, `Reference-relative FN`은 PyTorch reference에는 있지만 target backend에서 사라진 detection입니다. Ground Truth 기준의 일반적인 detection FP/FN과 구분해야 합니다.
 
-| Comparison | Reference detections | Target detections | FP | FN | Class mismatch | Result |
+| Comparison | Reference detections | Target detections | Reference-relative FP | Reference-relative FN | Class mismatch | Result |
 |---|---:|---:|---:|---:|---:|---|
 | PyTorch vs ONNX Runtime CUDA | 78 | 78 | 0 | 0 | 0 | PASS |
 | PyTorch vs TensorRT FP32 | 78 | 79 | 1 | 0 | 0 | FAIL |
 | PyTorch vs TensorRT FP16 | 78 | 79 | 1 | 0 | 0 | FAIL |
 | TensorRT FP32 vs FP16 | 79 | 79 | 0 | 0 | 0 | WARNING |
 
-TensorRT FP32와 FP16은 `05_short_06.jpg`에서 confidence가 임계값 `0.15`를 아주 조금 초과한 `short` detection을 각각 하나 더 생성했습니다. FP32 confidence는 `0.150476`, FP16 confidence는 `0.150527`입니다. 이는 backend별 부동소수점 계산과 전처리 경계 차이가 threshold 부근에서 드러난 사례이며, 현재 판정 정책대로 FP 1건으로 유지해 FAIL로 기록했습니다. FP32와 FP16끼리는 detection 구성이 같지만 strict bbox IoU `0.99` 기준을 일부 벗어나 WARNING입니다.
+TensorRT FP32와 FP16은 `05_short_06.jpg`에서 confidence threshold `0.15` 부근의 `short` detection을 각각 하나 더 생성했습니다. FP32 confidence는 `0.150476`, FP16 confidence는 `0.150527`입니다. 이는 backend별 연산 정밀도와 runtime/구현 차이가 threshold 부근의 최종 detection 결과에 영향을 줄 수 있음을 보여주는 사례입니다. 현재 산출물만으로 차이가 발생한 특정 연산 단계를 단정하지 않으며, 현재 비교 정책에 따라 PyTorch reference 기준 Reference-relative FP 1건으로 기록해 FAIL로 유지했습니다. FP32와 FP16끼리는 detection 구성이 같지만 strict bbox IoU `0.99` 기준을 일부 벗어나 WARNING입니다.
 
 성능 비교:
 
-| Backend | Pure inference mean | Host end-to-end mean |
+| Backend | Backend-reported inference-stage mean | Host end-to-end mean |
 |---|---:|---:|
 | PyTorch CUDA | 8.98 ms | 43.57 ms |
 | ONNX Runtime CUDA | 8.67 ms | 46.84 ms |
 | TensorRT FP32 | 3.40 ms | 71.99 ms |
 | TensorRT FP16 | 2.27 ms | 69.94 ms |
 
-TensorRT FP16의 순수 inference는 PyTorch CUDA 대비 약 74.7%, ONNX Runtime CUDA 대비 약 73.8% 짧았고, 두 TensorRT engine 모두 모델 계산 자체에서는 PyTorch와 ONNX Runtime보다 빨랐습니다. 반면 현재 통합 구조의 host end-to-end에는 Python에서 C++ worker로 이미지 경로 전달, C++ 이미지 파일 로딩과 디코딩, Python-C++ JSONL IPC, JSON 직렬화와 역직렬화, letterbox 전처리, decode/NMS/좌표 복원 후처리, 결과 이미지 처리 비용이 포함되어 PyTorch와 ONNX Runtime보다 길었습니다. 따라서 TensorRT 적용 여부는 순수 GPU inference뿐 아니라 전체 파이프라인 지연시간을 기준으로 판단해야 합니다. JSONL IPC만을 단독 병목으로 단정하지 않고, 파일 기반 Python-C++ 분리 구조 전체 비용으로 해석합니다. Persistent worker는 engine을 한 번만 deserialize하고 backend별 같은 PID를 재사용했으며, 실제 비교에서 one-shot fallback은 0회였고 종료 후 orphan `pcb_onnx_infer.exe` 프로세스는 없었습니다.
+Backend별 inference-stage 시간은 각 runtime 또는 현재 구현에서 분리 가능한 추론 구간을 측정한 값이며 측정 범위가 완전히 동일하지 않습니다. PyTorch는 CUDA synchronize가 반영된 Ultralytics inference profile을 사용하고 preprocess/postprocess를 제외합니다. ONNX Runtime은 `session.run()`의 host wall-clock 시간으로 ORT 호출 overhead와 provider가 관리하는 입출력 전송·동기화를 포함할 수 있으며 preprocess/postprocess는 별도입니다. TensorRT는 H2D/D2H와 decode/NMS를 제외한 `enqueueV3()` CUDA-event GPU 실행 시간을 사용합니다. 따라서 이 값들을 동일한 의미의 GPU kernel 시간으로 직접 해석하지 않습니다. 현재 각 backend에서 기록한 inference-stage 측정값 기준으로 TensorRT FP16이 PyTorch CUDA와 ONNX Runtime CUDA보다 짧았지만, 이를 동일한 GPU kernel 구간의 직접적인 속도 향상률로 해석하지 않습니다.
+
+4-backend benchmark의 TensorRT Host end-to-end는 Python-C++ JSONL 요청/응답, C++ 이미지 파일 load/decode, 전처리, H2D, TensorRT 실행, D2H, decode/NMS와 좌표 복원, JSON 직렬화/역직렬화 및 Python 응답 처리를 포함합니다. Annotated image 생성·저장·복사, SQLite 저장, GUI 업데이트와 worker startup/engine deserialize는 포함하지 않습니다. 현재 파일 기반 Python-C++ 분리 구조에서는 이 Host end-to-end가 PyTorch와 ONNX Runtime보다 길었으므로, TensorRT 적용 여부는 backend별 inference-stage 시간뿐 아니라 전체 파이프라인 지연시간을 함께 기준으로 판단해야 합니다. JSONL IPC만을 단독 병목으로 단정하지 않고 파일 기반 분리 구조 전체 비용으로 해석합니다. Persistent worker는 engine을 한 번만 deserialize하고 backend별 같은 PID를 재사용했으며, 실제 비교에서 one-shot fallback은 0회였고 종료 후 orphan `pcb_onnx_infer.exe` 프로세스는 없었습니다.
 
 이 결과는 RTX 4060 8GB와 당시 Windows/CUDA 환경의 측정값입니다. 하드웨어, 드라이버, CUDA/TensorRT 버전, 이미지와 설정에 따라 달라질 수 있습니다. GUI는 비교 기능을 제공하지 않으며 운영 검사 흐름과 개발 benchmark를 분리하기 위해 독립 CLI로 실행합니다. 전체 테스트 결과는 2026-07-26 기준 `443 passed`였고, 상세 측정 근거는 `benchmarks/backend_comparison/report.md`에 보존합니다.
+
+### 10. GUI backend 적용
 
 기본 backend는 기존 동작과 동일하게 `pytorch`입니다. CLI에서 선택 가능한 backend는 다음과 같습니다.
 
@@ -506,6 +578,8 @@ TensorRT FP16의 순수 inference는 PyTorch CUDA 대비 약 74.7%, ONNX Runtime
 ```
 
 GUI에서는 상단 메뉴의 `추론 설정` 화면에서 backend를 선택하고 저장합니다. 설정은 Qt `QSettings`에 저장되므로 개인 로컬 경로가 저장소 파일로 생성되지 않습니다.
+
+GUI에서 ONNX Runtime을 선택하면 `service/detector_backend_factory.py`가 Python `OnnxDetector`를 생성하므로 운영 검사 경로에 연결됩니다. 현재 `OnnxDetector.detect()`는 원본 이미지 경로와 detection 정보만 반환하고 annotated 결과 이미지를 생성하거나 `annotated_image_path`를 설정하지 않습니다. 따라서 메인 결과 이미지 패널과 이력의 YOLO 결과 이미지 영역은 비어 있으며, 원본 이미지는 메인 화면의 별도 현재 검사 이미지 영역에 표시됩니다. 이는 예외가 아니므로 detection 저장과 OK/NG 판정은 정상 동작합니다. 이력에서 VLM을 실행할 때 `result_image_path`가 없으면 원본 이미지로 fallback하며, backend 공통 annotation 후처리는 현재 없습니다.
 
 예시 설정:
 
@@ -530,28 +604,35 @@ Python 설정 단계의 검증 범위는 위 파일 존재, 확장자, device ID
 
 저장한 설정은 다음 검사 시작 때 적용됩니다. 검사 화면에는 현재 적용될 backend가 `추론 Backend: ...` 형태로 표시됩니다. 기본값은 기존 호환성을 위해 `PyTorch`입니다.
 
-## 예측 오류 분석
+### 11. VLM / SQLite / 운영 GUI 흐름
 
-`compare_predictions.py`는 PCB 테스트 이미지와 YOLO TXT 정답 라벨을 직접 매칭해 TP/FP/FN을 계산합니다.
+backend 적용 뒤의 운영 흐름은 문서 앞부분의 `시스템 구조`, `Ollama VLM 설정`, `VLM 실행 및 JSON 검증`, `검사 이력 DB 구조`, `검사 이력 번호 정책`에 상세히 설명되어 있습니다. 요약하면 GUI가 선택된 PyTorch, Python ONNX Runtime 또는 TensorRT backend로 detection 기반 OK/NG를 판정하고 결과를 SQLite의 `inspections`와 `defects`에 먼저 저장합니다. 이후 사용자가 저장된 NG 검사 이력에서 VLM 설명 생성을 요청하면 전체 이미지와 detection crop montage를 Ollama에 전달하고, JSON 검증 또는 fallback 처리를 거친 결과를 같은 검사 이력에 갱신합니다.
+
+## 테스트
+
+전체 테스트:
 
 ```powershell
-.\.venv\Scripts\python.exe compare_predictions.py `
-  --model-a models\best.pt `
-  --model-b runs\detect\pcb_ablation_scale05\weights\best.pt `
-  --name-a existing_best `
-  --name-b scale05 `
-  --images datasets\pcb\images\test `
-  --labels datasets\pcb\labels\test `
-  --data datasets\pcb\data.yaml `
-  --imgsz 960 `
-  --conf 0.15 `
-  --iou 0.7 `
-  --match-iou 0.5 `
-  --device 0 `
-  --run-name open_circuit_error_analysis
+.\.venv\Scripts\python.exe -m pytest
 ```
 
-결과는 `runs/prediction_compare/<run-name>/` 아래에 생성됩니다.
+문법 검사:
+
+```powershell
+.\.venv\Scripts\python.exe -m compileall .
+```
+
+이번 시스템 상태 화면 변경과 관련된 주요 테스트:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_ollama_status_service.py tests\test_status_view.py tests\test_app_smoke.py
+```
+
+검사 이력 삭제와 번호 표시 관련 테스트:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_inspection_history_deletion.py
+```
 
 ## 런타임 데이터 주의
 
