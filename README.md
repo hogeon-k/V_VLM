@@ -299,7 +299,7 @@ Pascal VOC XML 파일을 `data/annotations/` 아래에 두거나 [tools/convert_
 
 ## ONNX 변환 검증 및 평가
 
-현재 ONNX 기준 모델은 `models/best.onnx`이며, PyTorch 원본 모델은 `models/best.pt`입니다. `benchmarks/onnx/onnx_validation.json` 기준 실제 ONNX 모델은 opset `17`, 고정 입력 `1 x 3 x 960 x 960`, 출력 `1 x 7 x 18900`, batch size `1`, dynamic shape 미사용입니다. ONNX simplify 적용 여부는 변환 실행 조건에 따라 별도 기록해야 하며, 이 저장소의 검증 스크립트는 실제 ONNX 파일의 input/output shape, opset, producer, SHA256을 읽어 결과에 남깁니다.
+현재 ONNX 기준 모델은 `models/best.onnx`이며, PyTorch 원본 모델은 `models/best.pt`입니다. `benchmarks/onnx/onnx_validation.json` 기준 실제 ONNX 모델은 opset `17`, 고정 입력 `1 x 3 x 960 x 960`, 출력 `1 x 7 x 18900`, batch size `1`, dynamic shape 미사용입니다. 
 
 ONNX 모델 유효성 검사와 메타데이터 생성:
 
