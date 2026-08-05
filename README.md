@@ -2,7 +2,7 @@
 
 PySide6 기반 PCB Vision Inspection 데스크톱 프로젝트입니다. PCB 이미지를 입력받아 YOLO로 불량 위치와 유형을 탐지한 뒤 검사 결과를 먼저 SQLite에 저장합니다. 저장된 NG 검사 이력을 사용자가 선택해 VLM 분석을 요청하면 Ollama 기반 설명을 생성하고 같은 검사 이력에 결과를 갱신합니다.
 
-YOLO + Ollama VLM 터미널 검사 가이드는 [docs/yolo_vlm_terminal.md](C:/workspace/V_VLM/docs/yolo_vlm_terminal.md)를 참고하세요.
+YOLO + Ollama VLM 터미널 검사 가이드는 [docs/yolo_vlm_terminal.md](C:/workspace/V_VLM/docs/yolo_vlm_terminal.md)를 참고해주세요.
 
 ## 달성 성과
 
